@@ -223,6 +223,10 @@ body.is-modal-open {
 }
 
 .menu__logo {
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
   display: grid;
   place-items: center;
   width: 96px;
@@ -635,6 +639,10 @@ body.is-modal-open {
 }
 
 .player-card__avatar {
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
   display: grid;
   place-items: center;
   width: 38px;
@@ -939,6 +947,10 @@ body.is-modal-open {
 
 /* Game over */
 .gameover__icon {
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
   display: grid;
   place-items: center;
   width: 68px;
@@ -1011,6 +1023,10 @@ body.is-modal-open {
 }
 
 .promotion__glyph {
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
   font-size: 2rem;
   line-height: 1;
 }

@@ -178,6 +178,19 @@
   position: relative;
   z-index: 2;
   display: block;
+  /*
+     Name symbol fonts explicitly, and never an emoji font. This is the second
+     half of the emoji fix (the first is the U+FE0E selector in board.js):
+     if the browser resolves these glyphs through Segoe UI Emoji or Noto Color
+     Emoji, they paint in the font's own colours and ignore `color` entirely,
+     so white pieces come out solid black. Listing symbol fonts first keeps
+     the glyphs monochrome and colourable on every platform.
+  */
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  /* Belt and braces where supported: refuse emoji presentation outright. */
+  font-variant-emoji: text;
   /* Fallback for browsers without container queries. */
   font-size: clamp(20px, 7.6vw, 46px);
   line-height: 1;

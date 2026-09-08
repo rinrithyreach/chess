@@ -27,13 +27,27 @@ import { FILES, RANKS, ANIMATION_MS, WHITE } from './config.js';
  * To swap in SVG or image pieces later, replace `renderPieceContent` with a
  * renderer that returns an <img> or inline <svg>; nothing else needs to change.
  */
+/**
+ * U+FE0E is VARIATION SELECTOR-15: "render the previous character as text,
+ * not as an emoji".
+ *
+ * It is load-bearing, not decorative. U+265A–265F have an emoji presentation
+ * in several system fonts (Segoe UI Emoji, Noto Color Emoji). When the browser
+ * picks that presentation the glyph is painted in the font's own colours and
+ * CSS `color` is ignored entirely — so a *white* piece renders as a solid
+ * black emoji, and the two sides become indistinguishable. Fonts differ per
+ * glyph, which is why it can hit only the pawns, or only some of the back
+ * rank. Requesting text presentation explicitly keeps `color` in charge.
+ */
+export const TEXT_PRESENTATION = '\uFE0E';
+
 const PIECE_GLYPHS = {
-  k: '♚',
-  q: '♛',
-  r: '♜',
-  b: '♝',
-  n: '♞',
-  p: '♟',
+  k: `♚${TEXT_PRESENTATION}`,
+  q: `♛${TEXT_PRESENTATION}`,
+  r: `♜${TEXT_PRESENTATION}`,
+  b: `♝${TEXT_PRESENTATION}`,
+  n: `♞${TEXT_PRESENTATION}`,
+  p: `♟${TEXT_PRESENTATION}`,
 };
 
 const PIECE_NAMES = {

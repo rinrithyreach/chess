@@ -18,7 +18,12 @@ import {
   warn,
 } from './config.js';
 
-const PIECE_GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+// See TEXT_PRESENTATION in board.js: without it these can render as colour
+// emoji, which ignore CSS `color` and make white pieces paint black.
+const VS = '\uFE0E';
+const PIECE_GLYPHS = {
+  k: `♚${VS}`, q: `♛${VS}`, r: `♜${VS}`, b: `♝${VS}`, n: `♞${VS}`, p: `♟${VS}`,
+};
 const PROMOTION_PIECES = [
   { type: 'q', name: 'Queen' },
   { type: 'r', name: 'Rook' },
@@ -507,7 +512,7 @@ export class UI {
         : `${result.detail} · ${state.moves.length} moves played`;
     }
     if (icon) {
-      icon.textContent = isDraw ? '½' : '♛';
+      icon.textContent = isDraw ? '½' : `♛${VS}`;
       icon.dataset.color = result.winner ?? '';
     }
 
