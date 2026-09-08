@@ -139,6 +139,22 @@ export const DEFAULT_PLAYER_NAMES = {
 /** Move animation duration (ms). Kept short so play never feels gated on it. */
 export const ANIMATION_MS = 180;
 
+/**
+ * Easing for the piece slide.
+ *
+ * A decelerating curve, not `ease` — `ease` eases IN as well, so the piece
+ * hesitates for its first few frames and the move reads as laggy even though
+ * it started instantly. Leaving at full speed and settling into the square is
+ * what makes a short animation feel immediate rather than delayed.
+ */
+export const ANIMATION_EASING = 'cubic-bezier(0.2, 0.8, 0.3, 1)';
+
+/**
+ * The captured piece fades out over this fraction of ANIMATION_MS, so it is
+ * gone by the time the capturing piece lands on top of it.
+ */
+export const CAPTURE_FADE_RATIO = 0.8;
+
 /** How long toasts remain on screen (ms). */
 export const TOAST_MS = 2400;
 

@@ -195,7 +195,60 @@
   font-size: clamp(20px, 7.6vw, 46px);
   line-height: 1;
   pointer-events: none;
+  /*
+     `backface-visibility` is the cheap half of a compositor hint: it keeps the
+     glyph off the fractional-pixel path while it slides, without promoting a
+     layer. The expensive half — will-change — is deliberately NOT here: see
+     .piece--moving.
+  */
+  backface-visibility: hidden;
+}
+
+/*
+   Only the piece actually in flight gets a compositor layer and a raised
+   stacking order.
+
+   will-change used to sit on `.piece` itself, which promoted all thirty-two
+   pieces to their own layers permanently. That is not a stronger version of
+   this — it is worse: a phone GPU pays for every one of those layers all the
+   time, and the memory it costs is taken from the budget the one animation
+   that is actually running needs. Granting the hint for the ~180ms it is
+   needed, and taking it back afterwards, is what the property is for.
+
+   The raised z-index matters too. Every piece sits at z-index 2, so a piece
+   crossing the board passed UNDER the ones it travelled over — a rook sliding
+   down a file kept disappearing behind pawns. It should pass over them.
+*/
+.piece--moving {
+  z-index: 5;
   will-change: transform;
+}
+
+/*
+   A piece being captured, lifted out of the render so it can fade instead of
+   blinking out. It sits above the last-move wash but below the arriving piece
+   (z-index 2), so the capturer lands cleanly on top of it.
+
+   Absolutely positioned, because the square's grid centring only applies to
+   the real piece; this re-centres the glyph inside the full square instead.
+*/
+.piece--captured {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+/*
+   The fading ghost carries .piece--moving too, for the same compositor hint.
+   It must NOT inherit that rule's raised z-index, or the piece being taken
+   would fade out in front of the piece taking it. Pinned explicitly, rather
+   than left to whichever of the two rules happens to be written last.
+*/
+.piece--captured.piece--moving {
+  z-index: 1;
 }
 
 /*

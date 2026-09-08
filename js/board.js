@@ -13,7 +13,31 @@
  *     container, so listeners are never recreated per render.
  */
 
-import { FILES, RANKS, ANIMATION_MS, WHITE } from './config.js';
+import {
+  FILES,
+  RANKS,
+  ANIMATION_MS,
+  ANIMATION_EASING,
+  CAPTURE_FADE_RATIO,
+  WHITE,
+} from './config.js';
+
+/**
+ * Does this device want motion kept to a minimum?
+ *
+ * Checked live rather than cached, and checked HERE rather than left to CSS:
+ * the `prefers-reduced-motion` block in style.css only neutralises CSS
+ * transitions and CSS animations. A Web Animations API effect is neither, so
+ * it sails straight past that override — motion has to be declined in script
+ * or it is not declined at all.
+ */
+function prefersReducedMotion() {
+  try {
+    return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Piece rendering.
@@ -90,6 +114,23 @@ export class Board {
   #animationsEnabled = true;
   #showCoordinates = true;
   #focusedSquare = 'e1';
+
+  /**
+   * Slides currently in flight, keyed by the square they are landing on.
+   * A second move onto a square while the first is still running must cancel
+   * it: two effects animating one element's `transform` fight each other and
+   * the piece visibly stutters.
+   */
+  #running = new Map();
+
+  /**
+   * The move the player just completed by dragging, as `from|to`.
+   *
+   * They dragged the piece across the board with their own hand, so replaying
+   * that same journey as an animation reads as the board lagging a beat behind
+   * them. Recorded on drop, consumed by the render that follows.
+   */
+  #draggedMove = null;
 
   // Drag state (mouse/pen only — touch uses tap-to-move).
   #drag = null;
@@ -199,6 +240,15 @@ export class Board {
     const { state, view } = snapshot;
     if (!state) return;
 
+    const move =
+      options.animateMove && this.#animationsEnabled && !prefersReducedMotion()
+        ? options.animateMove
+        : null;
+
+    // A captured piece has to be photographed BEFORE the squares repaint,
+    // because the repaint is what erases it. Cheap, and only on captures.
+    const capturedGhost = move?.isCapture ? this.#detachCaptured(move) : null;
+
     const board = this.#boardFromFen(state.fen);
     const selected = view?.selected ?? null;
     const targets = new Map((view?.legalTargets ?? []).map((m) => [m.to, m]));
@@ -223,9 +273,11 @@ export class Board {
       el.setAttribute('aria-label', this.#describeSquare(square, piece, target));
     });
 
-    if (options.animateMove && this.#animationsEnabled) {
-      this.#animateMove(options.animateMove);
-    }
+    if (move) this.#animateMove(move, capturedGhost);
+
+    // Consumed by this render whether or not it carried the drag's move, so a
+    // drop that turned out to be illegal cannot suppress a later animation.
+    this.#draggedMove = null;
   }
 
   #renderPiece(entry, piece, square) {
@@ -288,43 +340,167 @@ export class Board {
 
   /**
    * Slide the moved piece from its origin into place.
+   *
    * Runs after the position has already been rendered, so it is purely
-   * cosmetic and can never desynchronise the board from the game state.
+   * cosmetic and can never desynchronise the board from the game state: if
+   * every animation here were deleted the game would still be correct, only
+   * blunter. That is what makes it safe to be this eager about starting it.
+   *
+   * @param {object} move The move descriptor from the engine.
+   * @param {?HTMLElement} capturedGhost The captured piece, lifted out of the
+   *   render by #detachCaptured, to fade out under the arriving piece.
    */
-  #animateMove(move) {
-    const animate = (from, to) => {
-      const fromEntry = this.#squares.get(from);
-      const toEntry = this.#squares.get(to);
-      if (!fromEntry || !toEntry || !toEntry.piece.textContent) return;
+  #animateMove(move, capturedGhost) {
+    if (capturedGhost) this.#fadeOut(capturedGhost);
 
-      const fromRect = fromEntry.el.getBoundingClientRect();
-      const toRect = toEntry.el.getBoundingClientRect();
-      const dx = fromRect.left - toRect.left;
-      const dy = fromRect.top - toRect.top;
-      if (!dx && !dy) return;
+    // The player dragged this piece here themselves, so it is already exactly
+    // where they put it. Sending it back to the origin to travel again undoes
+    // their own gesture and reads as the board lagging behind the pointer. The
+    // castling rook below still slides — they never touched that one.
+    if (this.#draggedMove !== `${move.from}|${move.to}`) {
+      this.#slide(move.from, move.to);
+    }
 
-      const pieceEl = toEntry.piece;
-      pieceEl.style.transition = 'none';
-      pieceEl.style.transform = `translate(${dx}px, ${dy}px)`;
-
-      requestAnimationFrame(() => {
-        pieceEl.style.transition = `transform ${ANIMATION_MS}ms ease-out`;
-        pieceEl.style.transform = 'translate(0, 0)';
-        window.setTimeout(() => {
-          pieceEl.style.transition = '';
-          pieceEl.style.transform = '';
-        }, ANIMATION_MS + 30);
-      });
-    };
-
-    animate(move.from, move.to);
-
-    // Castling moves two pieces; animate the rook as well.
+    // Castling moves two pieces; the rook slides as well.
     if (move.isCastle) {
       const rank = move.color === WHITE ? '1' : '8';
-      if (move.isKingsideCastle) animate(`h${rank}`, `f${rank}`);
-      else animate(`a${rank}`, `d${rank}`);
+      if (move.isKingsideCastle) this.#slide(`h${rank}`, `f${rank}`);
+      else this.#slide(`a${rank}`, `d${rank}`);
     }
+  }
+
+  /**
+   * Move a piece visually from `from` to `to`.
+   *
+   * A FLIP: the piece has already been painted at its destination, and this
+   * plays back the jump it just made, from the offset it came from.
+   */
+  #slide(from, to) {
+    const fromEntry = this.#squares.get(from);
+    const toEntry = this.#squares.get(to);
+    if (!fromEntry || !toEntry || !toEntry.piece.textContent) return;
+
+    const fromRect = fromEntry.el.getBoundingClientRect();
+    const toRect = toEntry.el.getBoundingClientRect();
+    const dx = fromRect.left - toRect.left;
+    const dy = fromRect.top - toRect.top;
+    if (!dx && !dy) return;
+
+    this.#run(toEntry.piece, to, [
+      { transform: `translate(${dx}px, ${dy}px)` },
+      { transform: 'translate(0, 0)' },
+    ]);
+  }
+
+  /** Fade a captured piece out from under the piece landing on top of it. */
+  #fadeOut(ghost) {
+    const remove = () => ghost.remove();
+    const animation = this.#run(
+      ghost,
+      null,
+      [
+        { opacity: 1, transform: 'scale(1)' },
+        { opacity: 0, transform: 'scale(0.72)' },
+      ],
+      { duration: Math.round(ANIMATION_MS * CAPTURE_FADE_RATIO), easing: 'ease-in' },
+    );
+    if (!animation) {
+      remove();
+      return;
+    }
+    animation.addEventListener('finish', remove);
+    animation.addEventListener('cancel', remove);
+  }
+
+  /**
+   * Play one effect on one element.
+   *
+   * Uses the Web Animations API rather than a CSS transition toggled inside
+   * requestAnimationFrame. Those look equivalent and are not: a rAF callback
+   * runs BEFORE that frame's style recalculation, so the browser is free never
+   * to observe the starting transform and to coalesce both writes into the
+   * final value. The piece then teleports with no animation at all — not
+   * always, just whenever the frames happen to line up that way, which is
+   * exactly the intermittent "sometimes it jumps" this replaces. Explicit
+   * keyframes cannot be collapsed like that, so the slide runs on the very
+   * next frame, every time.
+   *
+   * It also retires the cleanup timer the old version needed. With
+   * `fill: "none"` the element reverts to its stylesheet transform the moment
+   * the effect ends, leaving no inline styles to strip later — and so no stale
+   * timeout left to fire mid-slide during a fast exchange and cut the next
+   * animation short.
+   */
+  #run(element, key, keyframes, options = {}) {
+    // jsdom and pre-2018 browsers have no WAAPI. Skipping is the correct
+    // fallback: this is decoration over a board that is already correct.
+    if (typeof element.animate !== 'function') return null;
+
+    // Cancel any slide already landing on this square — see #running.
+    if (key !== null) this.#running.get(key)?.cancel();
+
+    element.classList.add('piece--moving');
+
+    let animation;
+    try {
+      animation = element.animate(keyframes, {
+        duration: ANIMATION_MS,
+        easing: ANIMATION_EASING,
+        fill: 'none',
+        ...options,
+      });
+    } catch {
+      // Has `animate`, rejected the effect. Leave the piece where it already
+      // correctly is.
+      element.classList.remove('piece--moving');
+      return null;
+    }
+
+    if (key !== null) this.#running.set(key, animation);
+
+    const settle = () => {
+      // Identity check, because `cancel` is delivered asynchronously: by the
+      // time it arrives a replacement slide may already own this square, and
+      // stripping the class then would drop that piece back beneath its
+      // neighbours halfway through its own animation.
+      if (key !== null && this.#running.get(key) !== animation) return;
+      if (key !== null) this.#running.delete(key);
+      element.classList.remove('piece--moving');
+    };
+    animation.addEventListener('finish', settle);
+    animation.addEventListener('cancel', settle);
+
+    return animation;
+  }
+
+  /**
+   * Lift the piece that is about to be captured out of the render, so it can
+   * fade independently while the capturing piece slides onto its square.
+   *
+   * Must run before the board repaints — the clone is taken from the live
+   * element while it still shows the captured piece. Cloning rather than
+   * rebuilding keeps it pixel-identical: same glyph, same colour rules, same
+   * container-relative font size.
+   *
+   * @returns {?HTMLElement} The detached ghost, already placed in the DOM.
+   */
+  #detachCaptured(move) {
+    // En passant is the one capture whose victim is not on the destination
+    // square: the pawn stands beside the capturer, back on the origin's rank.
+    const square = move.isEnPassant ? `${move.to[0]}${move.from[1]}` : move.to;
+    const entry = this.#squares.get(square);
+    if (!entry || !entry.piece.textContent) return null;
+
+    // A ghost from an earlier capture on this square should be gone by now,
+    // but animations are paused while a tab is in the background — so one can
+    // still be sitting here after a spell away. Never stack two.
+    entry.el.querySelectorAll('.piece--captured').forEach((stale) => stale.remove());
+
+    const ghost = entry.piece.cloneNode(true);
+    ghost.classList.add('piece--captured');
+    ghost.setAttribute('aria-hidden', 'true');
+    entry.el.append(ghost);
+    return ghost;
   }
 
   // -----------------------------------------------------------------------
@@ -400,6 +576,10 @@ export class Board {
       // same two-step sequence a tap-to-move produces. Re-activating the origin
       // here would toggle the selection off and swallow the move.
       if (dropSquare && dropSquare !== drag.square) {
+        // Note it before activating: if this drop is a legal move the render
+        // it triggers must not slide the piece back over the path the player
+        // just dragged it along. See #draggedMove.
+        this.#draggedMove = `${drag.square}|${dropSquare}`;
         this.#onSquareActivate(dropSquare);
       }
       // Dropped back where it started: leave the piece selected so the player

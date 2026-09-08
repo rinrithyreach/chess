@@ -13,7 +13,7 @@ import { Board } from './board.js';
 import { UI } from './ui.js';
 import * as storage from './storage.js';
 import sound from './sound.js';
-import { WHITE, GAME_MODE, DEBUG, log, warn } from './config.js';
+import { WHITE, GAME_MODE, DEBUG, ANIMATION_MS, log, warn } from './config.js';
 import { isFirebaseConfigured, firebaseConfigError } from './firebase-config.js';
 
 async function boot() {
@@ -127,8 +127,13 @@ async function boot() {
   controller.on(EVENT.PROMOTION, (payload) => ui.showPromotion(payload));
 
   controller.on(EVENT.GAME_OVER, (snapshot) => {
-    // Let the final position paint before the modal covers it.
-    window.setTimeout(() => ui.showGameOver(snapshot), 420);
+    // Let the mating move finish landing before the modal covers the board —
+    // otherwise the player never sees the move that ended the game.
+    //
+    // Derived from the animation rather than a round number, so it tracks the
+    // slide instead of drifting out of step with it. The old fixed 420ms left
+    // a fifth of a second of dead air after the piece had already settled.
+    window.setTimeout(() => ui.showGameOver(snapshot), ANIMATION_MS + 120);
   });
 
   controller.on(EVENT.TOAST, ({ message, tone }) => ui.toast(message, tone));
