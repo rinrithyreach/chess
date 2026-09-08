@@ -200,20 +200,26 @@
    Both colours use the same solid glyph and are separated by fill + outline.
    This keeps the two sides identical in shape on every platform, and keeps
    pieces crisp at any pixel density since they are font vectors.
+
+   White needs a genuinely heavy outline, not a hairline. Its fill sits only a
+   few percent brighter than the light squares (#ecd8b6 classic, #e8c99a wood),
+   so a 1px text-shadow ring left the piece almost dissolving into the board.
+   Black never had the problem, because it contrasts with both square colours.
+
+   Chained drop-shadows do the work instead of more text-shadow offsets: each
+   applies to the result of the previous, so four 1px passes build an even,
+   fully opaque ring — where stacked text-shadows stay translucent at the
+   diagonals and let the square show through.
 */
 .piece[data-color="w"] {
-  color: #f8f8f5;
-  text-shadow:
-    0 0 1px #14161d,
-    0 1px 0 #14161d,
-    1px 0 0 #14161d,
-    0 -1px 0 #14161d,
-    -1px 0 0 #14161d,
-    1px 1px 0 #14161d,
-    -1px 1px 0 #14161d,
-    1px -1px 0 #14161d,
-    -1px -1px 0 #14161d,
-    0 2px 3px rgba(0, 0, 0, 0.35);
+  color: #fbfbf8;
+  text-shadow: none;
+  filter:
+    drop-shadow(1px 0 0 #14161d)
+    drop-shadow(-1px 0 0 #14161d)
+    drop-shadow(0 1px 0 #14161d)
+    drop-shadow(0 -1px 0 #14161d)
+    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
 }
 
 /*
