@@ -1,0 +1,342 @@
+/* ==========================================================================
+   board.css — the chessboard, squares, pieces, highlights and themes
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Themes.
+   Every board colour comes from these custom properties, so adding a theme
+   means adding one block here — no other selector hardcodes a board colour.
+   -------------------------------------------------------------------------- */
+
+.board[data-theme="classic"],
+.theme-swatch__preview[data-theme="classic"] {
+  --board-light: #ecd8b6;
+  --board-dark: #b07d4f;
+  --board-edge: #6d4c30;
+  --coord-on-light: #8a6238;
+  --coord-on-dark: #ecd8b6;
+}
+
+.board[data-theme="midnight"],
+.theme-swatch__preview[data-theme="midnight"] {
+  --board-light: #9fb0cc;
+  --board-dark: #4a5a78;
+  --board-edge: #2b3550;
+  --coord-on-light: #3d4a63;
+  --coord-on-dark: #cdd8ea;
+}
+
+.board[data-theme="wood"],
+.theme-swatch__preview[data-theme="wood"] {
+  --board-light: #e8c99b;
+  --board-dark: #9a6a3d;
+  --board-edge: #5f4126;
+  --coord-on-light: #7b5228;
+  --coord-on-dark: #f0dcc0;
+}
+
+/* Highlight colours are shared across themes. */
+.board {
+  --hl-selected: rgba(232, 180, 76, 0.55);
+  /* Strong enough to read at a glance, soft enough that a dark piece standing
+     on it is still clearly dark. */
+  --hl-last-move: rgba(232, 180, 76, 0.34);
+  --hl-legal: rgba(20, 22, 28, 0.32);
+  --hl-legal-on-dark: rgba(245, 240, 230, 0.34);
+  --hl-check: #e5594d;
+}
+
+/* Theme preview swatches in Settings */
+.theme-swatch__preview {
+  background: linear-gradient(
+    135deg,
+    var(--board-light) 0 25%,
+    var(--board-dark) 25% 50%,
+    var(--board-light) 50% 75%,
+    var(--board-dark) 75% 100%
+  );
+  background-size: 16px 16px;
+}
+
+/* --------------------------------------------------------------------------
+   Board container
+   -------------------------------------------------------------------------- */
+
+.board-area {
+  display: flex;
+  justify-content: center;
+}
+
+.board-frame {
+  width: min(94vw, 560px);
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, var(--panel-soft), var(--panel));
+  box-shadow: var(--shadow);
+}
+
+.board {
+  display: grid;
+  /*
+     minmax(0, …) is essential, not cosmetic. A plain `1fr` track carries an
+     automatic min-content floor, so the piece glyphs would force each square
+     to their own text size and overflow the board — visibly squashing the
+     bottom ranks on short/wide viewports. The zero floor lets the tracks
+     divide the board evenly no matter how large the glyphs are.
+  */
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
+  width: 100%;
+  /* The board is always square, and never stretches in either direction. */
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  /* Fast taps without blocking page scroll on touch devices. */
+  touch-action: manipulation;
+  user-select: none;
+  /*
+     Establish a size container so pieces and coordinates can scale from the
+     BOARD's size rather than the viewport's. Sizing from vw is wrong whenever
+     the board is not the width-limiting element — a landscape phone or a
+     desktop side-by-side layout — and produced pieces far too large or small.
+  */
+  container-type: size;
+  container-name: board;
+}
+
+/* --------------------------------------------------------------------------
+   Squares
+   -------------------------------------------------------------------------- */
+
+.square {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.square--light {
+  background: var(--board-light);
+}
+
+.square--dark {
+  background: var(--board-dark);
+}
+
+/* --- Coordinates: subtle, inside the edge squares --- */
+
+.square__coord {
+  position: absolute;
+  /* Fallback; the container-query value below is the real one. */
+  font-size: clamp(7px, 1.6vw, 11px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+@supports (container-type: size) {
+  .square__coord {
+    font-size: clamp(7px, 2.1cqmin, 12px);
+  }
+}
+
+.square__coord--rank {
+  top: 3px;
+  left: 3px;
+}
+
+.square__coord--file {
+  right: 3px;
+  bottom: 3px;
+}
+
+.square--light .square__coord {
+  color: var(--coord-on-light);
+}
+
+.square--dark .square__coord {
+  color: var(--coord-on-dark);
+}
+
+/* --------------------------------------------------------------------------
+   Pieces
+   -------------------------------------------------------------------------- */
+
+.piece {
+  position: relative;
+  z-index: 2;
+  display: block;
+  /* Fallback for browsers without container queries. */
+  font-size: clamp(20px, 7.6vw, 46px);
+  line-height: 1;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/*
+   One square is 12.5% of the board, so 9cqmin ≈ 72% of a square — the
+   proportion a chess piece traditionally occupies. This holds at every board
+   size, on every layout.
+*/
+@supports (container-type: size) {
+  .piece {
+    font-size: 9cqmin;
+  }
+}
+
+/*
+   Both colours use the same solid glyph and are separated by fill + outline.
+   This keeps the two sides identical in shape on every platform, and keeps
+   pieces crisp at any pixel density since they are font vectors.
+*/
+.piece[data-color="w"] {
+  color: #f8f8f5;
+  text-shadow:
+    0 0 1px #14161d,
+    0 1px 0 #14161d,
+    1px 0 0 #14161d,
+    0 -1px 0 #14161d,
+    -1px 0 0 #14161d,
+    1px 1px 0 #14161d,
+    -1px 1px 0 #14161d,
+    1px -1px 0 #14161d,
+    -1px -1px 0 #14161d,
+    0 2px 3px rgba(0, 0, 0, 0.35);
+}
+
+/*
+   A slightly dimmed outline rather than near-white: at phone sizes the ring is
+   proportionally thick, and a pure white outline made dark pieces read as
+   light ones when they stood on a highlighted square.
+*/
+.piece[data-color="b"] {
+  color: #14161d;
+  text-shadow:
+    0 0 1px #ccd3e2,
+    0 1px 0 #ccd3e2,
+    1px 0 0 #ccd3e2,
+    0 -1px 0 #ccd3e2,
+    -1px 0 0 #ccd3e2,
+    1px 1px 0 #ccd3e2,
+    -1px 1px 0 #ccd3e2,
+    1px -1px 0 #ccd3e2,
+    -1px -1px 0 #ccd3e2,
+    0 2px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Floating piece that follows the cursor while dragging (mouse/pen only). */
+.piece--ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0.92;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+}
+
+.square.is-dragging .piece {
+  opacity: 0.25;
+}
+
+/* --------------------------------------------------------------------------
+   Highlights
+   -------------------------------------------------------------------------- */
+
+/* Last move — both origin and destination stay lit until the next move. */
+.square.is-last-move::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--hl-last-move);
+  pointer-events: none;
+}
+
+/* Selected square */
+.square.is-selected::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--hl-selected);
+  box-shadow: inset 0 0 0 3px rgba(232, 180, 76, 0.9);
+  pointer-events: none;
+}
+
+/* Legal destination — a small centred dot */
+.square.is-legal::after {
+  content: "";
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: var(--hl-legal);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.square--dark.is-legal::after {
+  background: var(--hl-legal-on-dark);
+}
+
+/* Capture destination — a ring around the piece */
+.square.is-capture::after {
+  content: "";
+  position: absolute;
+  inset: 6%;
+  border: clamp(3px, 1vw, 5px) solid var(--hl-legal);
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.square--dark.is-capture::after {
+  border-color: var(--hl-legal-on-dark);
+}
+
+/* King in check — unmistakably dangerous, not just a text label */
+.square.is-check::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at center,
+    rgba(229, 89, 77, 0.95) 0%,
+    rgba(229, 89, 77, 0.7) 42%,
+    rgba(229, 89, 77, 0) 76%
+  );
+  pointer-events: none;
+  animation: check-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes check-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Hover affordance on pointer devices only */
+@media (hover: hover) and (pointer: fine) {
+  .square:hover:not(.is-selected) {
+    filter: brightness(1.08);
+  }
+}
+
+.square:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+  z-index: 4;
+}

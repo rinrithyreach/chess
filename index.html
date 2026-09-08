@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Chess zin — play local two-player chess in your browser.">
+  <meta name="theme-color" content="#14161d">
+  <title>Chess zin</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#9819;</text></svg>">
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/board.css">
+  <link rel="stylesheet" href="./css/responsive.css">
+  <!-- Arcade 3D skin. Inert unless <html data-ui-style="arcade">. -->
+  <link rel="stylesheet" href="./css/arcade.css">
+  <script>
+    // Apply the saved skin before first paint so switching never flashes the
+    // other theme. Deliberately inline and tiny; the app re-applies it later.
+    // Mirrors resolveUiStyle() in js/config.js — keep the locked list in sync.
+    // Duplicated here only because it must run before first paint, ahead of
+    // any module loading.
+    (function () {
+      var LOCKED = ['arcade'];
+      var style = 'classic';
+      try {
+        var ui = new URLSearchParams(location.search).get('ui');
+        if (ui === 'classic' || ui === 'arcade') {
+          style = ui; // DEBUG preview: may target a locked style
+        } else {
+          var raw = localStorage.getItem('chess-arena:settings');
+          var saved = raw && JSON.parse(raw).settings.uiStyle;
+          if (saved === 'classic' || (saved === 'arcade' && LOCKED.indexOf('arcade') < 0)) {
+            style = saved;
+          }
+        }
+      } catch (_) { /* fall through to the default */ }
+      document.documentElement.setAttribute('data-ui-style', style);
+    })();
+  </script>
+</head>
+<body>
+  <!-- ==================== START / MENU SCREEN ==================== -->
+  <main class="screen is-active" id="screen-menu">
+    <div class="menu">
+      <div class="menu__logo" aria-hidden="true">♛</div>
+      <h1 class="menu__title">CHESS zin</h1>
+
+      <div class="menu__actions">
+        <button type="button" class="btn btn--primary btn--block" id="btn-new-game">New Game</button>
+        <button type="button" class="btn btn--ghost btn--block" id="btn-continue-game" hidden>
+          Continue Game
+          <span class="btn__meta" id="continue-meta"></span>
+        </button>
+        <button type="button" class="btn btn--ghost btn--block" id="btn-menu-settings">Settings</button>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ==================== NEW GAME SETUP SCREEN ==================== -->
+  <main class="screen" id="screen-setup">
+    <div class="setup">
+      <header class="setup__header">
+        <button type="button" class="icon-btn" id="btn-setup-back" aria-label="Back to main menu">←</button>
+        <h2 class="setup__title">New Game</h2>
+      </header>
+
+      <form class="setup__form" id="form-new-game" novalidate>
+        <div class="field">
+          <label class="field__label" for="input-white">Player 1 <span class="field__hint">White</span></label>
+          <input class="field__input" type="text" id="input-white" name="white"
+                 maxlength="20" autocomplete="off" placeholder="Player 1" spellcheck="false">
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="input-black">Player 2 <span class="field__hint">Black</span></label>
+          <input class="field__input" type="text" id="input-black" name="black"
+                 maxlength="20" autocomplete="off" placeholder="Player 2" spellcheck="false">
+        </div>
+
+        <fieldset class="field field--modes">
+          <legend class="field__label">Game Mode</legend>
+          <label class="mode mode--available">
+            <input type="radio" name="mode" value="local" checked>
+            <span class="mode__body">
+              <span class="mode__name">Local Two Player</span>
+              <span class="mode__desc">Both players share this device</span>
+            </span>
+          </label>
+          <label class="mode" id="mode-online-label">
+            <input type="radio" name="mode" value="online" id="mode-online">
+            <span class="mode__body">
+              <span class="mode__name">Online Multiplayer</span>
+              <span class="mode__desc" id="mode-online-desc">Play on two devices</span>
+            </span>
+          </label>
+        </fieldset>
+
+        <!-- Only the local player's name is needed for an online game. -->
+        <div class="online-fields" id="online-fields" hidden>
+          <div class="field">
+            <label class="field__label" for="input-online-name">Your Name</label>
+            <input class="field__input" type="text" id="input-online-name"
+                   maxlength="20" autocomplete="off" placeholder="Your name" spellcheck="false">
+          </div>
+          <div class="online-choice">
+            <button type="button" class="btn btn--primary btn--block" id="btn-create-room">
+              Create Room
+            </button>
+            <div class="online-choice__divider"><span>or join a friend</span></div>
+            <div class="join-row">
+              <input class="field__input field__input--code" type="text" id="input-room-code"
+                     maxlength="6" autocomplete="off" spellcheck="false"
+                     placeholder="CODE" aria-label="Room code"
+                     inputmode="latin" autocapitalize="characters">
+              <button type="button" class="btn btn--ghost" id="btn-join-room">Join</button>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn--primary btn--block" id="btn-start-game">Start Game</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- ==================== WAITING FOR OPPONENT ==================== -->
+  <main class="screen" id="screen-waiting">
+    <div class="waiting">
+      <div class="waiting__spinner" aria-hidden="true"></div>
+      <h2 class="waiting__title">Waiting for opponent</h2>
+      <p class="waiting__hint">Share this code with your friend</p>
+
+      <div class="room-code" id="room-code-display">
+        <span class="room-code__value" id="room-code-value">------</span>
+        <button type="button" class="icon-btn" id="btn-copy-code" aria-label="Copy room code">⧉</button>
+      </div>
+
+      <p class="waiting__note">
+        They open Chess zin, choose <strong>Online Multiplayer</strong>,
+        and enter this code.
+      </p>
+
+      <button type="button" class="btn btn--ghost btn--block" id="btn-cancel-room">Cancel</button>
+    </div>
+  </main>
+
+  <!-- ==================== GAME SCREEN ==================== -->
+  <main class="screen" id="screen-game">
+    <header class="app-header">
+      <button type="button" class="icon-btn" id="btn-game-menu" aria-label="Game menu">☰</button>
+      <span class="app-header__title">CHESS zin</span>
+      <button type="button" class="icon-btn" id="btn-game-settings" aria-label="Settings">⚙</button>
+    </header>
+
+    <!-- Online room bar: only rendered for network games -->
+    <div class="room-bar" id="room-bar" hidden>
+      <span class="room-bar__code">
+        Room <strong id="room-bar-code">------</strong>
+      </span>
+      <span class="room-bar__status" id="room-bar-status" data-state="connecting">
+        <span class="room-bar__dot" aria-hidden="true"></span>
+        <span id="room-bar-status-text">Connecting…</span>
+      </span>
+    </div>
+
+    <div class="game">
+      <!-- Opponent card (top of board) -->
+      <section class="player-card" id="card-top" aria-label="Player at top of board">
+        <span class="player-card__avatar" data-color="b" aria-hidden="true">♚</span>
+        <span class="player-card__info">
+          <span class="player-card__name" id="top-name">Player 2</span>
+          <span class="player-card__color" id="top-color">Black</span>
+        </span>
+        <span class="player-card__turn" id="top-turn" hidden>To move</span>
+      </section>
+
+      <!-- Board -->
+      <div class="board-area">
+        <div class="board-frame">
+          <div class="board" id="board" data-theme="classic"></div>
+        </div>
+      </div>
+
+      <!-- Current player card (bottom of board) -->
+      <section class="player-card" id="card-bottom" aria-label="Player at bottom of board">
+        <span class="player-card__avatar" data-color="w" aria-hidden="true">♚</span>
+        <span class="player-card__info">
+          <span class="player-card__name" id="bottom-name">Player 1</span>
+          <span class="player-card__color" id="bottom-color">White</span>
+        </span>
+        <span class="player-card__turn" id="bottom-turn" hidden>To move</span>
+      </section>
+
+      <!--
+        Side panel. On mobile this is `display: contents`, so status, controls
+        and history flow inline exactly as if this wrapper did not exist. On
+        wider screens it becomes a real column beside the board.
+      -->
+      <aside class="game-panel" id="game-panel">
+
+        <!-- Status -->
+        <div class="status" id="status" role="status" aria-live="polite">
+          <span class="status__text" id="status-text">White's Turn</span>
+          <span class="status__badge" id="status-badge" hidden>Check</span>
+        </div>
+
+        <!-- Primary controls -->
+        <nav class="controls" aria-label="Game controls">
+          <button type="button" class="btn btn--control" id="btn-undo">
+            <span aria-hidden="true">↶</span> Undo
+          </button>
+          <button type="button" class="btn btn--control" id="btn-flip">
+            <span aria-hidden="true">⇅</span> Flip
+          </button>
+          <button type="button" class="btn btn--control" id="btn-draw">
+            <span aria-hidden="true">½</span> Draw
+          </button>
+          <button type="button" class="btn btn--control" id="btn-resign">
+            <span aria-hidden="true">⚑</span> Resign
+          </button>
+        </nav>
+
+        <!--
+          Move history — hidden from the game screen.
+
+          The panel is kept, not deleted: the move list is still tracked in
+          game state and persisted with the save, so only the display is off.
+          Remove the `hidden` attribute below to bring the panel back.
+        -->
+        <section class="history" id="history-panel" hidden>
+          <button type="button" class="history__toggle" id="btn-history-toggle"
+                  aria-expanded="false" aria-controls="history-list">
+            <span>Move History</span>
+            <span class="history__count" id="history-count">0 moves</span>
+            <span class="history__chevron" aria-hidden="true">▾</span>
+          </button>
+          <ol class="history__list" id="history-list"></ol>
+        </section>
+
+      </aside>
+    </div>
+  </main>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- Promotion -->
+  <div class="modal" id="modal-promotion" role="dialog" aria-modal="true"
+       aria-labelledby="promotion-title" hidden>
+    <div class="modal__backdrop" data-close="promotion"></div>
+    <div class="modal__panel modal__panel--compact">
+      <h2 class="modal__title" id="promotion-title">Promote Pawn</h2>
+      <p class="modal__text">Choose a piece</p>
+      <div class="promotion" id="promotion-choices"></div>
+      <button type="button" class="btn btn--ghost btn--block" data-close="promotion">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Generic confirmation -->
+  <div class="modal" id="modal-confirm" role="dialog" aria-modal="true"
+       aria-labelledby="confirm-title" hidden>
+    <div class="modal__backdrop" data-close="confirm"></div>
+    <div class="modal__panel modal__panel--compact">
+      <h2 class="modal__title" id="confirm-title">Are you sure?</h2>
+      <p class="modal__text" id="confirm-text"></p>
+      <div class="modal__actions">
+        <button type="button" class="btn btn--ghost" id="btn-confirm-cancel">Cancel</button>
+        <button type="button" class="btn btn--primary" id="btn-confirm-ok">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game over -->
+  <div class="modal" id="modal-gameover" role="dialog" aria-modal="true"
+       aria-labelledby="gameover-title" hidden>
+    <div class="modal__backdrop" data-close="gameover"></div>
+    <div class="modal__panel">
+      <div class="gameover__icon" id="gameover-icon" aria-hidden="true">♛</div>
+      <h2 class="modal__title" id="gameover-title">Checkmate</h2>
+      <p class="gameover__result" id="gameover-result">White Wins</p>
+      <p class="modal__text" id="gameover-detail"></p>
+      <div class="modal__actions modal__actions--stack">
+        <button type="button" class="btn btn--primary btn--block" id="btn-rematch">Rematch</button>
+        <button type="button" class="btn btn--ghost btn--block" id="btn-gameover-new">New Game</button>
+        <button type="button" class="btn btn--ghost btn--block" data-close="gameover">Review Board</button>
+      </div>
+      <label class="checkbox" for="check-swap-colors">
+        <input type="checkbox" id="check-swap-colors" checked>
+        <span>Swap colors on rematch</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="modal" id="modal-settings" role="dialog" aria-modal="true"
+       aria-labelledby="settings-title" hidden>
+    <div class="modal__backdrop" data-close="settings"></div>
+    <div class="modal__panel">
+      <h2 class="modal__title" id="settings-title">Settings</h2>
+
+      <div class="setting">
+        <label class="setting__label" for="set-sound">Sound</label>
+        <input type="checkbox" id="set-sound" class="switch">
+      </div>
+
+      <div class="setting">
+        <label class="setting__label" for="set-coords">Show Coordinates</label>
+        <input type="checkbox" id="set-coords" class="switch">
+      </div>
+
+      <div class="setting">
+        <label class="setting__label" for="set-animations">Animations</label>
+        <input type="checkbox" id="set-animations" class="switch">
+      </div>
+
+      <div class="setting">
+        <label class="setting__label" for="set-autoflip">Auto Flip Board</label>
+        <input type="checkbox" id="set-autoflip" class="switch">
+      </div>
+
+      <div class="setting setting--stack">
+        <span class="setting__label" id="style-label">Look &amp; Feel</span>
+        <div class="style-picker" id="style-picker" role="radiogroup" aria-labelledby="style-label"></div>
+      </div>
+
+      <div class="setting setting--stack">
+        <span class="setting__label" id="theme-label">Board Theme</span>
+        <div class="theme-picker" id="theme-picker" role="radiogroup" aria-labelledby="theme-label"></div>
+      </div>
+
+      <button type="button" class="btn btn--primary btn--block" data-close="settings">Done</button>
+    </div>
+  </div>
+
+  <!-- Game menu (secondary actions) -->
+  <div class="modal modal--sheet" id="modal-menu" role="dialog" aria-modal="true"
+       aria-labelledby="menu-title" hidden>
+    <div class="modal__backdrop" data-close="menu"></div>
+    <div class="modal__panel">
+      <h2 class="modal__title" id="menu-title">Game Menu</h2>
+      <div class="modal__actions modal__actions--stack">
+        <button type="button" class="btn btn--ghost btn--block" id="btn-restart">Restart Game</button>
+        <button type="button" class="btn btn--ghost btn--block" id="btn-leave">Main Menu</button>
+        <button type="button" class="btn btn--ghost btn--block" data-close="menu">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incoming draw offer (online) -->
+  <div class="modal" id="modal-draw-offer" role="dialog" aria-modal="true"
+       aria-labelledby="draw-offer-title" hidden>
+    <div class="modal__backdrop"></div>
+    <div class="modal__panel modal__panel--compact">
+      <h2 class="modal__title" id="draw-offer-title">Draw offered</h2>
+      <p class="modal__text" id="draw-offer-text">Your opponent offers a draw.</p>
+      <div class="modal__actions">
+        <button type="button" class="btn btn--ghost" id="btn-draw-decline">Decline</button>
+        <button type="button" class="btn btn--primary" id="btn-draw-accept">Accept</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Opponent disconnected (online) -->
+  <div class="modal" id="modal-opponent-left" role="dialog" aria-modal="true"
+       aria-labelledby="opponent-left-title" hidden>
+    <div class="modal__backdrop" data-close="opponent-left"></div>
+    <div class="modal__panel modal__panel--compact">
+      <div class="gameover__icon" aria-hidden="true">⚠</div>
+      <h2 class="modal__title" id="opponent-left-title">Opponent disconnected</h2>
+      <p class="modal__text">
+        They may be reconnecting. The game is saved — you can wait, or leave and
+        rejoin later with the same room code.
+      </p>
+      <div class="modal__actions modal__actions--stack">
+        <button type="button" class="btn btn--primary btn--block" data-close="opponent-left">Keep Waiting</button>
+        <button type="button" class="btn btn--ghost btn--block" id="btn-leave-room">Leave Room</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

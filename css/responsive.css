@@ -1,0 +1,278 @@
+/* ==========================================================================
+   responsive.css — mobile-first adjustments, then tablet and desktop
+   The base styles in style.css / board.css already target phones; everything
+   here refines those targets or layers on larger layouts.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Very small phones (360 x 800 and below)
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 374px) {
+  .game {
+    gap: 0.55rem;
+    padding: 0.6rem 0.5rem 2rem;
+  }
+
+  .board-frame {
+    padding: 5px;
+  }
+
+  .player-card {
+    padding: 0.5rem 0.6rem;
+  }
+
+  .player-card__avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 1.1rem;
+  }
+
+  .btn--control {
+    font-size: 0.68rem;
+    padding: 0.45rem 0.15rem;
+  }
+
+  .promotion {
+    gap: 0.35rem;
+  }
+
+  .promotion__choice {
+    min-height: 68px;
+  }
+
+  .menu__logo {
+    width: 78px;
+    height: 78px;
+    font-size: 2.6rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Large phones / small tablets
+   -------------------------------------------------------------------------- */
+
+@media (min-width: 600px) {
+  .game {
+    gap: 0.85rem;
+    padding: 1.1rem 1rem 3rem;
+  }
+
+  .board-frame {
+    width: min(90vw, 560px);
+    padding: 10px;
+  }
+
+  .status__text {
+    font-size: 1.1rem;
+  }
+
+  .btn--control {
+    flex-direction: row;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    padding: 0.6rem 0.5rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Tablets
+   -------------------------------------------------------------------------- */
+
+@media (min-width: 768px) {
+  .app-header {
+    padding: 0.5rem 1.25rem;
+  }
+
+  .app-header__title {
+    font-size: 0.95rem;
+  }
+
+  .menu__title {
+    font-size: 3rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Desktop — board beside a game panel
+   -------------------------------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  .game {
+    display: grid;
+    grid-template-columns: minmax(0, auto) 320px;
+    grid-template-rows: auto auto auto 1fr;
+    align-items: start;
+    gap: 0.75rem 1.5rem;
+    max-width: 1000px;
+    padding: 1.5rem 1.5rem 3rem;
+  }
+
+  #card-top    { grid-column: 1; grid-row: 1; }
+  .board-area  { grid-column: 1; grid-row: 2; }
+  #card-bottom { grid-column: 1; grid-row: 3; }
+
+  /* The panel becomes one real column spanning the board's full height, so
+     status, controls and history stack together instead of being spread
+     across grid rows sized by the board. */
+  .game-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    height: 100%;
+    min-width: 0;
+  }
+
+  #status { justify-content: flex-start; }
+
+  #history-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .board-frame {
+    /* Kept deliberately modest — a huge board is harder to read, not easier. */
+    width: min(58vw, 600px);
+  }
+
+  .controls {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* On desktop there is room for the history to stay open. */
+  .history__list,
+  .history.is-expanded .history__list {
+    flex: 1;
+    max-height: none;
+    min-height: 120px;
+    padding: 0 0.5rem 0.5rem;
+  }
+
+  .history__toggle {
+    cursor: default;
+  }
+
+  .history__chevron {
+    display: none;
+  }
+
+  #status {
+    padding: 0.5rem 0.9rem;
+    border: 1px solid var(--border);
+    background: var(--panel);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Wide desktop
+   -------------------------------------------------------------------------- */
+
+@media (min-width: 1280px) {
+  .game {
+    grid-template-columns: minmax(0, auto) 360px;
+    max-width: 1120px;
+  }
+
+  .board-frame {
+    width: min(52vw, 620px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Pointer-device refinements
+   -------------------------------------------------------------------------- */
+
+@media (hover: hover) and (pointer: fine) {
+  .square {
+    cursor: pointer;
+  }
+}
+
+/* Coarse pointers get slightly bigger tap targets in dense controls. */
+@media (pointer: coarse) {
+  .btn--control {
+    min-height: 52px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Landscape phones — keep the whole board on screen without scrolling.
+
+   Deliberately LAST in this file. A landscape phone (e.g. 844 x 390) also
+   satisfies the min-width: 600px and 768px blocks above, which would otherwise
+   size the board by width and push it off the bottom of a short viewport.
+   Being last, these rules win at equal specificity.
+   -------------------------------------------------------------------------- */
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .game {
+    display: grid;
+    grid-template-columns: auto minmax(0, 300px);
+    grid-template-rows: auto auto auto 1fr;
+    align-items: start;
+    gap: 0.5rem 1rem;
+    max-width: 100%;
+    padding: 0.5rem 0.75rem 1rem;
+  }
+
+  #card-top    { grid-column: 1; grid-row: 1; }
+  .board-area  { grid-column: 1; grid-row: 2; }
+  #card-bottom { grid-column: 1; grid-row: 3; }
+
+  .game-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    min-width: 0;
+  }
+
+  .board-frame {
+    /* Bound by height, not width — the short axis is what constrains here.
+       Sized so the header and both player cards still fit on screen. */
+    width: min(52vw, 56vh);
+    padding: 5px;
+  }
+
+  /* Two columns so labels are never squeezed into the narrow side panel. */
+  .controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .btn--control {
+    flex-direction: row;
+    /* Still the 44px minimum touch target, even where vertical space is tight. */
+    min-height: var(--tap);
+    padding: 0.4rem 0.4rem;
+    font-size: 0.78rem;
+  }
+
+  .app-header {
+    padding: 0.15rem 0.5rem;
+  }
+
+  .player-card {
+    padding: 0.4rem 0.6rem;
+  }
+
+  .player-card__avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 1rem;
+  }
+
+  .history__list,
+  .history.is-expanded .history__list {
+    max-height: 110px;
+  }
+
+  .modal__panel {
+    max-height: calc(100dvh - 1rem);
+    padding: 1rem 1.25rem;
+  }
+}

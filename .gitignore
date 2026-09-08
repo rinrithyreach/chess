@@ -1,0 +1,18 @@
+# Firebase emulator artifacts
+*-debug.log
+.firebase/
+firebase-export-*/
+
+# Node (only used for tooling — the app itself needs no build)
+node_modules/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# NOTE: js/firebase-config.js is intentionally NOT ignored.
+# A Firebase web config is public by design and belongs in the repo — your
+# data is protected by firebase/database.rules.json, not by hiding it.
+# Never commit a service-account key; those are real secrets.

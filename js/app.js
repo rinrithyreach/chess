@@ -1,0 +1,376 @@
+/**
+ * app.js
+ * Composition root: builds the controller, board and UI, then wires them.
+ *
+ * This is the only module that knows about all three layers. Keeping the
+ * wiring here means the board never calls the engine, and the engine never
+ * touches the DOM.
+ */
+
+import { GameController, EVENT } from './game-controller.js';
+import { LocalSession } from './sessions/local-session.js';
+import { Board } from './board.js';
+import { UI } from './ui.js';
+import * as storage from './storage.js';
+import sound from './sound.js';
+import { WHITE, GAME_MODE, DEBUG, log, warn } from './config.js';
+import { isFirebaseConfigured, firebaseConfigError } from './firebase-config.js';
+
+async function boot() {
+  const boardEl = document.getElementById('board');
+  if (!boardEl) {
+    warn('Board element missing — cannot start');
+    return;
+  }
+
+  // Phase 1 uses the local session. Phase 2 swaps this single line for a
+  // FirebaseSession; nothing below changes.
+  const controller = new GameController(new LocalSession());
+  const board = new Board(boardEl);
+  const ui = new UI(controller);
+
+  await controller.init();
+
+  // A move waiting to be animated on the next render.
+  let pendingAnimation = null;
+
+  // Online transitions we need to notice between renders.
+  let wasWaiting = false;
+  let opponentWasConnected = true;
+
+  // -----------------------------------------------------------------------
+  // Controller -> views
+  // -----------------------------------------------------------------------
+
+  controller.on(EVENT.CHANGE, (snapshot) => {
+    board.setOrientation(snapshot.orientation);
+    board.setShowCoordinates(snapshot.settings.showCoordinates);
+    board.setAnimationsEnabled(snapshot.settings.animations);
+    board.render(snapshot, { animateMove: pendingAnimation });
+    pendingAnimation = null;
+    ui.render(snapshot);
+    handleOnlineTransitions(snapshot);
+  });
+
+  /**
+   * Watch for the room-level events that change which screen the player sees:
+   * an opponent joining, dropping out, or coming back.
+   */
+  function handleOnlineTransitions(snapshot) {
+    const online = snapshot.state?.online;
+
+    // Not online, or online but not actually seated in a room — for example
+    // right after a failed join. Without this guard the presence check below
+    // would fire "opponent disconnected" for a room we were never in.
+    if (!online || !online.roomCode || !online.myColor) {
+      wasWaiting = false;
+      opponentWasConnected = true;
+      return;
+    }
+
+    // Opponent joined — leave the waiting screen and start playing.
+    if (wasWaiting && !online.waitingForOpponent) {
+      ui.showScreen('game');
+      ui.toast(`${online.opponentName ?? 'Opponent'} joined`);
+      sound.play('move');
+    }
+    wasWaiting = online.waitingForOpponent;
+
+    // Presence changes, but only once the game is actually under way.
+    if (!online.waitingForOpponent && !snapshot.state.isGameOver) {
+      if (opponentWasConnected && !online.opponentConnected) {
+        ui.showOpponentLeft();
+      } else if (!opponentWasConnected && online.opponentConnected) {
+        ui.closeOpponentLeft();
+        ui.toast(`${online.opponentName ?? 'Opponent'} reconnected`);
+      }
+      opponentWasConnected = online.opponentConnected;
+    }
+
+    // A draw offer we made, answered by the opponent, closes our own dialog.
+    if (!online.drawOfferFrom) ui.closeDrawOffer();
+  }
+
+  /**
+   * Swap in the Firebase session provider.
+   * This is the whole of the Phase 2 integration as far as the app is
+   * concerned — the board, UI and controller are untouched.
+   */
+  async function goOnline() {
+    if (controller.isOnline()) return { ok: true };
+    if (!isFirebaseConfigured()) {
+      return { ok: false, error: firebaseConfigError() };
+    }
+    try {
+      // Imported lazily so local play never fetches the Firebase SDK.
+      const { FirebaseSession } = await import('./sessions/firebase-session.js');
+      await controller.useSession(new FirebaseSession());
+      return { ok: true };
+    } catch (error) {
+      warn('Could not start online session', error);
+      return { ok: false, error: error.message ?? 'Could not connect' };
+    }
+  }
+
+  /** Return to local play after an online game. */
+  async function goLocal() {
+    if (!controller.isOnline()) return;
+    await controller.useSession(new LocalSession());
+  }
+
+  controller.on(EVENT.MOVE, ({ move }) => {
+    // Captured here and consumed by the CHANGE render that follows, so the
+    // animation always runs against the already-updated position.
+    pendingAnimation = move;
+  });
+
+  controller.on(EVENT.PROMOTION, (payload) => ui.showPromotion(payload));
+
+  controller.on(EVENT.GAME_OVER, (snapshot) => {
+    // Let the final position paint before the modal covers it.
+    window.setTimeout(() => ui.showGameOver(snapshot), 420);
+  });
+
+  controller.on(EVENT.TOAST, ({ message, tone }) => ui.toast(message, tone));
+
+  controller.on(EVENT.DRAW_OFFER, async ({ from, to, remote }) => {
+    // Online the offer arrives over the network and gets its own dialog, which
+    // stays up until answered. Locally both players share the device, so a
+    // plain confirmation aimed at the opponent is enough.
+    if (remote) {
+      const snapshot = controller.getSnapshot();
+      ui.showDrawOffer({ fromName: snapshot.state?.online?.opponentName });
+      return;
+    }
+
+    const offerer = from === WHITE ? 'White' : 'Black';
+    const receiver = to === WHITE ? 'White' : 'Black';
+    const accepted = await ui.confirm({
+      title: `${offerer} offers a draw`,
+      text: `${receiver}, do you accept?`,
+      confirmLabel: 'Accept',
+    });
+    if (accepted) await controller.acceptDraw();
+    else await controller.declineDraw();
+  });
+
+  // -----------------------------------------------------------------------
+  // Board -> controller
+  // -----------------------------------------------------------------------
+
+  board.onSquareActivate((square) => {
+    sound.unlock();
+    controller.selectSquare(square);
+  });
+
+  // -----------------------------------------------------------------------
+  // UI -> controller
+  // -----------------------------------------------------------------------
+
+  ui.bind({
+    onNewGameScreen: () => {
+      ui.showScreen('setup');
+      document.getElementById('input-white')?.focus();
+    },
+
+    onStartGame: async ({ whiteName, blackName }) => {
+      sound.unlock();
+      await controller.newGame({ whiteName, blackName });
+      ui.showScreen('game');
+    },
+
+    onContinue: async () => {
+      sound.unlock();
+      const info = controller.getSavedGameInfo();
+
+      // An online game resumes by rejoining its room, not by replaying a
+      // local copy — the room is authoritative and has probably moved on.
+      if (info?.mode === GAME_MODE.ONLINE && info.roomCode) {
+        const started = await goOnline();
+        if (!started.ok) {
+          ui.toast(started.error ?? 'Online play unavailable', 'error');
+          return;
+        }
+        const rejoined = await controller.rejoinRoom(info.roomCode);
+        if (rejoined.ok) ui.showScreen('game');
+        else ui.refreshContinueButton();
+        return;
+      }
+
+      const result = await controller.continueGame();
+      if (result.ok) ui.showScreen('game');
+      else ui.refreshContinueButton();
+    },
+
+    // --- Online room handlers ---
+
+    onCreateRoom: async (name) => {
+      sound.unlock();
+      const started = await goOnline();
+      if (!started.ok) {
+        ui.toast(started.error ?? 'Online play unavailable', 'error');
+        return;
+      }
+      const result = await controller.createRoom({ name });
+      if (result.ok) ui.showWaitingRoom(result.roomCode);
+    },
+
+    onJoinRoom: async ({ code, name }) => {
+      sound.unlock();
+      if (!code?.trim()) {
+        ui.toast('Enter a room code', 'warn');
+        return;
+      }
+      const started = await goOnline();
+      if (!started.ok) {
+        ui.toast(started.error ?? 'Online play unavailable', 'error');
+        return;
+      }
+      const result = await controller.joinRoom(code, { name });
+      if (result.ok) ui.showScreen('game');
+    },
+
+    onCancelRoom: async () => {
+      await controller.leaveRoom();
+      await goLocal();
+      ui.showScreen('menu');
+      ui.refreshContinueButton();
+    },
+
+    onCopyRoomCode: async (code) => {
+      const copied = await copyText(code);
+      ui.toast(copied ? 'Room code copied' : 'Could not copy code',
+        copied ? 'info' : 'error');
+    },
+
+    onAcceptDraw: () => controller.acceptDraw(),
+    onDeclineDraw: () => controller.declineDraw(),
+
+    onUndo: () => controller.undo(),
+
+    onFlip: () => controller.flipBoard(),
+
+    onOfferDraw: () => controller.offerDraw(),
+
+    onResign: async () => {
+      const snapshot = controller.getSnapshot();
+      const color = snapshot.state?.turn;
+      const name = color === WHITE ? 'White' : 'Black';
+      const confirmed = await ui.confirm({
+        title: `${name} resigns?`,
+        text: `${color === WHITE ? 'Black' : 'White'} will win the game.`,
+        confirmLabel: 'Resign',
+        tone: 'danger',
+      });
+      if (confirmed) await controller.resign(color);
+    },
+
+    onRestart: async () => {
+      ui.closeModal('menu');
+      const confirmed = await ui.confirm({
+        title: 'Restart this game?',
+        text: 'The board, move history and result will be reset. Player names are kept.',
+        confirmLabel: 'Restart',
+        tone: 'danger',
+      });
+      if (confirmed) await controller.restart();
+    },
+
+    onRematch: (swapColors) => controller.rematch(swapColors),
+
+
+    onLeaveGame: async () => {
+      ui.closeModal('menu');
+      const online = controller.isOnline();
+      const confirmed = await ui.confirm({
+        title: online ? 'Leave this room?' : 'Return to main menu?',
+        text: online
+          ? 'Your opponent will see you disconnect. You can rejoin with the same room code.'
+          : 'Your game is saved and can be continued later.',
+        confirmLabel: online ? 'Leave Room' : 'Main Menu',
+      });
+      if (!confirmed) return;
+
+      if (online) {
+        await controller.leaveRoom();
+        await goLocal();
+      }
+      ui.showScreen('menu');
+      ui.refreshContinueButton();
+    },
+
+    onPromotionChoice: (piece) => controller.completePromotion(piece),
+
+    onSettingChange: (patch) => {
+      const settings = controller.updateSettings(patch);
+      ui.syncSettings(settings);
+      if (Object.prototype.hasOwnProperty.call(patch, 'sound')) {
+        sound.unlock();
+        ui.toast(settings.sound ? 'Sound enabled' : 'Sound disabled');
+      }
+    },
+
+  });
+
+  // -----------------------------------------------------------------------
+  // Initial paint
+  // -----------------------------------------------------------------------
+
+  ui.syncSettings(controller.getSettings());
+  ui.refreshContinueButton();
+  ui.setOnlineAvailable(isFirebaseConfigured(), firebaseConfigError());
+  ui.showScreen('menu');
+
+  // Private browsing or blocked storage: the game is fully playable, but it
+  // cannot be resumed after a refresh. Say so once rather than failing quietly.
+  if (!storage.isAvailable()) {
+    ui.toast('Storage unavailable — this game will not be saved', 'warn');
+  }
+
+  // Audio contexts must be created from a user gesture.
+  const unlockOnce = () => sound.unlock();
+  document.addEventListener('pointerdown', unlockOnce, { once: true });
+  document.addEventListener('keydown', unlockOnce, { once: true });
+
+  if (DEBUG) {
+    // Handy console access while developing; never referenced by app code.
+    window.chessArena = { controller, board, ui };
+    log('DEBUG mode on — window.chessArena available');
+  }
+}
+
+/** Clipboard write with a fallback for non-secure contexts. */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy path below.
+  }
+
+  try {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  } catch (error) {
+    warn('Clipboard unavailable', error);
+    return false;
+  }
+}
+
+// Surface unexpected failures instead of dying silently.
+window.addEventListener('error', (event) => warn('Uncaught error:', event.message));
+window.addEventListener('unhandledrejection', (event) => warn('Unhandled rejection:', event.reason));
+
+boot().catch((error) => {
+  console.error('[chess] Fatal startup error', error);
+});

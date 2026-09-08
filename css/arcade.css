@@ -1,0 +1,648 @@
+/* ==========================================================================
+   arcade.css — the "Arcade 3D" skin
+   Bright casual-game look with the board tilted into real CSS 3D perspective.
+
+   Everything here is scoped to [data-ui-style="arcade"] on <html>, so the
+   Classic skin is completely untouched and switching is instant.
+
+   IMPORTANT: this is purely presentational. The board still renders the same
+   64 squares in the same DOM order with the same coordinates, so gameplay and
+   keyboard navigation are unchanged.
+
+   The tilt is a single FLATTENED transform, not a preserve-3d scene — see the
+   note above `.board` for why that distinction decides whether the board is
+   actually playable.
+   ========================================================================== */
+
+:root[data-ui-style="arcade"] {
+  /* --- Bright casual palette --- */
+  --bg: #4fa83d;
+  --bg-elevated: #ffffff;
+  --panel: #ffffff;
+  --panel-soft: #f2f6ef;
+  --border: #d6e2cd;
+  --border-strong: #b9cdac;
+
+  --text: #2c3a24;
+  --text-muted: #5d6f52;
+  --text-faint: #8598799e;
+
+  --accent: #ffb524;
+  --accent-soft: rgba(255, 181, 36, 0.2);
+  --accent-text: #4a3000;
+  --danger: #ef5350;
+  --danger-soft: rgba(239, 83, 80, 0.16);
+  --success: #52c96a;
+
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-lg: 26px;
+
+  /* Chunky, toy-like depth: a hard offset shadow rather than a soft blur. */
+  --shadow-sm: 0 2px 0 rgba(38, 62, 28, 0.25);
+  --shadow: 0 4px 0 rgba(38, 62, 28, 0.28), 0 8px 18px rgba(20, 40, 14, 0.22);
+  --shadow-lg: 0 10px 0 rgba(38, 62, 28, 0.25), 0 22px 44px rgba(20, 40, 14, 0.35);
+
+  /*
+     Tilt and perspective are a usability trade-off, not just a look.
+
+     Perspective makes the near edge wider than the CSS width and the far
+     ranks shorter. At 34deg/1100px the near edge grew ~11% (clipping the a-
+     and h-files) and rank 8 shrank to 35px tall — under the 44px touch
+     target. 28deg with a longer 1500px perspective keeps the 3D read while
+     holding the far rank close to a comfortable size.
+  */
+  --tilt: 28deg;
+  --perspective: 1500px;
+}
+
+/* --------------------------------------------------------------------------
+   Page background — sunny lawn
+   -------------------------------------------------------------------------- */
+
+:root[data-ui-style="arcade"] body {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.22) 0 12%, transparent 40%),
+    radial-gradient(circle at 84% 28%, rgba(255, 255, 255, 0.16) 0 10%, transparent 36%),
+    radial-gradient(circle at 50% 120%, #3d8f2f 0 40%, transparent 70%),
+    linear-gradient(180deg, #6cc054 0%, #4fa83d 55%, #3f9331 100%);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+/*
+   Garden scenery: bushes and blossoms drawn with gradients, no image requests.
+   Fixed and full-viewport on purpose — a fixed layer cannot contribute to
+   scroll width, so decoration can hang off the edges without ever causing the
+   horizontal overflow the spec forbids.
+*/
+:root[data-ui-style="arcade"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    /* Soft light pools */
+    radial-gradient(closest-side, rgba(255, 255, 255, 0.13) 0 100%, transparent),
+    radial-gradient(closest-side, rgba(255, 255, 255, 0.1) 0 100%, transparent),
+    /* Bushes with a darker rim so they read as shapes, not haze */
+    radial-gradient(closest-side, #7cc95f 0 60%, #4f9c3c 63%, transparent 65%),
+    radial-gradient(closest-side, #6ebd52 0 60%, #47913a 63%, transparent 65%),
+    radial-gradient(closest-side, #7cc95f 0 60%, #4f9c3c 63%, transparent 65%),
+    radial-gradient(closest-side, #6ebd52 0 60%, #47913a 63%, transparent 65%),
+    /* Blossoms */
+    radial-gradient(closest-side, #ffe3ee 0 52%, #ffb3d0 56%, transparent 58%),
+    radial-gradient(closest-side, #fff6cf 0 52%, #ffd964 56%, transparent 58%),
+    radial-gradient(closest-side, #ffe3ee 0 52%, #ffb3d0 56%, transparent 58%);
+  background-size:
+    280px 190px, 210px 150px,
+    150px 104px, 116px 82px, 132px 92px, 104px 74px,
+    18px 18px, 15px 15px, 14px 14px;
+  background-position:
+    -70px 6%, 92% 74%,
+    -56px 26%, 100% 34%, 101% 82%, -40px 88%,
+    5% 21%, 96% 30%, 7% 86%;
+  background-repeat: no-repeat;
+}
+
+:root[data-ui-style="arcade"] .screen,
+:root[data-ui-style="arcade"] .app-header,
+:root[data-ui-style="arcade"] .room-bar {
+  position: relative;
+  z-index: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Header + chrome
+   -------------------------------------------------------------------------- */
+
+:root[data-ui-style="arcade"] .app-header {
+  background: rgba(38, 92, 28, 0.55);
+  backdrop-filter: blur(6px);
+  border-bottom: 0;
+}
+
+:root[data-ui-style="arcade"] .app-header__title,
+:root[data-ui-style="arcade"] .room-bar__code {
+  color: #ffffff;
+  text-shadow: 0 2px 0 rgba(28, 70, 20, 0.45);
+}
+
+:root[data-ui-style="arcade"] .icon-btn {
+  background: #ffffff;
+  color: #4a6b3c;
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-ui-style="arcade"] .icon-btn:hover {
+  background: #f4f9f0;
+  color: #2c3a24;
+}
+
+:root[data-ui-style="arcade"] .room-bar {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: var(--radius);
+  border-bottom: 0;
+  box-shadow: var(--shadow-sm);
+  margin: 0.5rem auto 0;
+  width: calc(100% - 1.5rem);
+  max-width: 540px;
+}
+
+:root[data-ui-style="arcade"] .room-bar__code,
+:root[data-ui-style="arcade"] .room-bar__code strong {
+  color: #4a6b3c;
+  text-shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons — chunky, with a hard "press" shadow
+   -------------------------------------------------------------------------- */
+
+:root[data-ui-style="arcade"] .btn {
+  border: 0;
+  border-radius: var(--radius);
+  background: #ffffff;
+  color: #3d5232;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.09s ease, box-shadow 0.09s ease, filter 0.15s ease;
+}
+
+:root[data-ui-style="arcade"] .btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 rgba(38, 62, 28, 0.25);
+}
+
+:root[data-ui-style="arcade"] .btn--primary {
+  background: linear-gradient(180deg, #ffcb52, #ffa41f);
+  color: #5a3a00;
+  box-shadow: 0 4px 0 #cf8110, 0 8px 16px rgba(120, 70, 0, 0.28);
+}
+
+:root[data-ui-style="arcade"] .btn--primary:active:not(:disabled) {
+  box-shadow: 0 1px 0 #cf8110;
+}
+
+:root[data-ui-style="arcade"] .btn--ghost {
+  background: rgba(255, 255, 255, 0.92);
+  color: #4a6b3c;
+}
+
+:root[data-ui-style="arcade"] .btn[data-tone="danger"] {
+  background: linear-gradient(180deg, #ff7b78, #ef5350);
+  color: #fff;
+  box-shadow: 0 4px 0 #c33f3c, 0 8px 16px rgba(140, 40, 40, 0.3);
+}
+
+:root[data-ui-style="arcade"] .btn--control {
+  background: #ffffff;
+  color: #4a6b3c;
+}
+
+:root[data-ui-style="arcade"] .btn--control span {
+  color: #6c8b5c;
+}
+
+/* --------------------------------------------------------------------------
+   Menu + setup screens
+   -------------------------------------------------------------------------- */
+
+:root[data-ui-style="arcade"] .menu__logo {
+  background: linear-gradient(160deg, #ffffff, #eaf3e4);
+  border: 0;
+  border-radius: 30px;
+  color: #ffa41f;
+  box-shadow: var(--shadow);
+}
+
+:root[data-ui-style="arcade"] .menu__title,
+:root[data-ui-style="arcade"] .setup__title,
+:root[data-ui-style="arcade"] .waiting__title {
+  color: #ffffff;
+  text-shadow: 0 3px 0 rgba(30, 74, 22, 0.55), 0 6px 14px rgba(20, 50, 12, 0.35);
+}
+
+:root[data-ui-style="arcade"] .waiting__hint,
+:root[data-ui-style="arcade"] .waiting__note {
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 2px rgba(20, 50, 12, 0.4);
+}
+
+:root[data-ui-style="arcade"] .field__label {
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(20, 50, 12, 0.45);
+}
+
+:root[data-ui-style="arcade"] .field__input,
+:root[data-ui-style="arcade"] .mode {
+  background: #ffffff;
+  border: 0;
+  border-radius: var(--radius);
+  color: #2c3a24;
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-ui-style="arcade"] .mode--available:has(input:checked) {
+  background: #fff6e2;
+  box-shadow: 0 0 0 3px var(--accent), var(--shadow-sm);
+}
+
+:root[data-ui-style="arcade"] .setup__header .icon-btn {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+/* --------------------------------------------------------------------------
+   Player cards — avatar-led, like a casual mobile game
+   -------------------------------------------------------------------------- */
+
+:root[data-ui-style="arcade"] .player-card {
+  background: rgba(255, 255, 255, 0.94);
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 0.55rem 0.9rem;
+}
+
+:root[data-ui-style="arcade"] .player-card.is-active {
+  background: #fffaf0;
+  box-shadow: 0 0 0 3px var(--accent), var(--shadow);
+}
+
+:root[data-ui-style="arcade"] .player-card__avatar {
+  width: 44px;
+  height: 44px;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 0 rgba(38, 62, 28, 0.25);
+  font-size: 1.5rem;
+}
+
+:root[data-ui-style="arcade"] .player-card__avatar[data-color="w"] {
+  background: linear-gradient(160deg, #fff8e8, #ffd79a);
+  color: #7a5320;
+}
+
+:root[data-ui-style="arcade"] .player-card__avatar[data-color="b"] {
+  background: linear-gradient(160deg, #6b7ea8, #3c4a6b);
+  color: #f0f4ff;
+}
+
+:root[data-ui-style="arcade"] .player-card__name {
+  color: #2c3a24;
+  font-weight: 800;
+}
+
+:root[data-ui-style="arcade"] .player-card__color {
+  color: #7b9169;
+}
+
+:root[data-ui-style="arcade"] .player-card__turn {
+  background: linear-gradient(180deg, #ffcb52, #ffa41f);
+  color: #5a3a00;
+  box-shadow: 0 2px 0 #cf8110;
+}
+
+/* --------------------------------------------------------------------------
+   THE BOARD — tilted into 3D
+   -------------------------------------------------------------------------- */
+
+:root[data-ui-style="arcade"] .board-frame {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  /* Perspective lives on the frame so the board can rotate inside it. */
+  perspective: var(--perspective);
+  perspective-origin: 50% 42%;
+  /* The tilt visually shortens the board, so reclaim the vertical space. */
+  margin-block: clamp(0.5rem, 3vw, 1.5rem);
+  /*
+     Narrower than the Classic skin on purpose. The 3D projection widens the
+     near edge beyond the element's CSS width (~6% at this tilt), and the
+     wooden rim adds ~22px more — at full width both were clipped off the
+     sides of the screen. 86vw leaves room for both.
+  */
+  width: min(86vw, 500px);
+  position: relative;
+}
+
+/*
+   Scenery lives on the fixed, full-viewport body::before layer above, never on
+   an element inside the flow. An absolutely-positioned decoration around the
+   board looked right but pushed ~15px past the viewport on phones, because the
+   board already occupies nearly the full width — and negative insets count
+   toward scroll width even when the paint is purely decorative.
+*/
+
+/*
+   The tilt is a SINGLE flattened transform on the board, deliberately not a
+   preserve-3d scene.
+
+   The obvious approach — `transform-style: preserve-3d` on the board with
+   each piece counter-rotated into 3D space — looks marginally better but
+   breaks input: Chromium routes pointer events using compositor hit-test
+   regions that go stale when a child of a 3D context repaints, so taps start
+   landing on the board instead of the square after the first move.
+   `elementFromPoint` still reports the right square, which makes it look like
+   it works until you actually try to play.
+
+   Flattening keeps every square an ordinary hit target. Pieces get a 2D
+   scaleY instead (see below), which reads as "standing up" just as well.
+*/
+:root[data-ui-style="arcade"] .board {
+  transform: perspective(var(--perspective)) rotateX(var(--tilt));
+  transform-style: flat;
+  border-radius: 10px;
+  overflow: visible;
+  /* Grass-coloured rim + a soft contact shadow on the ground. */
+  box-shadow:
+    0 0 0 8px #a9743f,
+    0 0 0 11px #8a5c2f,
+    0 26px 40px rgba(20, 45, 12, 0.45);
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* Squares stay ordinary, untransformed hit targets. */
+
+:root[data-ui-style="arcade"] .square--light {
+  background: linear-gradient(160deg, #f7e4c3, #ecd3ab);
+}
+
+:root[data-ui-style="arcade"] .square--dark {
+  background: linear-gradient(160deg, #c08c55, #a9743f);
+}
+
+/*
+   The board tilt foreshortens everything vertically by roughly cos(tilt).
+   Scaling pieces back up on Y cancels that, so they read as standing upright
+   on the board rather than lying flat on it — the same illusion the 3D
+   version gave, but as a plain 2D transform that does not disturb hit-testing.
+   1 / cos(28deg) ≈ 1.13.
+*/
+:root[data-ui-style="arcade"] .piece {
+  font-size: clamp(20px, 7.4vw, 44px);
+  transform-origin: 50% 82%;
+  transform: scaleY(1.13) translateY(-6%);
+  transition: transform 0.2s ease;
+}
+
+/*
+   Glossy "moulded plastic" pieces.
+
+   The glyph is filled with a top-lit gradient via background-clip:text, which
+   is what gives the moulded look. Because the text itself is transparent,
+   text-shadow can no longer be used for the outline — it would paint a solid
+   silhouette behind the fill. The outline and cast shadow come from a
+   drop-shadow chain instead (see each colour below).
+*/
+:root[data-ui-style="arcade"] .piece[data-color],
+:root[data-ui-style="arcade"] .promotion__glyph[data-color] {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
+   The outline is four 1px drop-shadows rather than -webkit-text-stroke.
+   text-stroke is centred on the glyph edge, so at the thickness needed to read
+   on a light square it eats inward and turns the white pieces muddy brown.
+   drop-shadow paints around the shape instead, keeping the gradient fill
+   intact, and it composes with the soft cast shadow in the same filter chain.
+*/
+:root[data-ui-style="arcade"] .piece[data-color="w"],
+:root[data-ui-style="arcade"] .promotion__glyph[data-color="w"] {
+  background-image: linear-gradient(180deg, #ffffff 0%, #fffaf0 42%, #f0e2c4 74%, #dcc6a0 100%);
+  text-shadow: none;
+  filter:
+    drop-shadow(1px 0 0 #6b5533) drop-shadow(-1px 0 0 #6b5533)
+    drop-shadow(0 1px 0 #6b5533) drop-shadow(0 -1px 0 #6b5533)
+    drop-shadow(0 3px 3px rgba(60, 40, 15, 0.45));
+}
+
+:root[data-ui-style="arcade"] .piece[data-color="b"],
+:root[data-ui-style="arcade"] .promotion__glyph[data-color="b"] {
+  background-image: linear-gradient(180deg, #8fa0b8 0%, #5a6b90 36%, #394566 72%, #2a3450 100%);
+  text-shadow: none;
+  /*
+     A DARK outline, unlike the Classic skin. Classic outlines dark pieces in
+     near-white so they separate from dark squares; the arcade board is light
+     tan throughout, so a light outline reads as a white sticker halo instead
+     of a moulded edge.
+  */
+  filter:
+    drop-shadow(1px 0 0 #1b2338) drop-shadow(-1px 0 0 #1b2338)
+    drop-shadow(0 1px 0 #1b2338) drop-shadow(0 -1px 0 #1b2338)
+    drop-shadow(0 3px 3px rgba(15, 22, 45, 0.5));
+}
+
+/* A soft ellipse on the ground under each piece sells the height. */
+:root[data-ui-style="arcade"] .square .piece::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6%;
+  width: 62%;
+  height: 16%;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: rgba(40, 25, 5, 0.3);
+  filter: blur(2px);
+  z-index: -1;
+}
+
+/* Lift the piece that is selected, as if picked up. */
+:root[data-ui-style="arcade"] .square.is-selected .piece {
+  transform: scaleY(1.13) translateY(-16%) scale(1.06);
+}
+
+/* --- Highlights, restyled for the bright board --- */
+
+:root[data-ui-style="arcade"] .board {
+  --hl-selected: rgba(255, 205, 80, 0.62);
+  --hl-last-move: rgba(255, 205, 80, 0.42);
+  --hl-legal: rgba(58, 92, 40, 0.4);
+  --hl-legal-on-dark: rgba(255, 250, 235, 0.62);
+  --hl-check: #ff4d4d;
+}
+
+:root[data-ui-style="arcade"] .square.is-selected::before {
+  box-shadow: inset 0 0 0 4px #ffd25a;
+}
+
+:root[data-ui-style="arcade"] .square.is-legal::after {
+  width: 34%;
+  height: 34%;
+  box-shadow: 0 2px 4px rgba(20, 40, 12, 0.35);
+}
+
+:root[data-ui-style="arcade"] .square.is-check::before {
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 77, 77, 0.95) 0%,
+    rgba(255, 77, 77, 0.6) 45%,
+    rgba(255, 77, 77, 0) 78%
+  );
+}
+
+/* Coordinates would look skewed lying on the tilted plane, so keep them
+   small and low-contrast rather than removing information entirely. */
+:root[data-ui-style="arcade"] .square__coord {
+  font-size: clamp(6px, 1.5vw, 10px);
+  opacity: 0.55;
+}
+
+/* The floating drag piece is outside the board's 3D space, so it must not
+   inherit the counter-rotation. */
+:root[data-ui-style="arcade"] .piece--ghost {
+  transform-origin: 50% 50%;
+}
+
+:root[data-ui-style="arcade"] .piece--ghost::after {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Status, history, modals
+   -------------------------------------------------------------------------- */
+
+:root[data-ui-style="arcade"] .status__text {
+  color: #ffffff;
+  text-shadow: 0 2px 0 rgba(30, 74, 22, 0.5);
+}
+
+:root[data-ui-style="arcade"] .status.is-over .status__text {
+  color: #fff0c2;
+}
+
+:root[data-ui-style="arcade"] .status__badge[data-tone="check"] {
+  background: #ffffff;
+  color: #e03c39;
+}
+
+:root[data-ui-style="arcade"] .status__badge[data-tone="win"] {
+  background: #ffffff;
+  color: #2f9d4c;
+}
+
+:root[data-ui-style="arcade"] .status__badge[data-tone="draw"] {
+  background: #ffffff;
+  color: #6b7f5f;
+}
+
+:root[data-ui-style="arcade"] .history {
+  background: rgba(255, 255, 255, 0.94);
+  border: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-ui-style="arcade"] .history__toggle {
+  color: #3d5232;
+  font-weight: 800;
+}
+
+:root[data-ui-style="arcade"] .history__row:nth-child(odd) {
+  background: rgba(90, 140, 70, 0.08);
+}
+
+:root[data-ui-style="arcade"] .modal__panel {
+  background: #ffffff;
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+:root[data-ui-style="arcade"] .modal__title {
+  color: #2c3a24;
+}
+
+:root[data-ui-style="arcade"] .modal__backdrop {
+  background: rgba(24, 56, 16, 0.62);
+}
+
+:root[data-ui-style="arcade"] .gameover__icon {
+  background: linear-gradient(160deg, #fff3d4, #ffd98a);
+  border: 0;
+  color: #d98800;
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-ui-style="arcade"] .gameover__result {
+  color: #e09400;
+}
+
+:root[data-ui-style="arcade"] .promotion__choice {
+  background: #f7faf4;
+  border: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+:root[data-ui-style="arcade"] .promotion__choice:hover {
+  background: #fff4dc;
+}
+
+:root[data-ui-style="arcade"] .promotion__glyph[data-color="w"] {
+  color: #fffdf7;
+  text-shadow: 0 1px 0 #c2ad90, 0 2px 0 #a8916f, 0 3px 4px rgba(60, 40, 15, 0.45);
+}
+
+:root[data-ui-style="arcade"] .promotion__glyph[data-color="b"] {
+  color: #46536f;
+  text-shadow: 0 1px 0 #2f3a52, 0 2px 0 #26304a, 0 3px 4px rgba(15, 22, 45, 0.5);
+}
+
+:root[data-ui-style="arcade"] .toast {
+  background: #ffffff;
+  border: 0;
+  color: #2c3a24;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+
+:root[data-ui-style="arcade"] .switch {
+  background: #dfe8d8;
+  border: 0;
+}
+
+:root[data-ui-style="arcade"] .switch:checked {
+  background: #ffd98a;
+}
+
+:root[data-ui-style="arcade"] .switch::after {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+:root[data-ui-style="arcade"] .switch:checked::after {
+  background: #ff9f1a;
+}
+
+:root[data-ui-style="arcade"] .room-code {
+  background: #ffffff;
+  border: 0;
+  box-shadow: var(--shadow);
+}
+
+:root[data-ui-style="arcade"] .room-code__value {
+  color: #e09400;
+}
+
+:root[data-ui-style="arcade"] .waiting__spinner {
+  border-color: rgba(255, 255, 255, 0.45);
+  border-top-color: #ffd25a;
+}
+
+/* --------------------------------------------------------------------------
+   Motion preference: keep the look, drop the movement
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ui-style="arcade"] .board,
+  :root[data-ui-style="arcade"] .piece {
+    transition: none;
+  }
+}
