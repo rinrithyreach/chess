@@ -12,6 +12,7 @@ import {
   BLACK,
   STATUS,
   BOARD_THEMES,
+  GAME_MODE,
   UI_STYLES,
   LOCKED_CONTROLS,
   isControlLocked,
@@ -185,6 +186,35 @@ export class UI {
       this.#dom[`screen-${screen}`]?.classList.toggle('is-active', screen === name);
     });
     window.scrollTo(0, 0);
+  }
+
+  /** Which Game Mode radio is currently chosen. */
+  #selectedMode() {
+    const checked = this.#dom['form-new-game']?.querySelector('input[name="mode"]:checked');
+    return checked?.value ?? GAME_MODE.LOCAL;
+  }
+
+  /**
+   * Show the parts of the setup form the chosen mode actually needs.
+   *
+   * Each mode asks for something different: two names for a local game, one
+   * for a game against the bot (the bot names its own seat), and none at all
+   * online, where the room controls take over and there is no Start button
+   * because the game begins when somebody joins.
+   */
+  #applyMode(mode) {
+    const online = mode === GAME_MODE.ONLINE;
+    const bot = mode === GAME_MODE.BOT;
+
+    if (this.#dom['online-fields']) this.#dom['online-fields'].hidden = !online;
+    if (this.#dom['btn-start-game']) this.#dom['btn-start-game'].hidden = online;
+
+    const nameFields = this.#dom['form-new-game']
+      ?.querySelectorAll('.field:not(.field--modes)');
+    nameFields?.forEach((field, index) => {
+      if (index === 0) field.hidden = online;            // the player's own name
+      else if (index === 1) field.hidden = online || bot; // the opponent's
+    });
   }
 
   /** Enable or disable the Online option on the setup screen. */
@@ -628,22 +658,16 @@ export class UI {
     this.#dom['form-new-game']?.addEventListener('submit', (event) => {
       event.preventDefault();
       this.#call('onStartGame', {
+        mode: this.#selectedMode(),
         whiteName: this.#dom['input-white']?.value ?? '',
         blackName: this.#dom['input-black']?.value ?? '',
       });
     });
 
-    // --- Online: mode toggle reveals the room controls ---
+    // --- Mode toggle: each mode needs a different part of this form ---
     this.#dom['form-new-game']?.addEventListener('change', (event) => {
       if (event.target.name !== 'mode') return;
-      const isOnline = event.target.value === 'online';
-      if (this.#dom['online-fields']) this.#dom['online-fields'].hidden = !isOnline;
-      // The two-name form and the Start button only apply to local games.
-      if (this.#dom['btn-start-game']) this.#dom['btn-start-game'].hidden = isOnline;
-      const localFields = this.#dom['form-new-game']?.querySelectorAll('.field:not(.field--modes)');
-      localFields?.forEach((field, index) => {
-        if (index < 2) field.hidden = isOnline;
-      });
+      this.#applyMode(event.target.value);
     });
 
     this.#dom['btn-create-room']?.addEventListener('click', () =>

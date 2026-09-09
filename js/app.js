@@ -169,6 +169,17 @@ async function boot() {
       return;
     }
 
+    // A saved game carries the mode it was played in, so resuming has to put
+    // the matching provider back. Restore a bot game onto a plain
+    // LocalSession and the bot's pieces simply become the player's — the
+    // position is right and the opponent has quietly gone.
+    if (info?.mode === GAME_MODE.BOT) {
+      const { BotSession } = await import('./sessions/bot-session.js');
+      await controller.useSession(new BotSession());
+    } else {
+      await controller.useSession(new LocalSession());
+    }
+
     const result = await controller.continueGame();
     if (result.ok) ui.showScreen('game');
     else ui.refreshContinueButton();
@@ -350,9 +361,26 @@ async function boot() {
       document.getElementById('input-white')?.focus();
     },
 
-    onStartGame: async ({ whiteName, blackName }) => {
+    onStartGame: async ({ mode, whiteName, blackName }) => {
       sound.unlock();
-      await controller.newGame({ whiteName, blackName });
+
+      // The mode picks the session provider, and that is the whole of the
+      // difference between these games. Everything downstream — board, UI,
+      // controller — is the same code either way.
+      // A fresh provider every time, rather than reusing whatever the last
+      // game left mounted. BotSession extends LocalSession, so `instanceof`
+      // cannot tell them apart, and starting a two-player game on a session
+      // that still answers as the bot is exactly the bug that invites.
+      if (mode === GAME_MODE.BOT) {
+        // Imported lazily: the search and its tables are dead weight for
+        // anyone who only ever plays another person.
+        const { BotSession } = await import('./sessions/bot-session.js');
+        await controller.useSession(new BotSession());
+        await controller.newGame({ whiteName, mode: GAME_MODE.BOT });
+      } else {
+        await controller.useSession(new LocalSession());
+        await controller.newGame({ whiteName, blackName });
+      }
       ui.showScreen('game');
     },
 

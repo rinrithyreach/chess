@@ -5,9 +5,10 @@ backend, no build step, no framework.
 
 > **CURRENT VERSION — Local Two-Player + Online Multiplayer**
 >
-> **Phase 1 — Local.** Two players share one device. Full standard chess
-> rules, save/resume, move history, resign and rematches. (Undo is built but
-> locked in the UI; the Draw button has been removed — see *Known limitations*.)
+> **Phase 1 — Local.** Two players share one device, or one plays the
+> built-in bot. Full standard chess rules, save/resume, move history, resign
+> and rematches. (Undo is built but locked in the UI; the Draw button has been
+> removed — see *Known limitations*.)
 >
 > **Phase 2 — Online.** Two players, two devices, synchronised through
 > Firebase Realtime Database: room codes, anonymous auth, live move sync,
@@ -67,6 +68,18 @@ turn/legality validation. Illegal moves never touch game state.
 **Playing** — tap-to-move on every device, plus optional drag-and-drop on
 mouse/pen. Selected square, legal-move dots, capture rings, last-move
 highlight and a pulsing check indicator.
+
+**Three game modes** — *Local Two Player* (share one device), *Player vs Bot*,
+and *Online Multiplayer*. Each is a session provider and nothing else: the
+board, the UI and the controller are identical in all three.
+
+**The bot** — negamax with alpha-beta, ordered moves, a quiescence search and
+piece-square tables, searching under a time budget rather than to a fixed
+depth, so the wait is bounded on a cheap phone and a faster device simply gets
+a stronger opponent. It runs in a Web Worker, so the board never freezes while
+it thinks. Roughly a novice: it punishes hanging pieces and short tactics, and
+will miss deeper combinations. Strength is one number — `BOT_TIME_BUDGET_MS`
+in `js/config.js` — which is where difficulty levels would go.
 
 **Online multiplayer** — create a room, share a six-character code, and play
 across two devices. Live move sync, per-device board orientation, opponent
@@ -152,11 +165,14 @@ chess-game/
 │   ├── board-shared.js           Square list, FEN parsing, labels — used by BOTH boards
 │   ├── board.js                  Flat DOM board: rendering and interaction
 │   ├── board-3d.js               WebGL board: same contract, lazily loaded
+│   ├── bot.js                    The opponent: evaluation and search
+│   ├── bot-worker.js             Runs that search off the main thread
 │   ├── ui.js                     Screens, modals, panels, toasts
 │   ├── storage.js                Versioned, validated localStorage
 │   ├── sound.js                  Web Audio effects
 │   ├── sessions/
-│   │   ├── local-session.js      Phase 1 provider — same device
+│   │   ├── local-session.js      Provider — two players, one device
+│   │   ├── bot-session.js        Provider — one player, one computer
 │   │   └── firebase-session.js   Phase 2 provider — two devices
 │   └── vendor/
 │       ├── chess.js              chess.js 1.4.0 ESM build (vendored)
@@ -630,12 +646,14 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across twelve suites — **665 assertions, all passing, with zero console
+project across fourteen suites — **712 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
 | --- | --- | --- |
 | Engine (Node) | 81 | Every rule scenario in the spec, plus error handling |
+| **Bot engine (Node)** | **13** | **Its chess: mate in one, free material, no self-blunders, promotion, timing** |
+| **Bot mode (Chromium)** | **34** | **Replies, refuses its own pieces to the player, never blocks a frame, survives a reload** |
 | App (jsdom) | 131 | Boots the real app, drives it by tap/click, asserts DOM |
 | Layout (Chromium) | 145 | 9 viewports: overflow, board geometry, touch targets |
 | Interaction (Chromium) | 42 | Real page refresh, drag-and-drop, keyboard, clipboard |

@@ -54,14 +54,44 @@ export const TERMINAL_STATUSES = [
 
 /**
  * Game modes.
- * A mode is only listed here once it is offered in the UI — the AI mode is
- * Phase 6 and its placeholder has been removed from the setup screen, so it
- * gets added back when it is actually built.
+ * A mode is only listed here once it is offered in the UI, and each has its
+ * own session provider — local-session, bot-session, firebase-session.
  */
 export const GAME_MODE = {
   LOCAL: 'local',
+  BOT: 'bot',
   ONLINE: 'online',
 };
+
+/**
+ * Roughly how long the bot may think, in ms.
+ *
+ * A time budget rather than a fixed depth, because depth is a guess about
+ * hardware: measured against chess.js, a midgame depth-3 search runs in a
+ * fraction of a second in a quiet position and several seconds in a busy one,
+ * and a phone is slower again. The bot searches depth 1, then 2, then 3, and
+ * plays the best move from the last depth that finished inside this budget —
+ * so the wait is bounded everywhere, and a faster device simply gets a
+ * stronger opponent rather than the same one sooner.
+ *
+ * This is the knob for difficulty, if levels are ever wanted.
+ */
+export const BOT_TIME_BUDGET_MS = 1200;
+
+/** Never search deeper than this, however much budget is left. */
+export const BOT_MAX_DEPTH = 4;
+
+/**
+ * Shortest time the bot may appear to think, in ms.
+ *
+ * An instant reply reads as a canned response rather than a decision, and
+ * lands on top of the animation of the move that provoked it. This is a floor,
+ * not a delay: a search that takes longer is not padded.
+ */
+export const BOT_MIN_THINK_MS = 450;
+
+/** Shown wherever the bot's seat needs a player name. */
+export const BOT_NAME = 'Bot';
 
 /** Board themes. Values map to `data-theme` on the board element. */
 export const BOARD_THEMES = [
