@@ -21,6 +21,12 @@ import {
   CAPTURE_FADE_RATIO,
   WHITE,
 } from './config.js';
+import {
+  ALL_SQUARES,
+  boardFromFen,
+  describeSquare,
+  squareShade,
+} from './board-shared.js';
 
 /**
  * Does this device want motion kept to a minimum?
@@ -74,35 +80,8 @@ const PIECE_GLYPHS = {
   p: `♟${TEXT_PRESENTATION}`,
 };
 
-const PIECE_NAMES = {
-  k: 'king',
-  q: 'queen',
-  r: 'rook',
-  b: 'bishop',
-  n: 'knight',
-  p: 'pawn',
-};
-
 function renderPieceContent(pieceEl, piece) {
   pieceEl.textContent = PIECE_GLYPHS[piece.type] ?? '';
-}
-
-/** All 64 squares in a8..h1 order (matching chess.js' board() layout). */
-function buildSquareList() {
-  const squares = [];
-  for (let rank = 8; rank >= 1; rank -= 1) {
-    for (const file of FILES) squares.push(`${file}${rank}`);
-  }
-  return squares;
-}
-
-const ALL_SQUARES = buildSquareList();
-
-/** Light or dark, computed from the coordinate rather than the array index. */
-function squareShade(square) {
-  const fileIndex = FILES.indexOf(square[0]);
-  const rankIndex = RANKS.indexOf(square[1]);
-  return (fileIndex + rankIndex) % 2 === 0 ? 'dark' : 'light';
 }
 
 export class Board {
@@ -135,11 +114,33 @@ export class Board {
   // Drag state (mouse/pen only — touch uses tap-to-move).
   #drag = null;
 
+  /**
+   * Cancels every listener this board added, in one call.
+   *
+   * Needed because the board is no longer the only thing that can occupy the
+   * board element — the player can switch to the WebGL board and back, and
+   * each switch builds a new instance on the same element. Without this the
+   * old instance's listeners survive, and a single tap is then delivered to
+   * two boards: both call the controller, the square is activated twice, and
+   * the selection is toggled straight back off. The move silently does
+   * nothing, which is exactly what it looked like.
+   */
+  #listeners = new AbortController();
+
   constructor(rootElement) {
     if (!rootElement) throw new Error('Board root element is required');
     this.#root = rootElement;
     this.#build();
     this.#attachListeners();
+  }
+
+  /** Detach from the board element so another renderer can take it over. */
+  dispose() {
+    this.#listeners.abort();
+    this.#squares.clear();
+    this.#lastRendered.clear();
+    this.#running.forEach((animation) => animation.cancel());
+    this.#running.clear();
   }
 
   /** Register the tap/click handler. The controller decides what it means. */
@@ -249,7 +250,7 @@ export class Board {
     // because the repaint is what erases it. Cheap, and only on captures.
     const capturedGhost = move?.isCapture ? this.#detachCaptured(move) : null;
 
-    const board = this.#boardFromFen(state.fen);
+    const board = boardFromFen(state.fen);
     const selected = view?.selected ?? null;
     const targets = new Map((view?.legalTargets ?? []).map((m) => [m.to, m]));
     const lastMove = state.lastMove;
@@ -270,7 +271,7 @@ export class Board {
       );
       el.classList.toggle('is-check', square === state.checkSquare);
 
-      el.setAttribute('aria-label', this.#describeSquare(square, piece, target));
+      el.setAttribute('aria-label', describeSquare(square, piece, target));
     });
 
     if (move) this.#animateMove(move, capturedGhost);
@@ -297,46 +298,6 @@ export class Board {
     renderPieceContent(pieceEl, piece);
   }
 
-  #describeSquare(square, piece, target) {
-    const who = piece
-      ? `${piece.color === WHITE ? 'white' : 'black'} ${PIECE_NAMES[piece.type]}`
-      : 'empty';
-    if (target) {
-      return `${square}, ${who}, ${target.isCapture ? 'capture' : 'move here'}`;
-    }
-    return `${square}, ${who}`;
-  }
-
-  /**
-   * Parse the piece-placement field of a FEN into a square->piece map.
-   * The board renders from FEN so its input is exactly the same serialized
-   * state the session publishes and storage persists.
-   */
-  #boardFromFen(fen) {
-    const map = new Map();
-    const placement = String(fen).split(' ')[0] ?? '';
-    const rows = placement.split('/');
-
-    rows.forEach((row, rowIndex) => {
-      const rank = 8 - rowIndex;
-      let fileIndex = 0;
-      for (const char of row) {
-        if (/\d/.test(char)) {
-          fileIndex += Number(char);
-          continue;
-        }
-        const file = FILES[fileIndex];
-        if (file) {
-          map.set(`${file}${rank}`, {
-            type: char.toLowerCase(),
-            color: char === char.toUpperCase() ? 'w' : 'b',
-          });
-        }
-        fileIndex += 1;
-      }
-    });
-    return map;
-  }
 
   /**
    * Slide the moved piece from its origin into place.
@@ -513,8 +474,13 @@ export class Board {
   }
 
   #attachListeners() {
+    // Every listener carries the abort signal, so dispose() detaches the
+    // whole board from the element in one call. See #listeners.
+    const on = (target, type, handler) =>
+      target.addEventListener(type, handler, { signal: this.#listeners.signal });
+
     // Pointer down: begin a tap, and possibly a drag for mouse/pen.
-    this.#root.addEventListener('pointerdown', (event) => {
+    on(this.#root, 'pointerdown', (event) => {
       const square = this.#squareFromEvent(event);
       if (!square) return;
 
@@ -536,7 +502,7 @@ export class Board {
       };
     });
 
-    this.#root.addEventListener('pointermove', (event) => {
+    on(this.#root, 'pointermove', (event) => {
       const drag = this.#drag;
       if (!drag || drag.pointerId !== event.pointerId || !drag.eligible) return;
 
@@ -586,8 +552,8 @@ export class Board {
       // can simply tap a destination instead.
     };
 
-    this.#root.addEventListener('pointerup', finish);
-    this.#root.addEventListener('pointercancel', (event) => {
+    on(this.#root, 'pointerup', finish);
+    on(this.#root, 'pointercancel', (event) => {
       const drag = this.#drag;
       if (!drag || drag.pointerId !== event.pointerId) return;
       this.#drag = null;
@@ -595,7 +561,7 @@ export class Board {
     });
 
     // Keyboard: Enter/Space activates, arrows move focus (roving tabindex).
-    this.#root.addEventListener('keydown', (event) => {
+    on(this.#root, 'keydown', (event) => {
       const square = this.#squareFromEvent(event);
       if (!square) return;
 

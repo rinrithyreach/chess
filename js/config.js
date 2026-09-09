@@ -87,8 +87,21 @@ export const BOARD_THEMES = [
  */
 export const UI_STYLES = [
   { id: 'classic', label: 'Classic', hint: 'Dark, flat, focused' },
+  { id: 'board3d', label: '3D Board', hint: 'Real depth and shadows', webgl: true },
   { id: 'arcade', label: 'Arcade 3D', hint: 'Locked', locked: true },
 ];
+
+/**
+ * Styles that need a GPU context, and so can fail at runtime for reasons that
+ * have nothing to do with this app — a blocklisted driver, a hardened browser
+ * profile, too many live WebGL contexts on the page. app.js checks before
+ * committing to one and falls back to Classic if the context is refused.
+ */
+export const WEBGL_UI_STYLES = UI_STYLES.filter((s) => s.webgl).map((s) => s.id);
+
+export function uiStyleNeedsWebgl(id) {
+  return WEBGL_UI_STYLES.includes(id);
+}
 
 /** Ids the player is actually allowed to pick. */
 export const SELECTABLE_UI_STYLES = UI_STYLES.filter((s) => !s.locked).map((s) => s.id);

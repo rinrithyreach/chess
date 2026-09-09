@@ -79,13 +79,21 @@ rematch, board flip, and copy PGN.
 Game* entry point. Local games restore position, history, players, orientation
 and undo depth; online games rejoin their room and resync from it.
 
-**Two visual skins** — **Classic** (dark, flat, focused) is the playable look.
-**Arcade 3D** (bright casual-game look with the board tilted into perspective,
-glossy moulded pieces, garden scenery and chunky cards) is fully built but
-shown **locked** under Settings → Look & Feel, with a padlock. To unlock it,
-drop `locked: true` from its entry in `UI_STYLES` (`js/config.js`) — nothing
-else needs changing. With `DEBUG` on, `?ui=arcade` previews it without
-unlocking.
+**Three visual skins** — **Classic** (dark, flat, focused) is the default.
+**3D Board** is a real WebGL board: turned pieces with genuine depth, a lit
+scene with cast shadows, a camera that swings round the board when you flip it,
+and moves that carry the piece through the air. Its pieces are *generated*, not
+modelled — chess pieces are surfaces of revolution, so a dozen profile points
+produce a real lathe-turned piece, and the knight is extruded from a silhouette.
+There are no model files to ship or keep in sync. **Arcade 3D** (a CSS
+perspective skin) is fully built but shown **locked** under Settings → Look &
+Feel, with a padlock. To unlock it, drop `locked: true` from its entry in
+`UI_STYLES` (`js/config.js`) — nothing else needs changing. With `DEBUG` on,
+`?ui=arcade` previews it without unlocking.
+
+The 3D board is loaded only when it is chosen, so nobody who stays on Classic
+ever downloads three.js. If a device refuses a WebGL context, the app says so
+and stays on Classic rather than showing an empty frame.
 
 **Interface** — start screen, new-game setup, waiting room with the shareable
 code, responsive game screen, settings (look & feel, sound, board theme,
@@ -110,6 +118,7 @@ chess-game/
 │   ├── style.css                 Design tokens, shell, controls, modals, online UI
 │   ├── board.css                 Board, squares, pieces, highlights, themes
 │   ├── responsive.css            Mobile → tablet → desktop layouts
+│   ├── board-3d.css              Canvas host + a11y layer for the WebGL board
 │   └── arcade.css                "Arcade 3D" skin (inert unless selected)
 ├── js/
 │   ├── config.js                 Constants, DEBUG flag, logger
@@ -117,7 +126,9 @@ chess-game/
 │   ├── firebase-config.js        YOUR Firebase project config (empty by default)
 │   ├── chess-engine.js           Defensive wrapper around chess.js
 │   ├── game-controller.js        Orchestration, selection, autosave
-│   ├── board.js                  Board rendering and interaction
+│   ├── board-shared.js           Square list, FEN parsing, labels — used by BOTH boards
+│   ├── board.js                  Flat DOM board: rendering and interaction
+│   ├── board-3d.js               WebGL board: same contract, lazily loaded
 │   ├── ui.js                     Screens, modals, panels, toasts
 │   ├── storage.js                Versioned, validated localStorage
 │   ├── sound.js                  Web Audio effects
@@ -125,7 +136,9 @@ chess-game/
 │   │   ├── local-session.js      Phase 1 provider — same device
 │   │   └── firebase-session.js   Phase 2 provider — two devices
 │   └── vendor/
-│       └── chess.js              chess.js 1.4.0 ESM build (vendored)
+│       ├── chess.js              chess.js 1.4.0 ESM build (vendored)
+│       ├── three.module.js       three.js r180 (vendored, for the 3D board)
+│       └── three.core.js         three.js core chunk it imports
 ├── firebase/
 │   ├── database.rules.json       Security rules (deploy these!)
 │   └── README.md                 What the rules do and do not enforce
@@ -594,7 +607,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across six suites — **478 assertions, all passing, with zero console
+project across eight suites — **569 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -602,12 +615,20 @@ errors in every browser and viewport tested**:
 | Engine (Node) | 81 | Every rule scenario in the spec, plus error handling |
 | App (jsdom) | 129 | Boots the real app, drives it by tap/click, asserts DOM |
 | Layout (Chromium) | 145 | 9 viewports: overflow, board geometry, touch targets |
-| Interaction (Chromium) | 36 | Real page refresh, drag-and-drop, keyboard, clipboard |
+| Interaction (Chromium) | 38 | Real page refresh, drag-and-drop, keyboard, clipboard |
 | **Multiplayer (Chromium ×2)** | **71** | **Two devices against the Firebase emulator** |
+| **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
+| **3D board (Chromium)** | **48** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
-| Style lock | 15 | Arcade shows a padlock, cannot be selected, and a stored value cannot bypass it |
+| Style lock | 16 | Arcade shows a padlock, cannot be selected, and a stored value cannot bypass it |
 | **Arcade skin (Chromium)** | **20** | **All 64 tilted squares tappable, 4 viewports, no overflow** |
+
+The 3D suite's headline check is picking. Every one of the 64 squares is
+projected through the live camera to find where it is actually drawn, clicked
+at that pixel, and the board asked which square it thinks was hit — all 64
+match. That is verified square by square rather than spot-checked because it is
+the exact failure that killed the CSS 3D skin (see *Things that went wrong*).
 
 The multiplayer suite runs two independent browser contexts — two real
 anonymous users — against the local Firebase emulator with the production
@@ -653,7 +674,7 @@ clients talking to a real database:
    player's old seat. Fixed by cancelling and re-registering presence on seat
    change.
 
-A fourth issue was a spurious "Opponent disconnected" modal after a *failed*
+A further issue was a spurious "Opponent disconnected" modal after a *failed*
 join, because the presence check ran even when not seated in a room.
 
 And one from the Arcade skin, which is worth recording because it looks like a
@@ -669,6 +690,29 @@ CSS problem and is really an input problem:
    passed. Only actually playing a game through simulated taps caught it. The
    fix was to flatten the transform and fake the upright pieces with a 2D
    `scaleY`, which is visually near-identical and hit-tests normally.
+
+   The WebGL board later solved this properly rather than working around it:
+   it picks by raycasting against the real geometry, so what you click is by
+   construction what you see, at any camera angle.
+
+And two from building that WebGL board:
+
+8. **Switching board style broke the board that was switched *to*.** Both
+   boards attach their listeners to the same `#board` element, and neither
+   removed them. After one switch a single tap was delivered to *two* boards:
+   both called the controller, the square was activated twice, and the second
+   activation toggled the selection straight back off. The move silently did
+   nothing — no error, no console output, a board that just felt dead. Fixed by
+   giving each board an `AbortController` and aborting it in `dispose()`, so a
+   board detaches completely when it hands the element over. It is the same
+   double-activation shape as the old drag bug (4), from a different cause.
+
+9. **The knight rendered as a standing card.** Its head is an extruded 2D
+   silhouette, and the silhouette is the only thing that identifies the piece.
+   Extruded thin and stood upright it sits ~56 degrees off the camera axis, so
+   what you see is the *edge* of the plate. Fixed by extruding it much deeper
+   and tipping it back toward the viewer. The general lesson: an extruded
+   silhouette only works if the camera can actually see the silhouette.
 
 ### Manual checklist
 

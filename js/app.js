@@ -13,7 +13,15 @@ import { Board } from './board.js';
 import { UI } from './ui.js';
 import * as storage from './storage.js';
 import sound from './sound.js';
-import { WHITE, GAME_MODE, DEBUG, ANIMATION_MS, log, warn } from './config.js';
+import {
+  WHITE,
+  GAME_MODE,
+  DEBUG,
+  ANIMATION_MS,
+  uiStyleNeedsWebgl,
+  log,
+  warn,
+} from './config.js';
 import { isFirebaseConfigured, firebaseConfigError } from './firebase-config.js';
 
 async function boot() {
@@ -26,8 +34,19 @@ async function boot() {
   // Phase 1 uses the local session. Phase 2 swaps this single line for a
   // FirebaseSession; nothing below changes.
   const controller = new GameController(new LocalSession());
-  const board = new Board(boardEl);
   const ui = new UI(controller);
+
+  /**
+   * The board renderer currently on screen.
+   *
+   * Reassignable, because the two boards are alternatives rather than layers:
+   * the flat one is a DOM grid, the 3D one owns a GPU context, and they cannot
+   * both hold the same element. Everything below talks to whichever is
+   * mounted through the one contract they share, so nothing else in this file
+   * needs to know which it is.
+   */
+  let board = new Board(boardEl);
+  let boardStyle = 'classic';
 
   await controller.init();
 
@@ -43,6 +62,13 @@ async function boot() {
   // -----------------------------------------------------------------------
 
   controller.on(EVENT.CHANGE, (snapshot) => {
+    // The mounted renderer follows the setting itself, rather than being
+    // swapped by whichever call site happened to change it. Restoring saved
+    // settings, a settings-panel tap and the console helper are then all the
+    // same path, and none of them can leave the board disagreeing with the
+    // style the player has chosen. A no-op when it already matches.
+    applyBoardStyle(snapshot.settings.uiStyle);
+
     board.setOrientation(snapshot.orientation);
     board.setShowCoordinates(snapshot.settings.showCoordinates);
     board.setAnimationsEnabled(snapshot.settings.animations);
@@ -163,10 +189,74 @@ async function boot() {
   // Board -> controller
   // -----------------------------------------------------------------------
 
-  board.onSquareActivate((square) => {
-    sound.unlock();
-    controller.selectSquare(square);
-  });
+  function wireBoard() {
+    board.onSquareActivate((square) => {
+      sound.unlock();
+      controller.selectSquare(square);
+    });
+  }
+  wireBoard();
+
+  /**
+   * Mount the board renderer the chosen style calls for.
+   *
+   * Loading three.js is deferred to the moment a player actually picks the 3D
+   * board, and never happens for anyone who does not: it is by far the largest
+   * thing the app can load, and making every player on every visit pay for a
+   * skin most will never open would be a poor trade for a game whose whole
+   * point is that it starts instantly.
+   *
+   * A refused WebGL context is treated as a normal outcome, not an error. Some
+   * devices and hardened browser profiles simply will not grant one, and the
+   * honest response is to say so and stay on a board that works.
+   */
+  async function applyBoardStyle(styleId) {
+    const wanted = uiStyleNeedsWebgl(styleId) ? styleId : 'classic';
+    if (wanted === boardStyle) return true;
+
+    if (wanted === 'classic') {
+      board.dispose?.();
+      board = new Board(boardEl);
+      boardStyle = 'classic';
+      wireBoard();
+      repaint();
+      return true;
+    }
+
+    try {
+      const { Board3D } = await import('./board-3d.js');
+      board.dispose?.();
+      boardEl.innerHTML = '';
+      board = new Board3D(boardEl);
+      boardStyle = wanted;
+      wireBoard();
+      repaint();
+      return true;
+    } catch (error) {
+      warn('3D board unavailable, staying on the flat board', error);
+      // Whatever half-built state the attempt left behind, replace it with a
+      // board that definitely works before telling the player.
+      boardEl.innerHTML = '';
+      board = new Board(boardEl);
+      boardStyle = 'classic';
+      wireBoard();
+      controller.updateSettings({ uiStyle: 'classic' });
+      ui.syncSettings(controller.getSettings());
+      repaint();
+      ui.toast('This device cannot run the 3D board', 'error');
+      return false;
+    }
+  }
+
+  /** Push the current snapshot at whichever board is mounted. */
+  function repaint() {
+    const snapshot = controller.getSnapshot();
+    board.setOrientation(snapshot.orientation);
+    board.setShowCoordinates(snapshot.settings.showCoordinates);
+    board.setAnimationsEnabled(snapshot.settings.animations);
+    board.render(snapshot);
+    ui.render(snapshot);
+  }
 
   // -----------------------------------------------------------------------
   // UI -> controller
@@ -326,6 +416,11 @@ async function boot() {
   ui.setOnlineAvailable(isFirebaseConfigured(), firebaseConfigError());
   ui.showScreen('menu');
 
+  // Restore the board the player last chose. Deliberately not awaited: the
+  // menu should be interactive immediately, and the 3D board mounts itself
+  // when its module arrives rather than holding up the first paint.
+  applyBoardStyle(controller.getSettings().uiStyle);
+
   // Private browsing or blocked storage: the game is fully playable, but it
   // cannot be resumed after a refresh. Say so once rather than failing quietly.
   if (!storage.isAvailable()) {
@@ -339,7 +434,15 @@ async function boot() {
 
   if (DEBUG) {
     // Handy console access while developing; never referenced by app code.
-    window.chessArena = { controller, board, ui };
+    // `board` is a getter because the renderer is swapped when the player
+    // changes style — a captured reference would go stale on the first swap
+    // and quietly hand back a board that is no longer on screen.
+    window.chessArena = {
+      controller,
+      ui,
+      get board() { return board; },
+      get boardStyle() { return boardStyle; },
+    };
     log('DEBUG mode on — window.chessArena available');
   }
 }
