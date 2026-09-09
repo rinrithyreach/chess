@@ -13,6 +13,8 @@ import {
   STATUS,
   BOARD_THEMES,
   UI_STYLES,
+  LOCKED_CONTROLS,
+  isControlLocked,
   TOAST_MS,
   warn,
 } from './config.js';
@@ -122,6 +124,37 @@ export class UI {
         stylePicker.append(button);
       });
     }
+
+    // Locked controls: visible, plainly unavailable, and inert. Applied once
+    // here rather than on every render, since the lock never changes at
+    // runtime — and applying it before the first render means there is no
+    // frame in which a locked control looks pressable.
+    LOCKED_CONTROLS.forEach((id) => {
+      const button = this.#dom[`btn-${id}`];
+      if (!button) return;
+
+      // The label is the button's own text, minus the icon span, so it stays
+      // correct if a control is ever renamed in the HTML.
+      const label = [...button.childNodes]
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent.trim())
+        .join(' ')
+        .trim() || id;
+
+      button.classList.add('btn--locked');
+      // aria-disabled rather than `disabled`: the button keeps its place in
+      // the tab order and is still announced, so a screen-reader user learns
+      // the control is locked instead of it silently vanishing.
+      button.setAttribute('aria-disabled', 'true');
+      button.setAttribute('aria-label', `${label}, locked`);
+      button.title = `${label} is locked`;
+
+      const lock = document.createElement('span');
+      lock.className = 'btn__lock';
+      lock.setAttribute('aria-hidden', 'true');
+      lock.textContent = '🔒';
+      button.append(lock);
+    });
 
     // Theme picker
     const picker = this.#dom['theme-picker'];
@@ -363,12 +396,17 @@ export class UI {
     // Online, the board is only live once both seats are filled.
     const inactive = Boolean(state.isGameOver) || Boolean(online?.waitingForOpponent);
 
+    // Locked controls are skipped: their appearance and title are set once at
+    // build time, and re-deriving them from game state here would overwrite
+    // the lock with an ordinary enabled/disabled button.
     const undo = this.#dom['btn-undo'];
-    if (undo) {
+    if (undo && !isControlLocked('undo')) {
       undo.disabled = !state.canUndo;
       undo.title = online ? 'Undo is not available in online games' : '';
     }
-    if (this.#dom['btn-draw']) this.#dom['btn-draw'].disabled = inactive;
+    if (this.#dom['btn-draw'] && !isControlLocked('draw')) {
+      this.#dom['btn-draw'].disabled = inactive;
+    }
     if (this.#dom['btn-resign']) this.#dom['btn-resign'].disabled = inactive;
 
     // Restart resets the position unilaterally, which has no meaning across
@@ -651,10 +689,23 @@ export class UI {
     this.#dom['btn-game-settings']?.addEventListener('click', () => this.openModal('settings'));
 
     // --- Controls ---
-    this.#dom['btn-undo']?.addEventListener('click', () => this.#call('onUndo'));
-    this.#dom['btn-flip']?.addEventListener('click', () => this.#call('onFlip'));
-    this.#dom['btn-draw']?.addEventListener('click', () => this.#call('onOfferDraw'));
-    this.#dom['btn-resign']?.addEventListener('click', () => this.#call('onResign'));
+    // Routed through one helper so the lock is enforced in a single place. A
+    // locked control is aria-disabled rather than `disabled`, so the browser
+    // still delivers its click — from a tap and from Enter or Space on a
+    // focused button alike — and this is what refuses to act on it.
+    const control = (id, action) => {
+      this.#dom[`btn-${id}`]?.addEventListener('click', () => {
+        if (isControlLocked(id)) {
+          this.toast(`${this.#dom[`btn-${id}`].title}`, 'warn');
+          return;
+        }
+        this.#call(action);
+      });
+    };
+    control('undo', 'onUndo');
+    control('flip', 'onFlip');
+    control('draw', 'onOfferDraw');
+    control('resign', 'onResign');
     this.#dom['btn-restart']?.addEventListener('click', () => this.#call('onRestart'));
     this.#dom['btn-leave']?.addEventListener('click', () => this.#call('onLeaveGame'));
 

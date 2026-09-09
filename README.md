@@ -72,8 +72,11 @@ across two devices. Live move sync, per-device board orientation, opponent
 presence, automatic reconnect, draw offers sent over the network, resignation,
 and rematches that require both players to agree (and swap colours).
 
-**Game management** — undo (local), restart (local), resign, offer draw,
-rematch, board flip, and copy PGN.
+**Game management** — restart (local), resign, rematch, board flip, and copy
+PGN. **Undo and Draw are locked**: both are built and correct, but shown in the
+control row with a padlock and refused on tap and on keyboard alike. Remove an
+id from `LOCKED_CONTROLS` (`js/config.js`) to restore that control — nothing
+else needs changing.
 
 **Persistence** — autosave after every meaningful action, and a *Continue
 Game* entry point. Local games restore position, history, players, orientation
@@ -608,21 +611,22 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across ten suites — **596 assertions, all passing, with zero console
+project across eleven suites — **638 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
 | --- | --- | --- |
 | Engine (Node) | 81 | Every rule scenario in the spec, plus error handling |
-| App (jsdom) | 129 | Boots the real app, drives it by tap/click, asserts DOM |
+| App (jsdom) | 131 | Boots the real app, drives it by tap/click, asserts DOM |
 | Layout (Chromium) | 145 | 9 viewports: overflow, board geometry, touch targets |
-| Interaction (Chromium) | 38 | Real page refresh, drag-and-drop, keyboard, clipboard |
+| Interaction (Chromium) | 39 | Real page refresh, drag-and-drop, keyboard, clipboard |
 | **Multiplayer (Chromium ×2)** | **71** | **Two devices against the Firebase emulator** |
 | **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
 | **3D board (Chromium)** | **48** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | Styles | 22 | Two styles listed, both selectable, and a retired one cannot return by any route |
+| **Locked controls (Chromium)** | **39** | **Undo and Draw never reach the controller — by tap, by keyboard, or across re-renders** |
 
 The 3D suite's headline check is picking. Every one of the 64 squares is
 projected through the live camera to find where it is actually drawn, clicked
@@ -733,7 +737,7 @@ And two from building that WebGL board:
 | 12 | Promote to Q / R / B / N | Picker opens; chosen piece appears |
 | 13 | Load `7k/5Q2/6K1/8/8/8/8/8 b - - 0 1` | DRAW — Stalemate |
 | 14 | Load `7k/8/8/8/8/8/8/K7 w - - 0 1` | DRAW — Insufficient Material |
-| 15 | e4, e5, Nf3, then Undo | Knight returns to g1, White to move |
+| 15 | e4, e5, Nf3, then tap Undo | Refused — Undo is locked, and says so |
 | 16 | Play moves, refresh, Continue Game | Position, history and undo restored |
 | 17 | Flip Board | Only orientation changes |
 | 18 | Move after checkmate | Rejected |
@@ -790,12 +794,19 @@ the DOM**. Set it to `false` before shipping.
 3. **Drag-and-drop is mouse/pen only.** On touch, tap-to-move is the sole
    interaction so that page scrolling keeps working. Tap-to-move is fully
    supported everywhere, including desktop.
-4. **Undo has no depth limit and no confirmation, and is local-only.** Either
-   player can take back any number of half-moves in a local game. Online it is
-   disabled outright: a unilateral take-back would let one player rewind the
-   opponent's position. Turning it into an offer the opponent approves is a
-   natural next step — it already routes through `submitAction`, so the change
-   is confined to the session provider.
+4. **Undo and Draw are locked in the UI, not removed.** Both controls stay in
+   the row with a padlock and refuse to act. The capability underneath is
+   untouched and still tested, so unlocking either is a one-line change to
+   `LOCKED_CONTROLS` rather than a repair job. Note that this also stops draw
+   offers being *made* in online games; receiving, accepting and declining one
+   still work, since an opponent on an older build can still send one.
+
+   If Undo is ever unlocked, its own caveats still apply: it has no depth
+   limit and no confirmation, and is local-only — online, a unilateral
+   take-back would let one player rewind the opponent's position. Turning it
+   into an offer the opponent approves is the natural next step; it already
+   routes through `submitAction`, so the change is confined to the session
+   provider.
 
 10. **Online games have no clock, no rate limiting and no room cleanup.**
     Rooms are never deleted, and an authenticated user can create unlimited

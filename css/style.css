@@ -782,6 +782,51 @@ body.is-modal-open {
   line-height: 1.1;
 }
 
+/* --------------------------------------------------------------------------
+   Locked control: present, plainly unavailable, and not pressable
+   -------------------------------------------------------------------------- */
+
+/*
+   Not the `disabled` attribute — see #buildDynamic in ui.js. These use
+   `aria-disabled`, so the browser still treats them as live buttons and would
+   otherwise give them the full hover and press affordance of a working
+   control. Everything below is what takes that affordance away.
+*/
+.btn--locked {
+  position: relative;
+  cursor: not-allowed;
+  border-color: var(--border);
+  background: var(--panel);
+  color: var(--text-faint);
+  opacity: 0.55;
+}
+
+.btn--locked:hover,
+.btn--locked:active,
+.btn--locked:focus {
+  /* A locked control must not move or light up under the finger. */
+  border-color: var(--border);
+  background: var(--panel);
+  transform: none;
+}
+
+/*
+   Sits in the corner rather than in the flow, so a locked control keeps
+   exactly the same height and label position as the working ones beside it
+   and the row does not shift when a control is locked or unlocked.
+
+   Two classes, because `.btn--control span` sets a 1.05rem icon size and
+   would otherwise win on specificity and blow the padlock up to icon size.
+*/
+.btn--locked .btn__lock {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 0.62rem;
+  line-height: 1;
+  opacity: 0.9;
+}
+
 /* ==========================================================================
    Move history
    ========================================================================== */

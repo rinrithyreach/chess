@@ -122,6 +122,23 @@ export function resolveUiStyle(savedStyle) {
   return SELECTABLE_UI_STYLES.includes(savedStyle) ? savedStyle : 'classic';
 }
 
+/**
+ * Game controls that are shown but cannot be used.
+ *
+ * A locked control keeps its place in the row rather than disappearing: the
+ * player can see the game has an Undo and that it is simply not on offer,
+ * which an absent button cannot communicate. It is inert to pointer and
+ * keyboard alike, and says so when pressed.
+ *
+ * Ids are the part after `btn-`. Take one out of this list to restore that
+ * control — nothing else needs changing.
+ */
+export const LOCKED_CONTROLS = ['undo', 'draw'];
+
+export function isControlLocked(id) {
+  return LOCKED_CONTROLS.includes(id);
+}
+
 export const DEFAULT_SETTINGS = {
   sound: true,
   // Classic is the default: it holds a 44px touch target on every rank, which
