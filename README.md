@@ -91,6 +91,16 @@ send one. What is gone is the way to *make* an offer from this build.
 Game* entry point. Local games restore position, history, players, orientation
 and undo depth; online games rejoin their room and resync from it.
 
+**Refresh mid-game** and the app's own dialog offers it straight back —
+*Resume your game?*, naming the players and how far you got, with Continue and
+New Game. Only after an actual reload; arriving fresh still just shows the
+Continue button, since a dialog in front of everyone who once left a game
+unfinished would be nagging rather than helpful. A styled confirmation
+*before* the page goes is not possible for any site: a page cannot render its
+own UI during `beforeunload`, and browsers replace whatever it supplies with
+fixed wording of their own — so the dialog goes on the other side of the
+reload, where the app is in charge of it.
+
 **Two visual styles** — **Classic** (dark, flat, focused) is the default and
 is rendered as a DOM grid. **3D Board** is a real WebGL board: turned pieces
 with genuine depth, a lit scene with cast shadows, a camera that swings round
@@ -620,7 +630,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across eleven suites — **637 assertions, all passing, with zero console
+project across twelve suites — **665 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -628,7 +638,8 @@ errors in every browser and viewport tested**:
 | Engine (Node) | 81 | Every rule scenario in the spec, plus error handling |
 | App (jsdom) | 131 | Boots the real app, drives it by tap/click, asserts DOM |
 | Layout (Chromium) | 145 | 9 viewports: overflow, board geometry, touch targets |
-| Interaction (Chromium) | 39 | Real page refresh, drag-and-drop, keyboard, clipboard |
+| Interaction (Chromium) | 42 | Real page refresh, drag-and-drop, keyboard, clipboard |
+| **Resume after refresh (Chromium)** | **25** | **The dialog is the app's own, appears only after a reload, and both answers do the right thing** |
 | **Multiplayer (Chromium ×2)** | **71** | **Two devices against the Firebase emulator** |
 | **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
 | **3D board (Chromium)** | **48** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown** |
@@ -747,7 +758,7 @@ And two from building that WebGL board:
 | 13 | Load `7k/5Q2/6K1/8/8/8/8/8 b - - 0 1` | DRAW — Stalemate |
 | 14 | Load `7k/8/8/8/8/8/8/K7 w - - 0 1` | DRAW — Insufficient Material |
 | 15 | e4, e5, Nf3, then tap Undo | Refused — Undo is locked, and says so |
-| 16 | Play moves, refresh, Continue Game | Position, history and undo restored |
+| 16 | Play moves, then refresh | *Resume your game?* dialog; Continue restores position and history |
 | 17 | Flip Board | Only orientation changes |
 | 18 | Move after checkmate | Rejected |
 

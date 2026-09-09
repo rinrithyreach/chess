@@ -466,7 +466,7 @@ export class UI {
    * The OK button is disabled once clicked, so a double tap cannot fire the
    * action twice.
    */
-  confirm({ title, text, confirmLabel = 'Confirm', tone = 'default' }) {
+  confirm({ title, text, confirmLabel = 'Confirm', cancelLabel = 'Cancel', tone = 'default' }) {
     return new Promise((resolve) => {
       // Settle any dialog that is somehow still open.
       if (this.#confirmResolver) {
@@ -483,6 +483,11 @@ export class UI {
         ok.disabled = false;
         ok.dataset.tone = tone;
       }
+
+      // Reset every time: the label is per-dialog, so a previous caller's
+      // wording must not leak into the next one that does not set it.
+      const cancel = this.#dom['btn-confirm-cancel'];
+      if (cancel) cancel.textContent = cancelLabel;
 
       this.#confirmResolver = resolve;
       this.openModal('confirm');

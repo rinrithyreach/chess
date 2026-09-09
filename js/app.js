@@ -144,6 +144,88 @@ async function boot() {
     await controller.useSession(new LocalSession());
   }
 
+  /**
+   * Pick a saved game back up.
+   *
+   * Shared by the menu's Continue button and the resume dialog, so the two
+   * cannot drift — in particular over the online case, which is the one with
+   * a real difference in it.
+   */
+  async function continueSavedGame() {
+    sound.unlock();
+    const info = controller.getSavedGameInfo();
+
+    // An online game resumes by rejoining its room, not by replaying a
+    // local copy — the room is authoritative and has probably moved on.
+    if (info?.mode === GAME_MODE.ONLINE && info.roomCode) {
+      const started = await goOnline();
+      if (!started.ok) {
+        ui.toast(started.error ?? 'Online play unavailable', 'error');
+        return;
+      }
+      const rejoined = await controller.rejoinRoom(info.roomCode);
+      if (rejoined.ok) ui.showScreen('game');
+      else ui.refreshContinueButton();
+      return;
+    }
+
+    const result = await controller.continueGame();
+    if (result.ok) ui.showScreen('game');
+    else ui.refreshContinueButton();
+  }
+
+  /**
+   * Did this page arrive by reload, rather than a fresh visit or a link?
+   *
+   * Wrapped because the modern entry and the deprecated fallback have both
+   * been missing somewhere: `getEntriesByType` is absent in jsdom, and
+   * `performance.navigation` is gone from newer browsers. Anything unclear
+   * counts as "not a reload", which simply leaves the Continue button as the
+   * only way back in — the behaviour before this existed.
+   */
+  function wasReloaded() {
+    try {
+      const [entry] = performance.getEntriesByType?.('navigation') ?? [];
+      if (entry) return entry.type === 'reload';
+      return performance.navigation?.type === 1;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * After a refresh, offer the game back in the app's own dialog.
+   *
+   * This is what a refresh can actually be given. A styled confirmation
+   * BEFORE the page goes is not possible for anyone: a page cannot render its
+   * own UI during `beforeunload`, and browsers substitute fixed wording of
+   * their own for anything it supplies. So the dialog is put on the other
+   * side of the reload, where the app is in charge of it — and it is more
+   * useful there anyway, since it offers to restore the game rather than
+   * merely warning about it.
+   *
+   * Only after an actual reload. On a first visit the Continue button is
+   * enough, and a dialog in front of every visitor who once left a game
+   * unfinished would be nagging rather than helpful.
+   */
+  async function offerResumeAfterReload() {
+    if (!wasReloaded() || !controller.hasSavedGame()) return;
+
+    const info = controller.getSavedGameInfo();
+    const moves = info?.moveCount ?? 0;
+    const resume = await ui.confirm({
+      title: 'Resume your game?',
+      text: info
+        ? `${info.white} vs ${info.black} — ${moves} ${moves === 1 ? 'move' : 'moves'} played`
+        : 'You have a game in progress.',
+      confirmLabel: 'Continue',
+      cancelLabel: 'New Game',
+    });
+
+    if (resume) await continueSavedGame();
+    else ui.showScreen('setup');
+  }
+
   controller.on(EVENT.MOVE, ({ move }) => {
     // Captured here and consumed by the CHANGE render that follows, so the
     // animation always runs against the already-updated position.
@@ -274,28 +356,7 @@ async function boot() {
       ui.showScreen('game');
     },
 
-    onContinue: async () => {
-      sound.unlock();
-      const info = controller.getSavedGameInfo();
-
-      // An online game resumes by rejoining its room, not by replaying a
-      // local copy — the room is authoritative and has probably moved on.
-      if (info?.mode === GAME_MODE.ONLINE && info.roomCode) {
-        const started = await goOnline();
-        if (!started.ok) {
-          ui.toast(started.error ?? 'Online play unavailable', 'error');
-          return;
-        }
-        const rejoined = await controller.rejoinRoom(info.roomCode);
-        if (rejoined.ok) ui.showScreen('game');
-        else ui.refreshContinueButton();
-        return;
-      }
-
-      const result = await controller.continueGame();
-      if (result.ok) ui.showScreen('game');
-      else ui.refreshContinueButton();
-    },
+    onContinue: () => continueSavedGame(),
 
     // --- Online room handlers ---
 
@@ -431,27 +492,9 @@ async function boot() {
   document.addEventListener('pointerdown', unlockOnce, { once: true });
   document.addEventListener('keydown', unlockOnce, { once: true });
 
-  /**
-   * Confirm before leaving or reloading a game in progress.
-   *
-   * This is the browser's own dialog, not one of ours, and that is not a
-   * shortcut — it is the only thing available. A page cannot render its own UI
-   * during `beforeunload`, and every current browser ignores any message
-   * supplied here and shows fixed wording of its own ("Leave site?" and
-   * similar). Calling preventDefault is the entire API; `returnValue` is set
-   * as well only because older browsers require it.
-   *
-   * Gated on an actual live game, because a confirmation that appears on the
-   * menu screen — where there is nothing to interrupt — trains the player to
-   * dismiss it without reading, and browsers may ignore a page that asks too
-   * often. Nothing is at risk once a game is over, either: the result is
-   * already saved.
-   */
-  window.addEventListener('beforeunload', (event) => {
-    if (!controller.isStarted() || controller.isGameOver()) return;
-    event.preventDefault();
-    event.returnValue = '';
-  });
+  // Offer the game back after a refresh, in the app's own dialog. Last,
+  // because it opens a modal over the menu the lines above have just put up.
+  offerResumeAfterReload();
 
   if (DEBUG) {
     // Handy console access while developing; never referenced by app code.
