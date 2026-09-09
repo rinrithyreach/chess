@@ -431,6 +431,28 @@ async function boot() {
   document.addEventListener('pointerdown', unlockOnce, { once: true });
   document.addEventListener('keydown', unlockOnce, { once: true });
 
+  /**
+   * Confirm before leaving or reloading a game in progress.
+   *
+   * This is the browser's own dialog, not one of ours, and that is not a
+   * shortcut — it is the only thing available. A page cannot render its own UI
+   * during `beforeunload`, and every current browser ignores any message
+   * supplied here and shows fixed wording of its own ("Leave site?" and
+   * similar). Calling preventDefault is the entire API; `returnValue` is set
+   * as well only because older browsers require it.
+   *
+   * Gated on an actual live game, because a confirmation that appears on the
+   * menu screen — where there is nothing to interrupt — trains the player to
+   * dismiss it without reading, and browsers may ignore a page that asks too
+   * often. Nothing is at risk once a game is over, either: the result is
+   * already saved.
+   */
+  window.addEventListener('beforeunload', (event) => {
+    if (!controller.isStarted() || controller.isGameOver()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
   if (DEBUG) {
     // Handy console access while developing; never referenced by app code.
     // `board` is a getter because the renderer is swapped when the player
