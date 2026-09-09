@@ -6,7 +6,8 @@ backend, no build step, no framework.
 > **CURRENT VERSION — Local Two-Player + Online Multiplayer**
 >
 > **Phase 1 — Local.** Two players share one device. Full standard chess
-> rules, save/resume, move history, undo, resign, draw offers and rematches.
+> rules, save/resume, move history, resign and rematches. (Undo is built but
+> locked in the UI; the Draw button has been removed — see *Known limitations*.)
 >
 > **Phase 2 — Online.** Two players, two devices, synchronised through
 > Firebase Realtime Database: room codes, anonymous auth, live move sync,
@@ -69,14 +70,22 @@ highlight and a pulsing check indicator.
 
 **Online multiplayer** — create a room, share a six-character code, and play
 across two devices. Live move sync, per-device board orientation, opponent
-presence, automatic reconnect, draw offers sent over the network, resignation,
-and rematches that require both players to agree (and swap colours).
+presence, automatic reconnect, resignation, and rematches that require both
+players to agree (and swap colours). The network draw-offer path is still
+implemented and still tested, but with the Draw button gone there is no longer
+a way to start one from this build.
 
 **Game management** — restart (local), resign, rematch, board flip, and copy
-PGN. **Undo and Draw are locked**: both are built and correct, but shown in the
-control row with a padlock and refused on tap and on keyboard alike. Remove an
-id from `LOCKED_CONTROLS` (`js/config.js`) to restore that control — nothing
-else needs changing.
+PGN. The control row is **Undo, Flip, Resign**.
+
+**Undo is locked**: built and correct, but shown with a padlock and refused on
+tap and on keyboard alike. Remove its id from `LOCKED_CONTROLS`
+(`js/config.js`) to restore it — nothing else needs changing.
+
+**The Draw button was removed.** The capability underneath is intact and still
+tested: `offerDraw()` is still part of the session contract, and the dialog
+that receives an offer still works, so a peer running an older build can still
+send one. What is gone is the way to *make* an offer from this build.
 
 **Persistence** — autosave after every meaningful action, and a *Continue
 Game* entry point. Local games restore position, history, players, orientation
@@ -611,7 +620,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across eleven suites — **638 assertions, all passing, with zero console
+project across eleven suites — **637 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -626,7 +635,7 @@ errors in every browser and viewport tested**:
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | Styles | 22 | Two styles listed, both selectable, and a retired one cannot return by any route |
-| **Locked controls (Chromium)** | **39** | **Undo and Draw never reach the controller — by tap, by keyboard, or across re-renders** |
+| **Control row (Chromium)** | **38** | **Undo never reaches the controller by any route; Draw is absent; the row still holds 44px targets** |
 
 The 3D suite's headline check is picking. Every one of the 64 squares is
 projected through the live camera to find where it is actually drawn, clicked
@@ -753,7 +762,7 @@ Positions for tests 9–14 are one tap away via the DEBUG presets below.
 | 21 | Each device's own colour | Always at the bottom of its own board |
 | 22 | Tap an opponent piece | Nothing happens; no move is sent |
 | 23 | Move on device A | Appears on B within a moment, with last-move highlight |
-| 24 | Offer a draw | Opponent gets an accept/decline dialog |
+| 24 | Look for a Draw button | There is none — the control row is Undo, Flip, Resign |
 | 25 | Resign | Both devices show the same result |
 | 26 | Rematch | Resets only once *both* ask; colours swap |
 | 27 | Close one device's tab | Other shows "disconnected" |
@@ -794,12 +803,16 @@ the DOM**. Set it to `false` before shipping.
 3. **Drag-and-drop is mouse/pen only.** On touch, tap-to-move is the sole
    interaction so that page scrolling keeps working. Tap-to-move is fully
    supported everywhere, including desktop.
-4. **Undo and Draw are locked in the UI, not removed.** Both controls stay in
-   the row with a padlock and refuse to act. The capability underneath is
-   untouched and still tested, so unlocking either is a one-line change to
-   `LOCKED_CONTROLS` rather than a repair job. Note that this also stops draw
-   offers being *made* in online games; receiving, accepting and declining one
-   still work, since an opponent on an older build can still send one.
+4. **Undo is locked in the UI, and Draw is gone from it.** Undo stays in the
+   row with a padlock and refuses to act; the Draw button was removed
+   outright. Neither capability was deleted — both are still implemented and
+   still tested — so restoring either is a small, contained change rather than
+   a repair job: an id in `LOCKED_CONTROLS` for Undo, a button and one line of
+   wiring for Draw.
+
+   The practical consequence is that a draw can no longer be *offered* from
+   this build, online or off. Receiving, accepting and declining still work,
+   since a peer on an older build can still send one.
 
    If Undo is ever unlocked, its own caveats still apply: it has no depth
    limit and no confirmation, and is local-only — online, a unilateral

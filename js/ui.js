@@ -63,7 +63,7 @@ export class UI {
       'card-top', 'card-bottom', 'top-name', 'top-color', 'top-turn',
       'bottom-name', 'bottom-color', 'bottom-turn',
       'board', 'status', 'status-text', 'status-badge',
-      'btn-undo', 'btn-flip', 'btn-draw', 'btn-resign',
+      'btn-undo', 'btn-flip', 'btn-resign',
       'history-panel', 'btn-history-toggle', 'history-list', 'history-count',
       'modal-promotion', 'promotion-choices',
       'modal-confirm', 'confirm-title', 'confirm-text', 'btn-confirm-ok', 'btn-confirm-cancel',
@@ -404,9 +404,6 @@ export class UI {
       undo.disabled = !state.canUndo;
       undo.title = online ? 'Undo is not available in online games' : '';
     }
-    if (this.#dom['btn-draw'] && !isControlLocked('draw')) {
-      this.#dom['btn-draw'].disabled = inactive;
-    }
     if (this.#dom['btn-resign']) this.#dom['btn-resign'].disabled = inactive;
 
     // Restart resets the position unilaterally, which has no meaning across
@@ -704,7 +701,6 @@ export class UI {
     };
     control('undo', 'onUndo');
     control('flip', 'onFlip');
-    control('draw', 'onOfferDraw');
     control('resign', 'onResign');
     this.#dom['btn-restart']?.addEventListener('click', () => this.#call('onRestart'));
     this.#dom['btn-leave']?.addEventListener('click', () => this.#call('onLeaveGame'));

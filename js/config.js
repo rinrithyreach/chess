@@ -133,7 +133,7 @@ export function resolveUiStyle(savedStyle) {
  * Ids are the part after `btn-`. Take one out of this list to restore that
  * control — nothing else needs changing.
  */
-export const LOCKED_CONTROLS = ['undo', 'draw'];
+export const LOCKED_CONTROLS = ['undo'];
 
 export function isControlLocked(id) {
   return LOCKED_CONTROLS.includes(id);

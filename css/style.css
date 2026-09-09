@@ -762,7 +762,7 @@ body.is-modal-open {
   /* minmax(0, 1fr) rather than 1fr: without the zero floor, each button's
      min-content width becomes a hard minimum and the row overflows on narrow
      screens instead of shrinking. */
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.5rem;
 }
 

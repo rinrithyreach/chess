@@ -345,7 +345,6 @@ async function boot() {
 
     onFlip: () => controller.flipBoard(),
 
-    onOfferDraw: () => controller.offerDraw(),
 
     onResign: async () => {
       const snapshot = controller.getSnapshot();
