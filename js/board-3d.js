@@ -8,10 +8,11 @@
  * context that has to be handed back when the player switches skins. app.js
  * swaps between the two knowing nothing about either's internals.
  *
- * Why WebGL and not CSS 3D: the CSS attempt (the Arcade skin) put the board in
- * a `preserve-3d` transform, and Chromium's compositor then hit-tested against
- * a stale flattened box — `elementFromPoint` reported the wrong square and the
- * board became unplayable. That is not a bug you can style your way out of.
+ * Why WebGL and not CSS 3D: an earlier CSS skin (since removed) put the board
+ * in a `preserve-3d` transform, and Chromium's compositor then hit-tested
+ * against a stale flattened box — `elementFromPoint` reported the wrong square
+ * and the board became unplayable. That is not a bug you can style your way
+ * out of, and it is the reason that approach was abandoned rather than fixed.
  * Here, picking is done by raycasting against the real geometry, so what you
  * click is by construction what you see.
  *

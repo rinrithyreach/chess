@@ -13,7 +13,6 @@ import {
   STATUS,
   BOARD_THEMES,
   UI_STYLES,
-  isUiStyleLocked,
   TOAST_MS,
   warn,
 } from './config.js';
@@ -105,8 +104,7 @@ export class UI {
       });
     }
 
-    // Look & feel picker. A locked style is still listed — showing it with a
-    // padlock tells the player it exists, which hiding it would not.
+    // Look & feel picker. Every listed style is selectable.
     const stylePicker = this.#dom['style-picker'];
     if (stylePicker) {
       stylePicker.innerHTML = '';
@@ -114,23 +112,13 @@ export class UI {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'style-option';
-        if (style.locked) button.classList.add('style-option--locked');
         button.dataset.style = style.id;
         button.setAttribute('role', 'radio');
         button.setAttribute('aria-checked', 'false');
-        if (style.locked) {
-          // aria-disabled rather than `disabled`: the button stays focusable
-          // and announced, so a screen-reader user learns it is locked instead
-          // of it silently vanishing from the tab order.
-          button.setAttribute('aria-disabled', 'true');
-          button.title = `${style.label} is locked`;
-        }
         button.innerHTML =
-          `<span class="style-option__preview" data-style="${style.id}">` +
-          (style.locked ? '<span class="style-option__lock" aria-hidden="true">🔒</span>' : '') +
-          '</span>' +
+          `<span class="style-option__preview" data-style="${style.id}"></span>` +
           `<span class="style-option__name">${style.label}</span>` +
-          `<span class="style-option__hint">${style.locked ? 'Locked' : style.hint}</span>`;
+          `<span class="style-option__hint">${style.hint}</span>`;
         stylePicker.append(button);
       });
     }
@@ -548,7 +536,6 @@ export class UI {
     });
 
     this.#dom.board?.setAttribute('data-theme', settings.boardTheme);
-    // One attribute drives the whole skin; arcade.css keys everything off it.
     document.documentElement.setAttribute('data-ui-style', settings.uiStyle ?? 'classic');
   }
 
@@ -727,10 +714,6 @@ export class UI {
     this.#dom['style-picker']?.addEventListener('click', (event) => {
       const option = event.target.closest('.style-option');
       if (!option) return;
-      if (isUiStyleLocked(option.dataset.style)) {
-        this.toast('Arcade 3D is locked', 'warn');
-        return;
-      }
       this.#call('onSettingChange', { uiStyle: option.dataset.style });
     });
 

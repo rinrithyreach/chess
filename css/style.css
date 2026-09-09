@@ -1154,42 +1154,6 @@ body.is-modal-open {
   overflow: hidden;
 }
 
-/* --- Locked option: visible, clearly unavailable --- */
-
-.style-option--locked {
-  cursor: not-allowed;
-}
-
-/* Drain the preview of colour so "unavailable" reads before the padlock does. */
-.style-option--locked .style-option__preview {
-  filter: grayscale(0.85) brightness(0.6);
-}
-
-.style-option__lock {
-  position: absolute;
-  inset: 0;
-  /* The preview's ::after (the swatch artwork) is painted after this element,
-     so without a stacking order the padlock ends up hidden behind it. */
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  /* A scrim, because the padlock inherits the parent's grayscale filter and
-     would otherwise sit grey-on-grey against the dimmed swatch. */
-  background: rgba(8, 12, 20, 0.5);
-  font-size: 1.15rem;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-}
-
-.style-option--locked .style-option__name,
-.style-option--locked .style-option__hint {
-  opacity: 0.55;
-}
-
-/* A locked option can never be the active one, so never show it as active. */
-.style-option--locked.is-active {
-  border-color: var(--border);
-}
-
 /* Flat checkerboard for Classic. */
 .style-option__preview[data-style="classic"] {
   background:
@@ -1198,24 +1162,6 @@ body.is-modal-open {
     #1b1f2a;
 }
 
-/* Tilted checkerboard on grass for Arcade. */
-.style-option__preview[data-style="arcade"] {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(180deg, #6cc054, #4fa83d);
-}
-
-.style-option__preview[data-style="arcade"]::after {
-  content: "";
-  position: absolute;
-  inset: 22% 12% 6%;
-  background:
-    linear-gradient(135deg, #f7e4c3 0 25%, #c08c55 25% 50%, #f7e4c3 50% 75%, #c08c55 75% 100%)
-      0 0 / 10px 10px;
-  border-radius: 2px;
-  transform: perspective(70px) rotateX(28deg);
-  box-shadow: 0 0 0 2px #8a5c2f;
-}
 
 .style-option__name {
   font-size: 0.82rem;

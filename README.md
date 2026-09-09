@@ -79,17 +79,19 @@ rematch, board flip, and copy PGN.
 Game* entry point. Local games restore position, history, players, orientation
 and undo depth; online games rejoin their room and resync from it.
 
-**Three visual skins** — **Classic** (dark, flat, focused) is the default.
-**3D Board** is a real WebGL board: turned pieces with genuine depth, a lit
-scene with cast shadows, a camera that swings round the board when you flip it,
-and moves that carry the piece through the air. Its pieces are *generated*, not
-modelled — chess pieces are surfaces of revolution, so a dozen profile points
-produce a real lathe-turned piece, and the knight is extruded from a silhouette.
-There are no model files to ship or keep in sync. **Arcade 3D** (a CSS
-perspective skin) is fully built but shown **locked** under Settings → Look &
-Feel, with a padlock. To unlock it, drop `locked: true` from its entry in
-`UI_STYLES` (`js/config.js`) — nothing else needs changing. With `DEBUG` on,
-`?ui=arcade` previews it without unlocking.
+**Two visual styles** — **Classic** (dark, flat, focused) is the default and
+is rendered as a DOM grid. **3D Board** is a real WebGL board: turned pieces
+with genuine depth, a lit scene with cast shadows, a camera that swings round
+the board when you flip it, and moves that carry the piece through the air.
+Its pieces are *generated*, not modelled — chess pieces are surfaces of
+revolution, so a dozen profile points produce a real lathe-turned piece, and
+the knight is extruded from a silhouette. There are no model files to ship or
+keep in sync. With `DEBUG` on, `?ui=<id>` previews either without changing the
+saved setting.
+
+A third style, a CSS-perspective *Arcade 3D* skin, was built and then removed;
+`js/board-3d.js` explains why in its header, and the history is in git. A saved
+`uiStyle` of `arcade` left over from that build simply falls back to Classic.
 
 The 3D board is loaded only when it is chosen, so nobody who stays on Classic
 ever downloads three.js. If a device refuses a WebGL context, the app says so
@@ -118,8 +120,7 @@ chess-game/
 │   ├── style.css                 Design tokens, shell, controls, modals, online UI
 │   ├── board.css                 Board, squares, pieces, highlights, themes
 │   ├── responsive.css            Mobile → tablet → desktop layouts
-│   ├── board-3d.css              Canvas host + a11y layer for the WebGL board
-│   └── arcade.css                "Arcade 3D" skin (inert unless selected)
+│   └── board-3d.css              Canvas host + a11y layer for the WebGL board
 ├── js/
 │   ├── config.js                 Constants, DEBUG flag, logger
 │   ├── app.js                    Composition root (entry point)
@@ -607,7 +608,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across eight suites — **569 assertions, all passing, with zero console
+project across ten suites — **596 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -621,8 +622,7 @@ errors in every browser and viewport tested**:
 | **3D board (Chromium)** | **48** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
-| Style lock | 16 | Arcade shows a padlock, cannot be selected, and a stored value cannot bypass it |
-| **Arcade skin (Chromium)** | **20** | **All 64 tilted squares tappable, 4 viewports, no overflow** |
+| Styles | 22 | Two styles listed, both selectable, and a retired one cannot return by any route |
 
 The 3D suite's headline check is picking. Every one of the 64 squares is
 projected through the live camera to find where it is actually drawn, clicked
@@ -677,8 +677,9 @@ clients talking to a real database:
 A further issue was a spurious "Opponent disconnected" modal after a *failed*
 join, because the presence check ran even when not seated in a room.
 
-And one from the Arcade skin, which is worth recording because it looks like a
-CSS problem and is really an input problem:
+And one from the CSS-perspective skin that was later removed. It is worth
+recording because it looks like a CSS problem and is really an input problem —
+and because it is the reason the 3D board is WebGL:
 
 7. **A `preserve-3d` board could not be played on.** The natural way to build
    a tilted board is `transform-style: preserve-3d` with each piece
@@ -807,13 +808,13 @@ the DOM**. Set it to `false` before shipping.
 12. **Move legality is enforced by clients, not the server.** See
     [Trust model](#trust-model) for exactly what that does and does not mean.
 
-13. **The Arcade 3D skin trades tap size for looks.** Perspective makes the far
-    ranks smaller: on a 360px-wide phone rank 8 is about 29px tall against 41px
-    on rank 1, below the 44px target the Classic skin holds everywhere. Every
-    square is still reachable and a full game is playable by tap (verified
-    across four viewports), but Classic is the more comfortable choice for
-    serious play, which is why it remains the default. The tilt is a single
-    `--tilt` value in `css/arcade.css` if you want it flatter.
+13. **The 3D board trades tap size for looks.** Perspective makes the far ranks
+    smaller, so the back rank is a smaller target than the 44px the Classic
+    board holds everywhere. Every square is still reachable — picking is a
+    raycast against real geometry, and all 64 are verified individually — but
+    Classic is the more comfortable choice for serious play, which is why it
+    remains the default. It also needs no GPU context, so it is the one that
+    always works.
 5. **PGN import is not implemented.** Export and clipboard copy work; the
    engine already exposes `loadPgn()`, so import is a small addition.
 6. **No clocks.** Timers are Phase 3.

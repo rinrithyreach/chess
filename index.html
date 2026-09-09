@@ -11,27 +11,25 @@
   <link rel="stylesheet" href="./css/board.css">
   <link rel="stylesheet" href="./css/board-3d.css">
   <link rel="stylesheet" href="./css/responsive.css">
-  <!-- Arcade 3D skin. Inert unless <html data-ui-style="arcade">. -->
-  <link rel="stylesheet" href="./css/arcade.css">
   <script>
     // Apply the saved skin before first paint so switching never flashes the
-    // other theme. Deliberately inline and tiny; the app re-applies it later.
-    // Mirrors resolveUiStyle() in js/config.js — keep the locked list in sync.
+    // other style. Deliberately inline and tiny; the app re-applies it later.
+    // Mirrors resolveUiStyle() in js/config.js — keep the id list in sync.
     // Duplicated here only because it must run before first paint, ahead of
     // any module loading.
     (function () {
-      var LOCKED = ['arcade'];
+      var STYLES = ['classic', 'board3d'];
       var style = 'classic';
       try {
         var ui = new URLSearchParams(location.search).get('ui');
-        if (ui === 'classic' || ui === 'arcade') {
-          style = ui; // DEBUG preview: may target a locked style
+        if (STYLES.indexOf(ui) >= 0) {
+          style = ui;
         } else {
           var raw = localStorage.getItem('chess-arena:settings');
           var saved = raw && JSON.parse(raw).settings.uiStyle;
-          if (saved === 'classic' || (saved === 'arcade' && LOCKED.indexOf('arcade') < 0)) {
-            style = saved;
-          }
+          // Anything not on the list — including `arcade` left over from an
+          // older build — falls back to the default rather than being trusted.
+          if (STYLES.indexOf(saved) >= 0) style = saved;
         }
       } catch (_) { /* fall through to the default */ }
       document.documentElement.setAttribute('data-ui-style', style);

@@ -71,24 +71,16 @@ export const BOARD_THEMES = [
 ];
 
 /**
- * Overall visual style.
- *
- * `classic` is the flat, dark, premium look. `arcade` is a bright casual-game
- * skin with a board tilted into 3D perspective. Purely presentational — the
- * board still renders the same 64 squares in the same DOM order, so gameplay,
- * coordinates and hit-testing are unchanged.
- */
-/**
  * Available looks.
  *
- * `locked: true` shows the option in Settings with a padlock but makes it
- * unselectable. Remove the flag to unlock — the skin itself is complete and
- * needs no other change.
+ * `classic` is the flat, dark, premium look, rendered as a DOM grid.
+ * `board3d` is the WebGL board — real geometry, lighting and shadows.
+ * Which one is chosen decides which renderer app.js mounts; everything else
+ * about the game is identical either way.
  */
 export const UI_STYLES = [
   { id: 'classic', label: 'Classic', hint: 'Dark, flat, focused' },
   { id: 'board3d', label: '3D Board', hint: 'Real depth and shadows', webgl: true },
-  { id: 'arcade', label: 'Arcade 3D', hint: 'Locked', locked: true },
 ];
 
 /**
@@ -103,22 +95,19 @@ export function uiStyleNeedsWebgl(id) {
   return WEBGL_UI_STYLES.includes(id);
 }
 
-/** Ids the player is actually allowed to pick. */
-export const SELECTABLE_UI_STYLES = UI_STYLES.filter((s) => !s.locked).map((s) => s.id);
-
-export function isUiStyleLocked(id) {
-  return UI_STYLES.some((s) => s.id === id && s.locked);
-}
+/** Ids the player is allowed to pick. */
+export const SELECTABLE_UI_STYLES = UI_STYLES.map((s) => s.id);
 
 /**
  * Which style to actually use.
  *
- * A locked style is never honoured, even if it is already stored from before
- * it was locked — that value falls back to the default instead.
+ * Anything not on the list falls back to the default rather than being trusted
+ * — which is what retires a style cleanly. A player whose browser still has
+ * `arcade` stored from an older build simply gets Classic, with no migration
+ * step and nothing to clean up.
  *
- * `?ui=arcade` overrides the lock while DEBUG is on, so a locked skin stays
- * previewable and testable without editing source. It is inert once DEBUG is
- * false, so it cannot be used to bypass the lock in production.
+ * `?ui=<id>` overrides the stored value while DEBUG is on, so a style stays
+ * previewable without editing source. It is inert once DEBUG is false.
  */
 export function resolveUiStyle(savedStyle) {
   if (DEBUG) {
@@ -136,7 +125,8 @@ export function resolveUiStyle(savedStyle) {
 export const DEFAULT_SETTINGS = {
   sound: true,
   // Classic is the default: it holds a 44px touch target on every rank, which
-  // the tilted Arcade board cannot. Arcade is one tap away in Settings.
+  // a board drawn in perspective cannot, and it needs no GPU context. The 3D
+  // board is one tap away in Settings.
   uiStyle: 'classic',
   boardTheme: 'classic',
   showCoordinates: true,
