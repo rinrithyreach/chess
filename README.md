@@ -105,8 +105,13 @@ Game* entry point. Local games restore position, history, players, orientation
 and undo depth; online games rejoin their room and resync from it.
 
 **Refresh mid-game** and the app's own dialog offers it straight back —
-*Resume your game?*, naming the players and how far you got, with Continue and
-New Game. Only after an actual reload; arriving fresh still just shows the
+*Resume your game?*, naming the players and how far you got, with three
+answers: **Continue** picks the game up, **New Game** starts another, and
+**Exit Game** leaves it alone and keeps it saved. That third one was always
+possible by pressing Escape or tapping outside, but only if you knew to — on a
+phone an unlabelled way out is no way out. It discards nothing, and says so.
+Dismissing the dialog now means Exit rather than New Game, so a stray tap on
+the backdrop is never what puts a game behind you. Only after an actual reload; arriving fresh still just shows the
 Continue button, since a dialog in front of everyone who once left a game
 unfinished would be nagging rather than helpful. A styled confirmation
 *before* the page goes is not possible for any site: a page cannot render its
@@ -657,7 +662,7 @@ errors in every browser and viewport tested**:
 | App (jsdom) | 131 | Boots the real app, drives it by tap/click, asserts DOM |
 | Layout (Chromium) | 145 | 9 viewports: overflow, board geometry, touch targets |
 | Interaction (Chromium) | 42 | Real page refresh, drag-and-drop, keyboard, clipboard |
-| **Resume after refresh (Chromium)** | **25** | **The dialog is the app's own, appears only after a reload, and both answers do the right thing** |
+| **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |
 | **Multiplayer (Chromium ×2)** | **71** | **Two devices against the Firebase emulator** |
 | **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
 | **3D board (Chromium)** | **48** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown** |
@@ -777,6 +782,7 @@ And two from building that WebGL board:
 | 14 | Load `7k/8/8/8/8/8/8/K7 w - - 0 1` | DRAW — Insufficient Material |
 | 15 | e4, e5, Nf3, then tap Undo | Refused — Undo is locked, and says so |
 | 16 | Play moves, then refresh | *Resume your game?* dialog; Continue restores position and history |
+| 16b | Refresh again, tap Exit Game | Back on the menu, nothing lost — Continue still offers the same game |
 | 17 | Flip Board | Only orientation changes |
 | 18 | Move after checkmate | Rejected |
 

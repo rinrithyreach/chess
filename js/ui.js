@@ -46,6 +46,9 @@ export class UI {
   #openModal = null;
   #lastFocused = null;
   #confirmResolver = null;
+  /** What dismissing the confirmation resolves to — see confirm(). */
+  #confirmDismiss = false;
+  #confirmAltValue = 'alt';
   #historyExpanded = false;
 
   constructor(controller) {
@@ -67,7 +70,8 @@ export class UI {
       'btn-undo', 'btn-flip', 'btn-resign',
       'history-panel', 'btn-history-toggle', 'history-list', 'history-count',
       'modal-promotion', 'promotion-choices',
-      'modal-confirm', 'confirm-title', 'confirm-text', 'btn-confirm-ok', 'btn-confirm-cancel',
+      'modal-confirm', 'confirm-title', 'confirm-text', 'confirm-actions',
+      'btn-confirm-ok', 'btn-confirm-cancel', 'btn-confirm-alt',
       'modal-gameover', 'gameover-icon', 'gameover-title', 'gameover-result',
       'gameover-detail', 'btn-rematch', 'btn-gameover-new', 'check-swap-colors',
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
@@ -475,11 +479,13 @@ export class UI {
     if (this.#openModal === name) this.#openModal = null;
     if (!this.#openModal) document.body.classList.remove('is-modal-open');
 
-    // A cancelled confirmation must still settle its promise.
+    // A cancelled confirmation must still settle its promise. What a dismissal
+    // means is the caller's to decide: for a two-button dialog it is "no", but
+    // a dialog with a third way out usually has a safer outcome than either.
     if (name === 'confirm' && this.#confirmResolver) {
       const resolve = this.#confirmResolver;
       this.#confirmResolver = null;
-      resolve(false);
+      resolve(this.#confirmDismiss);
     }
     if (name === 'promotion') this.#controller.cancelPromotion();
 
@@ -492,15 +498,35 @@ export class UI {
   }
 
   /**
-   * Custom confirmation dialog. Resolves true/false.
+   * Custom confirmation dialog.
+   *
+   * Resolves true for the confirm button and false for the cancel button. Pass
+   * `altLabel` and a third button appears, resolving `altValue` — for the
+   * questions that genuinely have three answers rather than two. Callers that
+   * ask nothing extra are unaffected and still get a plain true/false.
+   *
+   * `dismissValue` is what closing the dialog without choosing resolves to
+   * (Escape, the backdrop, the close button). It defaults to false — "no" —
+   * which is right for a yes/no question, but a three-way dialog should
+   * usually point it at whichever outcome changes the least.
+   *
    * The OK button is disabled once clicked, so a double tap cannot fire the
    * action twice.
    */
-  confirm({ title, text, confirmLabel = 'Confirm', cancelLabel = 'Cancel', tone = 'default' }) {
+  confirm({
+    title,
+    text,
+    confirmLabel = 'Confirm',
+    cancelLabel = 'Cancel',
+    altLabel = null,
+    altValue = 'alt',
+    dismissValue = false,
+    tone = 'default',
+  }) {
     return new Promise((resolve) => {
       // Settle any dialog that is somehow still open.
       if (this.#confirmResolver) {
-        this.#confirmResolver(false);
+        this.#confirmResolver(this.#confirmDismiss);
         this.#confirmResolver = null;
       }
 
@@ -519,6 +545,26 @@ export class UI {
       const cancel = this.#dom['btn-confirm-cancel'];
       if (cancel) cancel.textContent = cancelLabel;
 
+      const alt = this.#dom['btn-confirm-alt'];
+      if (alt) {
+        alt.hidden = !altLabel;
+        alt.disabled = false;
+        if (altLabel) alt.textContent = altLabel;
+      }
+
+      // Three buttons do not fit a row on a phone, so a three-way dialog
+      // stacks with the confirm button on top. The nodes are reordered rather
+      // than positioned with CSS `order`, so what a screen reader announces
+      // and what Tab visits stay in the same sequence as what is on screen.
+      const actions = this.#dom['confirm-actions'];
+      if (actions && ok && cancel && alt) {
+        actions.classList.toggle('modal__actions--stack', Boolean(altLabel));
+        if (altLabel) actions.append(ok, cancel, alt);
+        else actions.append(cancel, ok, alt);
+      }
+
+      this.#confirmAltValue = altValue;
+      this.#confirmDismiss = dismissValue;
       this.#confirmResolver = resolve;
       this.openModal('confirm');
     });
@@ -763,6 +809,8 @@ export class UI {
     // --- Confirm ---
     this.#dom['btn-confirm-ok']?.addEventListener('click', () => this.#settleConfirm(true));
     this.#dom['btn-confirm-cancel']?.addEventListener('click', () => this.#settleConfirm(false));
+    this.#dom['btn-confirm-alt']?.addEventListener('click', () =>
+      this.#settleConfirm(this.#confirmAltValue));
 
     // --- Game over ---
     this.#dom['btn-rematch']?.addEventListener('click', () => {

@@ -264,9 +264,13 @@
     <div class="modal__panel modal__panel--compact">
       <h2 class="modal__title" id="confirm-title">Are you sure?</h2>
       <p class="modal__text" id="confirm-text"></p>
-      <div class="modal__actions">
+      <div class="modal__actions" id="confirm-actions">
         <button type="button" class="btn btn--ghost" id="btn-confirm-cancel">Cancel</button>
         <button type="button" class="btn btn--primary" id="btn-confirm-ok">Confirm</button>
+        <!-- A third way out, for dialogs that have one. Hidden by default, and
+             moved into place by UI.confirm() so reading order matches the
+             stacked layout it switches to. -->
+        <button type="button" class="btn btn--ghost" id="btn-confirm-alt" hidden>Exit</button>
       </div>
     </div>
   </div>

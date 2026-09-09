@@ -218,23 +218,45 @@ async function boot() {
    * Only after an actual reload. On a first visit the Continue button is
    * enough, and a dialog in front of every visitor who once left a game
    * unfinished would be nagging rather than helpful.
+   *
+   * Three answers, because the question has three. Continue picks the game
+   * back up, New Game starts another, and Exit Game leaves it alone — which
+   * was always possible by pressing Escape or tapping outside, but only if you
+   * knew to. On a phone, an unlabelled way out is no way out, so it gets a
+   * button. Nothing is discarded by it: the save stays, and the toast says so,
+   * because a button called Exit that quietly threw a game away would be a
+   * cruel reading of the word.
    */
   async function offerResumeAfterReload() {
     if (!wasReloaded() || !controller.hasSavedGame()) return;
 
     const info = controller.getSavedGameInfo();
     const moves = info?.moveCount ?? 0;
-    const resume = await ui.confirm({
+    const choice = await ui.confirm({
       title: 'Resume your game?',
       text: info
         ? `${info.white} vs ${info.black} — ${moves} ${moves === 1 ? 'move' : 'moves'} played`
         : 'You have a game in progress.',
       confirmLabel: 'Continue',
       cancelLabel: 'New Game',
+      altLabel: 'Exit Game',
+      altValue: 'exit',
+      // Dismissing points at Exit rather than New Game: a stray tap on the
+      // backdrop should not be the thing that puts a game behind you.
+      dismissValue: 'exit',
     });
 
-    if (resume) await continueSavedGame();
-    else ui.showScreen('setup');
+    if (choice === true) {
+      await continueSavedGame();
+    } else if (choice === false) {
+      ui.showScreen('setup');
+    } else {
+      // Already on the menu — the reload put us there — so exiting is simply
+      // staying, with the Continue button still holding the game.
+      ui.showScreen('menu');
+      ui.refreshContinueButton();
+      ui.toast('Game saved — continue it any time');
+    }
   }
 
   controller.on(EVENT.MOVE, ({ move }) => {
