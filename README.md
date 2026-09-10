@@ -123,8 +123,22 @@ reload, where the app is in charge of it.
 genuine depth, a lit scene with cast shadows, a camera that swings round the
 board when you flip it, and moves that carry the piece through the air. Its
 pieces are *generated*, not modelled — chess pieces are surfaces of revolution,
-so a dozen profile points produce a real lathe-turned piece, and the knight is
-extruded from a silhouette. There are no model files to ship or keep in sync.
+so a two-dozen-point profile produces a real lathe-turned piece with its
+plinth, chamfer, collar and coronet, and the knight is extruded from a
+silhouette traced to have a muzzle, a dished nose, two ears and a notched mane.
+There are no model files to ship or keep in sync.
+
+**The finish.** Filmic tone mapping, so a highlight on a turned surface rolls
+off and keeps its shape instead of clipping to a bald white patch. A small
+studio — graded sky, warm softbox where the key light is, cool fill opposite,
+floor bounce — built from primitives and prefiltered into a cube map, so the
+pieces have a room to reflect: a polished object reads as polished because you
+can see something in it, and before this there was nothing. A clearcoat over
+each piece, because a finished piece is lacquer over wood and one specular lobe
+has to average the two into something that looks like neither. And the board is
+a surface rather than two colours: every square gets its own wood grain, with
+its own direction and its own seed, a matching roughness map so the grain
+catches the light, and a drawn seam at every join.
 
 **Board size**, in the control row next to Flip, in three steps: *Fit*,
 *Large* (the default) and *Max*. It is zoom, but implemented as camera
@@ -679,7 +693,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across fifteen suites — **762 assertions, all passing, with zero console
+project across fifteen suites — **772 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -693,7 +707,7 @@ errors in every browser and viewport tested**:
 | **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |
 | **Multiplayer (Chromium ×2)** | **82** | **The setup form follows the chosen mode, then two devices against the Firebase emulator** |
 | **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
-| **3D board (Chromium)** | **48** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown** |
+| **3D board (Chromium)** | **58** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; and the finish is measured — grain in the surface, seams drawn, the no-GPU path detected** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |
@@ -896,7 +910,21 @@ the DOM**. Set it to `false` before shipping.
 12. **Move legality is enforced by clients, not the server.** See
     [Trust model](#trust-model) for exactly what that does and does not mean.
 
-13. **Perspective still costs tap size, but far less than it did.** The far
+13. **Two of the finish refinements are switched off without a GPU.** The
+    environment map and the pieces' clearcoat are a texture unit and a few ALU
+    ops on any GPU made this decade, and hundreds of CPU instructions per
+    fragment on a software rasteriser — which is what Chrome falls back to when
+    it blocklists a driver. Profiled on this project's own SwiftShader test
+    harness, the environment map alone took the 95th-percentile frame during a
+    move from 17ms to 500ms. The board detects the absence of a GPU (not its
+    speed, which is unknowable) and drops those two along with the board's
+    roughness map and half the lathe segments, which brings that figure back to
+    17ms exactly. Everyone else gets the full finish. The honest caveat: the
+    full path's cost has only been measured under software rendering, where it
+    is worst by a wide margin, so its real-GPU cost is inferred rather than
+    measured.
+
+14. **Perspective still costs tap size, but far less than it did.** The far
     rank used to be a 22px target on a 412px phone against the near rank's
     36px — the hardest square on the board to hit. The board-size control
     fixes most of that by raising the camera rather than dollying in, which

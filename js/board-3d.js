@@ -46,6 +46,7 @@ import {
   BOARD_ZOOM_LEVELS,
   DEFAULT_BOARD_ZOOM,
   clampBoardZoom,
+  warn,
 } from './config.js';
 import {
   ALL_SQUARES,
@@ -68,10 +69,20 @@ const RIM = 0.42; // border width around the playing area
  * product. The extra colours (rim, and the two coordinate inks) have no CSS
  * equivalent because a flat board draws its frame in CSS instead.
  */
+/*
+   Board colours for the 3D board.
+
+   Darker than the flat board's equivalents on purpose, and not a mistake to be
+   "corrected" back. These are albedos going through a light of roughly 1.5 and
+   then filmic tone mapping, not pixels going straight to the screen: the flat
+   board's cream arrives at the eye as near-white here, taking the grain with
+   it. Tuned by rendering until what comes OUT is the colour the flat board
+   shows.
+*/
 const THEMES = {
-  classic: { light: '#ecd8b6', dark: '#b07d4f', rim: '#6b4a2c', inkOnLight: '#8a6238', inkOnDark: '#ecd8b6' },
-  midnight: { light: '#9fb0cc', dark: '#4a5a78', rim: '#2c3549', inkOnLight: '#3d4a63', inkOnDark: '#cdd8ea' },
-  wood: { light: '#e8c99b', dark: '#9a6a3d', rim: '#5d3f22', inkOnLight: '#7b5228', inkOnDark: '#f0dcc0' },
+  classic: { light: '#c8ab7e', dark: '#7d5530', rim: '#4a3018', inkOnLight: '#6b4a26', inkOnDark: '#e2cba6' },
+  midnight: { light: '#77879f', dark: '#33405a', rim: '#1e2536', inkOnLight: '#2b3549', inkOnDark: '#c2cee2' },
+  wood: { light: '#c5a271', dark: '#6f4826', rim: '#3f2914', inkOnLight: '#5c3c1c', inkOnDark: '#ecd8bc' },
 };
 
 const HIGHLIGHT = {
@@ -81,9 +92,40 @@ const HIGHLIGHT = {
   focus: { color: 0x7fb2ff, opacity: 0.5 },
 };
 
+/**
+ * The two piece finishes.
+ *
+ * Not the same material in two colours. A pale piece is boxwood: fairly matt,
+ * lit mostly by the light that scatters just under the surface. A dark piece
+ * is ebonised and lacquered, so almost everything you see on it is reflection
+ * — which is why it gets the harder coat and the stronger environment. Give
+ * them identical finishes and the black pieces read as silhouettes with no
+ * shape in them.
+ *
+ * A sheen lobe was tried here and removed. It is the most expensive term
+ * MeshPhysicalMaterial offers, it was applied to all 32 pieces, and beside the
+ * clearcoat it was doing nothing anyone could point at.
+ */
 const PIECE_MATERIALS = {
-  w: { color: 0xf2ede1, roughness: 0.42, metalness: 0.04 },
-  b: { color: 0x2a2e39, roughness: 0.46, metalness: 0.06 },
+  w: {
+    color: 0xd9cdb6,
+    roughness: 0.62,
+    metalness: 0.0,
+    // A tight coat over a rough body. The contrast between the two is the
+    // whole effect: a broad soft highlight on a smooth body just looks pale,
+    // which is how the first pass read.
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.13,
+    envMapIntensity: 0.9,
+  },
+  b: {
+    color: 0x1e212a,
+    roughness: 0.5,
+    metalness: 0.0,
+    clearcoat: 0.75,
+    clearcoatRoughness: 0.1,
+    envMapIntensity: 1.4,
+  },
 };
 
 /**
@@ -105,41 +147,72 @@ const PIECE_HEIGHT = { p: 0.72, r: 0.84, n: 0.94, b: 1.02, q: 1.16, k: 1.3 };
  */
 const PROFILES = {
   p: [
-    [0.00, 0.00], [0.30, 0.00], [0.30, 0.06], [0.26, 0.10], [0.17, 0.15],
-    [0.14, 0.30], [0.16, 0.42], [0.23, 0.48], [0.20, 0.53], [0.15, 0.58],
-    [0.22, 0.70], [0.24, 0.80], [0.20, 0.90], [0.12, 0.97], [0.00, 1.00],
+    [0.00, 0.000], [0.300, 0.000], [0.300, 0.042], [0.288, 0.052],
+    [0.286, 0.074], [0.246, 0.104], [0.196, 0.132],
+    [0.162, 0.168], [0.148, 0.244], [0.142, 0.322],
+    [0.152, 0.396], [0.206, 0.442], [0.226, 0.468],
+    [0.228, 0.492], [0.196, 0.514],
+    [0.150, 0.548], [0.140, 0.582],
+    [0.186, 0.646], [0.226, 0.726], [0.236, 0.802],
+    [0.214, 0.880], [0.158, 0.942], [0.084, 0.984], [0.00, 1.000],
   ],
   r: [
-    [0.00, 0.00], [0.34, 0.00], [0.34, 0.07], [0.29, 0.12], [0.22, 0.20],
-    [0.20, 0.62], [0.24, 0.68], [0.31, 0.74], [0.31, 0.86], [0.26, 0.86],
-    [0.26, 1.00], [0.00, 1.00],
+    [0.00, 0.000], [0.340, 0.000], [0.340, 0.048], [0.326, 0.058],
+    [0.324, 0.082], [0.276, 0.116], [0.232, 0.152],
+    [0.212, 0.196], [0.202, 0.320], [0.200, 0.480], [0.206, 0.586],
+    [0.238, 0.642], [0.246, 0.672],
+    [0.246, 0.700], [0.216, 0.716],
+    [0.222, 0.746], [0.296, 0.788], [0.310, 0.812],
+    [0.310, 0.874], [0.262, 0.876],
+    [0.262, 1.000], [0.00, 1.000],
   ],
   // The mitre is a tall cone pinched to a thin stem below a separate finial
   // ball. Without that pinch a bishop is just a taller pawn — which is exactly
   // how the first pass read on the board.
   b: [
-    [0.00, 0.00], [0.33, 0.00], [0.33, 0.06], [0.28, 0.11], [0.19, 0.17],
-    [0.15, 0.30], [0.19, 0.40], [0.24, 0.45], [0.20, 0.49], [0.14, 0.54],
-    [0.20, 0.62], [0.22, 0.70], [0.20, 0.78], [0.15, 0.86], [0.08, 0.92],
-    [0.045, 0.94], [0.075, 0.97], [0.05, 0.995], [0.00, 1.00],
+    [0.00, 0.000], [0.330, 0.000], [0.330, 0.042], [0.316, 0.052],
+    [0.314, 0.074], [0.268, 0.106], [0.212, 0.140],
+    [0.172, 0.176], [0.154, 0.256], [0.150, 0.318],
+    [0.164, 0.372], [0.206, 0.412], [0.238, 0.444],
+    [0.240, 0.468], [0.208, 0.486],
+    [0.156, 0.512], [0.142, 0.546],
+    [0.186, 0.596], [0.212, 0.652], [0.222, 0.708],
+    [0.210, 0.768], [0.176, 0.826], [0.128, 0.878], [0.082, 0.916],
+    [0.048, 0.938], [0.044, 0.948],
+    [0.078, 0.964], [0.070, 0.986], [0.036, 0.996], [0.00, 1.000],
   ],
   q: [
-    [0.00, 0.00], [0.37, 0.00], [0.37, 0.06], [0.31, 0.11], [0.21, 0.18],
-    [0.17, 0.34], [0.20, 0.46], [0.26, 0.51], [0.21, 0.56], [0.17, 0.62],
-    [0.25, 0.74], [0.30, 0.82], [0.26, 0.86], [0.30, 0.88], [0.22, 0.92],
-    [0.12, 0.95], [0.13, 0.98], [0.00, 1.00],
+    [0.00, 0.000], [0.370, 0.000], [0.370, 0.044], [0.356, 0.054],
+    [0.354, 0.078], [0.302, 0.112], [0.240, 0.150],
+    [0.190, 0.192], [0.174, 0.286], [0.170, 0.366],
+    [0.182, 0.428], [0.230, 0.472], [0.262, 0.502],
+    [0.264, 0.526], [0.226, 0.546],
+    [0.180, 0.578], [0.168, 0.616],
+    [0.216, 0.678], [0.262, 0.740], [0.296, 0.806],
+    [0.300, 0.836], [0.258, 0.850],
+    [0.264, 0.868], [0.302, 0.884],
+    [0.296, 0.906], [0.218, 0.928],
+    [0.132, 0.948], [0.120, 0.964], [0.146, 0.978], [0.104, 0.992], [0.00, 1.000],
   ],
   k: [
-    [0.00, 0.00], [0.38, 0.00], [0.38, 0.06], [0.32, 0.11], [0.22, 0.18],
-    [0.18, 0.36], [0.21, 0.48], [0.27, 0.53], [0.22, 0.58], [0.18, 0.63],
-    [0.26, 0.74], [0.30, 0.80], [0.26, 0.84], [0.30, 0.86], [0.20, 0.90],
-    [0.16, 0.92], [0.00, 0.92],
+    [0.00, 0.000], [0.380, 0.000], [0.380, 0.044], [0.366, 0.054],
+    [0.364, 0.078], [0.310, 0.112], [0.246, 0.152],
+    [0.196, 0.196], [0.180, 0.300], [0.176, 0.388],
+    [0.188, 0.446], [0.238, 0.490], [0.272, 0.520],
+    [0.274, 0.544], [0.234, 0.564],
+    [0.188, 0.598], [0.176, 0.638],
+    [0.226, 0.700], [0.272, 0.760], [0.300, 0.812],
+    [0.302, 0.838], [0.260, 0.852],
+    [0.266, 0.868], [0.300, 0.880],
+    [0.292, 0.900], [0.214, 0.914], [0.164, 0.920], [0.00, 0.920],
   ],
   // The knight's body is only a short pedestal; the head is most of the piece
   // and is extruded separately.
   n: [
-    [0.00, 0.00], [0.34, 0.00], [0.34, 0.07], [0.29, 0.12], [0.21, 0.18],
-    [0.19, 0.24], [0.23, 0.28], [0.00, 0.28],
+    [0.00, 0.000], [0.340, 0.000], [0.340, 0.048], [0.326, 0.058],
+    [0.324, 0.082], [0.278, 0.114], [0.226, 0.148],
+    [0.196, 0.186], [0.188, 0.238],
+    [0.212, 0.268], [0.236, 0.292], [0.00, 0.292],
   ],
 };
 
@@ -154,11 +227,39 @@ const PROFILES = {
  * muzzle jutting forward, the dish of the nose, two separate ears, and the
  * mane falling down the back of the neck.
  */
+/**
+ * A tiny seeded PRNG, so generated detail is the same every time.
+ *
+ * `Math.random` would give a board whose grain reshuffled on every theme
+ * change and differed between the two players' screens, which for something
+ * meant to look like one physical object is exactly wrong.
+ */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 const KNIGHT_OUTLINE = [
-  [-0.16, 0.00], [-0.20, 0.18], [-0.24, 0.34], [-0.30, 0.48], [-0.36, 0.60],
-  [-0.38, 0.70], [-0.30, 0.76], [-0.18, 0.80], [-0.10, 0.88], [-0.13, 1.00],
-  [-0.04, 0.92], [0.02, 1.02], [0.08, 0.88], [0.16, 0.72], [0.22, 0.52],
-  [0.26, 0.34], [0.24, 0.16], [0.20, 0.00],
+  // Throat and jaw, dropping forward to the muzzle.
+  [-0.16, 0.00], [-0.21, 0.14], [-0.27, 0.28], [-0.34, 0.42], [-0.40, 0.52],
+  // Muzzle: lip, nose, nostril — the part that has to jut, because a head
+  // without a muzzle is a lump and reads as one at forty pixels tall.
+  [-0.45, 0.585], [-0.455, 0.645], [-0.415, 0.695],
+  // The dish above the nostril, then the bridge climbing to the brow. This
+  // concave step is the single most horse-like thing in the outline.
+  [-0.355, 0.715], [-0.30, 0.775], [-0.245, 0.845], [-0.195, 0.905],
+  // Two ears with a notch between them. One ear reads as a horn.
+  [-0.19, 1.005], [-0.115, 0.935], [-0.055, 1.055], [0.015, 0.925],
+  // The crest of the neck, then the mane stepping down the back in three
+  // notches — the detail that stops the back of the head being a plain arc.
+  [0.09, 0.865], [0.175, 0.755], [0.135, 0.675], [0.215, 0.575],
+  [0.175, 0.485], [0.255, 0.365], [0.24, 0.18], [0.20, 0.00],
 ];
 
 export class Board3D {
@@ -178,6 +279,10 @@ export class Board3D {
   #canvas = null;
   #boardMesh = null;
   #boardTexture = null;
+  #boardRoughness = null;
+  #environmentRT = null;
+  #environment = null;
+  #richDetail = true;
   #pieceGroup = null;
   #markerGroup = null;
   #raycaster = new THREE.Raycaster();
@@ -250,10 +355,26 @@ export class Board3D {
     this.#renderer.setClearColor(0x000000, 0);
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    /*
+       Filmic tone mapping rather than none.
+
+       Without it, everything above 1.0 clips to flat white: a turned piece's
+       highlight arrives as a bald patch with no shape in it, which is most of
+       why the first pass read as plastic. ACES rolls those highlights off
+       instead, so the brightest part of a curve still shows its curvature. It
+       darkens the midtones as a side effect, which is what the exposure and
+       the retuned light intensities below are compensating for.
+    */
+    this.#renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.#renderer.toneMappingExposure = 0.76;
+    this.#renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    this.#richDetail = this.#hasHardwareGpu();
 
     this.#scene = new THREE.Scene();
     this.#camera = new THREE.PerspectiveCamera(38, 1, 0.5, 60);
 
+    this.#buildEnvironment();
     this.#buildLights();
     this.#buildBoard();
 
@@ -274,13 +395,154 @@ export class Board3D {
     }
   }
 
-  #buildLights() {
-    // Sky/ground fill, so the underside of a piece is never dead black.
-    this.#scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2620, 1.15));
+  /**
+   * Is there a GPU behind this context, or is Chromium rasterising in software?
+   *
+   * Not a guess at how fast the device is — that is unknowable and the wrong
+   * question. This is the one distinction that actually changes the arithmetic:
+   * a prefiltered cube lookup and a second specular lobe are a texture unit and
+   * a few ALU ops on any GPU made this decade, and hundreds of CPU instructions
+   * per fragment without one. Measured on this project's own test harness,
+   * which runs SwiftShader: the 95th-percentile frame during a move went from
+   * 17ms to 200ms with the environment map on, and back to 50ms without it.
+   * A real GPU never sees that curve.
+   *
+   * Chrome falls back to SwiftShader when it blocklists a driver, so this is a
+   * real population, not a hypothetical one. They get the same board with the
+   * two most fill-hungry refinements left off; everyone else gets the lot.
+   *
+   * Unknown counts as hardware. The debug extension is absent or masked in
+   * plenty of ordinary browsers, and downgrading everyone whose renderer will
+   * not identify itself would trade a real loss for an imagined gain.
+   */
+  #hasHardwareGpu() {
+    try {
+      const gl = this.#renderer?.getContext?.();
+      const info = gl?.getExtension?.('WEBGL_debug_renderer_info');
+      if (!gl || !info) return true;
+      const name = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) ?? '');
+      return !/swiftshader|llvmpipe|software|basic render/i.test(name);
+    } catch {
+      return true;
+    }
+  }
 
-    const key = new THREE.DirectionalLight(0xfff4e2, 2.1);
+  /**
+   * A room for the pieces to reflect.
+   *
+   * Lights alone give a MeshStandardMaterial diffuse shading and a single
+   * specular dot, and nothing else — no sense of a surface having anywhere to
+   * be. That is the real reason turned pieces looked like moulded plastic: a
+   * polished object reads as polished because you can see the room in it, and
+   * there was no room. This builds a small studio — a graded sky, a warm
+   * softbox above and to the left where the key light is, a cool one opposite,
+   * and a floor bounce — and prefilters it into a cube map that every standard
+   * material then samples. It is the largest single change to how the board
+   * looks, and it costs one 128px cube generated once.
+   *
+   * Built from primitives rather than loaded, for the same reason the pieces
+   * are: nothing to ship, nothing to keep in sync.
+   *
+   * Skipped entirely when there is no GPU — see #hasHardwareGpu.
+   */
+  #buildEnvironment() {
+    if (!this.#richDetail) return;
+
+    let generator = null;
+    const room = new THREE.Scene();
+    const temporary = [];
+
+    try {
+      // The sky: a vertical gradient on the inside of a sphere. Warm just
+      // above the horizon, cool overhead — the way a lit room actually falls
+      // off, and enough variation that a curved surface sweeping through it
+      // shows the sweep.
+      const sky = document.createElement('canvas');
+      sky.width = 4;
+      sky.height = 64;
+      const skyCtx = sky.getContext('2d');
+      const grad = skyCtx.createLinearGradient(0, 0, 0, 64);
+      grad.addColorStop(0, '#8fa3c4');
+      grad.addColorStop(0.45, '#5c6474');
+      grad.addColorStop(0.62, '#453e38');
+      grad.addColorStop(1, '#17140f');
+      skyCtx.fillStyle = grad;
+      skyCtx.fillRect(0, 0, 4, 64);
+      const skyTexture = new THREE.CanvasTexture(sky);
+      skyTexture.colorSpace = THREE.SRGBColorSpace;
+
+      const domeGeo = new THREE.SphereGeometry(12, 16, 12);
+      const domeMat = new THREE.MeshBasicMaterial({
+        map: skyTexture,
+        side: THREE.BackSide,
+      });
+      room.add(new THREE.Mesh(domeGeo, domeMat));
+      temporary.push(domeGeo, domeMat, skyTexture);
+
+      // The softboxes. Bright emissive-by-basic panels: what a piece's
+      // highlight is actually a picture of.
+      const panelGeo = new THREE.PlaneGeometry(1, 1);
+      temporary.push(panelGeo);
+      const panel = (color, intensity, scale, position) => {
+        const material = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(color).multiplyScalar(intensity),
+        });
+        const mesh = new THREE.Mesh(panelGeo, material);
+        mesh.scale.set(scale[0], scale[1], 1);
+        mesh.position.set(...position);
+        mesh.lookAt(0, 0, 0);
+        room.add(mesh);
+        temporary.push(material);
+      };
+      panel('#fff1dc', 2.4, [7, 5], [-5, 8, 5]);   // key, matching the key light
+      panel('#cfe0ff', 0.7, [8, 4], [6, 5, -7]);   // cool fill, opposite
+      panel('#ffffff', 0.28, [10, 10], [0, -6, 0]); // floor bounce
+
+      generator = new THREE.PMREMGenerator(this.#renderer);
+      generator.compileEquirectangularShader?.();
+      this.#environmentRT = generator.fromScene(room, 0.03);
+      /*
+         Assigned per material, NOT as scene.environment.
+
+         scene.environment gives it to everything, and everything includes the
+         board — which is by far the largest thing on screen. Profiling said
+         that one line was the single most expensive change in this file: the
+         95th-percentile frame went from 17ms to 500ms with it, and to 83ms
+         without, because every pixel of the board was doing a prefiltered cube
+         lookup to gain a sheen nobody was looking for. The pieces are where a
+         reflection reads, they cover a small fraction of the canvas, and they
+         are what this was for. They get it; the board does not.
+      */
+      this.#environment = this.#environmentRT.texture;
+    } catch (error) {
+      // A prefiltered environment is a refinement, not a requirement. If the
+      // generator is unavailable the materials fall back to light-only
+      // shading, which is exactly how this board looked before.
+      warn('Environment map unavailable; using lights only', error);
+      this.#environmentRT = null;
+      this.#environment = null;
+    } finally {
+      generator?.dispose();
+      temporary.forEach((resource) => resource.dispose?.());
+    }
+  }
+
+  #buildLights() {
+    // Sky/ground fill, so the underside of a piece is never dead black. Lower
+    // than it was: the environment now supplies most of the ambient, and
+    // leaving both at full strength washed the shading flat again.
+    this.#scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2620, 0.26));
+
+    const key = new THREE.DirectionalLight(0xfff4e2, 1.45);
     key.position.set(-4.5, 9, 4.5);
     key.castShadow = true;
+    // Stays at 1024, and that is a measured decision rather than a default
+    // left alone. 2048 looked marginally cleaner under a piece and cost four
+    // times the shadow pass — profiled at a 267ms 95th-percentile frame
+    // against 17ms, because the shadow map is re-rendered every time anything
+    // on the board moves. The tight frustum below is what keeps 1024 sharp
+    // enough: it spends every texel on the board rather than on the empty
+    // space the default frustum covers.
     key.shadow.mapSize.set(1024, 1024);
     // A tight orthographic frustum around the board keeps shadow texels dense
     // enough to stay crisp at 1024; the default frustum wastes most of them.
@@ -296,13 +558,19 @@ export class Board3D {
     this.#scene.add(key);
 
     // A dim opposite fill stops the far side of every piece going flat.
-    const fill = new THREE.DirectionalLight(0xcfe0ff, 0.5);
+    const fill = new THREE.DirectionalLight(0xcfe0ff, 0.32);
     fill.position.set(5, 4, -6);
     this.#scene.add(fill);
   }
 
   #buildBoard() {
     const theme = THEMES[this.#theme] ?? THEMES.classic;
+    // Generated first: the rim below uses it too, and it never changes with
+    // the theme — only the colour laid over it does. Skipped without a GPU:
+    // it is one more texture fetch across the largest surface on screen, and
+    // the grain is still there in the colour map either way — what is lost is
+    // the way it catches the light, not the wood.
+    this.#boardRoughness = this.#richDetail ? this.#makeGrainRoughnessTexture() : null;
 
     // The rim: a slab slightly larger than the playing area, so the board has
     // a physical edge to catch the light instead of floating as a flat plane.
@@ -311,10 +579,16 @@ export class Board3D {
       0.5,
       2 * HALF + 2 * RIM,
     );
+    // The border is real wood too, and at the low camera angle its near face
+    // is a sixth of what you can see. Flat colour there gave the whole board a
+    // painted edge; sharing the squares' grain map makes it part of the same
+    // object. Standard rather than physical, and no environment: it is a large
+    // area of screen for a refinement that would not show on it.
     const rimMat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(theme.rim),
-      roughness: 0.62,
-      metalness: 0.05,
+      roughnessMap: this.#boardRoughness,
+      roughness: this.#boardRoughness ? 0.95 : 0.7,
+      metalness: 0.0,
     });
     const rim = new THREE.Mesh(rimGeo, rimMat);
     rim.position.y = BOARD_Y - 0.25;
@@ -328,7 +602,12 @@ export class Board3D {
     this.#boardTexture = this.#makeCheckerTexture();
     const boardMat = new THREE.MeshStandardMaterial({
       map: this.#boardTexture,
-      roughness: 0.75,
+      // Wood is not uniformly glossy: the grain scatters light where it is
+      // open and holds a sheen where it is not. One greyscale map turns a flat
+      // plane of two colours into a surface, and it is what makes the board
+      // move as the camera does rather than sitting there like paint.
+      roughnessMap: this.#boardRoughness,
+      roughness: this.#boardRoughness ? 1 : 0.75,
       metalness: 0.0,
     });
     this.#boardMesh = new THREE.Mesh(boardGeo, boardMat);
@@ -351,7 +630,7 @@ export class Board3D {
    */
   #makeCheckerTexture() {
     const theme = THEMES[this.#theme] ?? THEMES.classic;
-    const cell = 128;
+    const cell = 160;
     const canvas = document.createElement('canvas');
     canvas.width = cell * 8;
     canvas.height = cell * 8;
@@ -363,7 +642,27 @@ export class Board3D {
         const isLight = (row + col) % 2 === 1;
         ctx.fillStyle = isLight ? theme.light : theme.dark;
         ctx.fillRect(col * cell, row * cell, cell, cell);
+        // Each square is a separate piece of veneer, so each gets its own
+        // grain: its own direction and its own offset. A single grain running
+        // across the whole board is the one thing that would make it read as
+        // printed rather than made.
+        this.#paintGrain(ctx, col * cell, row * cell, cell, (row * 8 + col), isLight);
       }
+    }
+
+    // The seam between squares. A real board has an edge there — light catches
+    // the join — and one dark pixel of inset is enough to say so, at a
+    // thousandth of the cost of modelling 64 bevels.
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.26)';
+    ctx.lineWidth = Math.max(1, cell * 0.012);
+    for (let i = 0; i <= 8; i += 1) {
+      const at = i * cell;
+      ctx.beginPath();
+      ctx.moveTo(at, 0);
+      ctx.lineTo(at, cell * 8);
+      ctx.moveTo(0, at);
+      ctx.lineTo(cell * 8, at);
+      ctx.stroke();
     }
 
     if (this.#showCoordinates) {
@@ -399,11 +698,126 @@ export class Board3D {
     }
 
     const texture = new THREE.CanvasTexture(canvas);
-    // Crisp square edges up close, no shimmer at grazing angles far away.
-    texture.magFilter = THREE.NearestFilter;
+    /*
+       Linear, not nearest.
+
+       Nearest was the right call when a square was one flat colour: it kept
+       the boundary between two fields perfectly crisp. Now that each square
+       carries grain and a drawn seam, nearest samples that fine detail into
+       hard stair-steps, and the seam line does the crisp-edge job better than
+       point sampling ever did. Anisotropy is what keeps the far rank legible
+       at this camera angle — without it the grain and the coordinates smear
+       into mush a couple of ranks out.
+    */
+    texture.magFilter = THREE.LinearFilter;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.anisotropy = this.#renderer?.capabilities.getMaxAnisotropy() ?? 1;
     texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  /**
+   * Wood grain for one square, in place.
+   *
+   * Deterministic from the square's index, so the board looks the same every
+   * time it is drawn — a board whose grain reshuffled on every theme change
+   * would be visibly wrong. Fine streaks with a slowly wandering centre line,
+   * which is what grain is; the alternative, random noise, reads as dirt.
+   */
+  #paintGrain(ctx, x, y, size, seed, isLight) {
+    const rand = mulberry32(seed * 2654435761);
+    const across = rand() < 0.5; // half the squares are cut the other way
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, size, size);
+    ctx.clip();
+    ctx.translate(x + size / 2, y + size / 2);
+    if (across) ctx.rotate(Math.PI / 2);
+    ctx.translate(-size / 2, -size / 2);
+
+    const lines = 26;
+    ctx.lineWidth = size * 0.012;
+    for (let i = 0; i < lines; i += 1) {
+      const base = (i / lines) * size + rand() * size * 0.02;
+      // Dark and light streaks in the same pass: grain is both, and only
+      // darkening it makes the square look dirty rather than figured.
+      const dark = rand() < 0.62;
+      const strength = (isLight ? 0.13 : 0.16) * (0.35 + rand() * 0.65);
+      ctx.strokeStyle = dark
+        ? `rgba(60, 36, 14, ${strength})`
+        : `rgba(255, 236, 200, ${strength * 0.8})`;
+      ctx.beginPath();
+      ctx.moveTo(0, base);
+      const wobble = size * (0.012 + rand() * 0.02);
+      ctx.bezierCurveTo(
+        size * 0.33, base + wobble,
+        size * 0.66, base - wobble,
+        size, base + wobble * 0.4,
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * A greyscale roughness map matching the grain.
+   *
+   * Quarter the colour map's resolution on purpose: roughness varies slowly
+   * and nobody can see a roughness texel, so this is where to spend less. It
+   * is generated once and never regenerated — grain does not change when the
+   * theme or the orientation does, only its colour does.
+   */
+  #makeGrainRoughnessTexture() {
+    const cell = 40;
+    const canvas = document.createElement('canvas');
+    canvas.width = cell * 8;
+    canvas.height = cell * 8;
+    const ctx = canvas.getContext('2d');
+
+    // Mid-grey base: fairly rough, as a satin lacquer is.
+    ctx.fillStyle = '#b4b4b4';
+    ctx.fillRect(0, 0, cell * 8, cell * 8);
+
+    for (let row = 0; row < 8; row += 1) {
+      for (let col = 0; col < 8; col += 1) {
+        const rand = mulberry32((row * 8 + col) * 2654435761);
+        const across = rand() < 0.5;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(col * cell, row * cell, cell, cell);
+        ctx.clip();
+        ctx.translate(col * cell + cell / 2, row * cell + cell / 2);
+        if (across) ctx.rotate(Math.PI / 2);
+        ctx.translate(-cell / 2, -cell / 2);
+        ctx.lineWidth = cell * 0.02;
+        for (let i = 0; i < 26; i += 1) {
+          const base = (i / 26) * cell + rand() * cell * 0.02;
+          const dark = rand() < 0.62;
+          // Open grain scatters (rougher, lighter here); closed grain holds a
+          // sheen (smoother, darker here).
+          ctx.strokeStyle = dark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)';
+          ctx.beginPath();
+          ctx.moveTo(0, base);
+          const wobble = cell * (0.012 + rand() * 0.02);
+          ctx.bezierCurveTo(
+            cell * 0.33, base + wobble,
+            cell * 0.66, base - wobble,
+            cell, base + wobble * 0.4,
+          );
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.anisotropy = this.#renderer?.capabilities.getMaxAnisotropy() ?? 1;
+    // Data, not colour: a roughness map must stay linear or the values are
+    // silently gamma-shifted and the whole surface reads too glossy.
+    texture.colorSpace = THREE.NoColorSpace;
     texture.needsUpdate = true;
     return texture;
   }
@@ -687,6 +1101,12 @@ export class Board3D {
     this.#geometries.clear();
     this.#materials.clear();
     this.#boardTexture?.dispose();
+    this.#boardRoughness?.dispose();
+    // The prefiltered environment is a render target, not a plain texture, and
+    // holds GPU memory of its own until it is released.
+    this.#environmentRT?.dispose();
+    this.#environmentRT = null;
+    this.#environment = null;
 
     this.#renderer?.dispose();
     // forceContextLoss frees the driver-side context immediately instead of
@@ -738,7 +1158,13 @@ export class Board3D {
     const points = (PROFILES[type] ?? PROFILES.p).map(
       ([radius, y]) => new THREE.Vector2(radius * SQUARE, y * height),
     );
-    const geometry = new THREE.LatheGeometry(points, 28);
+    // 48 segments rather than 28, where there is a GPU to draw them. At 28 the silhouette of a queen against a
+    // light square was visibly a polygon, and the highlight running round a
+    // turned collar broke into facets — which is the detail that says
+    // "generated" out loud. A lathe is cheap: the whole set is still a few
+    // tens of thousands of triangles, and the board draws on demand rather
+    // than every frame, so this costs nothing while nobody is moving.
+    const geometry = new THREE.LatheGeometry(points, this.#richDetail ? 48 : 28);
     geometry.computeVertexNormals();
     this.#geometries.set(key, geometry);
     return geometry;
@@ -748,10 +1174,36 @@ export class Board3D {
     const key = `mat:${color}`;
     if (this.#materials.has(key)) return this.#materials.get(key);
     const spec = PIECE_MATERIALS[color] ?? PIECE_MATERIALS.w;
-    const material = new THREE.MeshStandardMaterial({
+    /*
+       Physical rather than standard, for the clearcoat.
+
+       A finished chess piece has two surfaces, not one: the wood or resin
+       underneath, and a thin lacquer over it. They behave differently — the
+       coat reflects the room sharply while the body under it stays soft — and
+       a single-lobe material has to average the two into something that looks
+       like neither. Clearcoat models them separately, and with the environment
+       map now giving it something to reflect it is what reads as "polished"
+       instead of "shiny".
+    */
+    /*
+       Physical only where it can be afforded. Without a GPU the clearcoat is
+       the second most expensive thing on screen after the environment map, and
+       with no environment for it to reflect it has much less to show anyway,
+       so the two are dropped together rather than half-kept.
+    */
+    const Material = this.#richDetail
+      ? THREE.MeshPhysicalMaterial
+      : THREE.MeshStandardMaterial;
+    const material = new Material({
       color: new THREE.Color(spec.color),
       roughness: spec.roughness,
       metalness: spec.metalness,
+      ...(this.#richDetail ? {
+        clearcoat: spec.clearcoat,
+        clearcoatRoughness: spec.clearcoatRoughness,
+        envMap: this.#environment,
+        envMapIntensity: spec.envMapIntensity,
+      } : {}),
     });
     this.#materials.set(key, material);
     return material;
@@ -857,12 +1309,24 @@ export class Board3D {
           // rendered as a standing card: the camera looks down at 56 degrees,
           // so a thin extrusion is seen close to edge-on and its silhouette —
           // the only thing that identifies the piece — collapses to a line.
-          depth: 0.46,
+          // A slab with a hairline bevel is still a slab, and that is exactly
+          // what this read as: a flat card standing on a pedestal. Most of the
+          // thickness is now in the bevel itself, so the sides of the head are
+          // a rounded shoulder rather than a cut edge, and four bevel segments
+          // give that shoulder enough steps to catch light instead of banding.
+          // Two failures to steer between. Too thin and it is a standing card:
+          // the camera looks down, a flat extrusion is seen near edge-on, and
+          // the silhouette that identifies the piece collapses to a line. Too
+          // much bevel and the shoulder eats the muzzle and the ears, which is
+          // the same loss by the opposite route. This is a solid head with a
+          // carved edge: most of the width in the extrusion, enough bevel to
+          // round it, not enough to sand the features off.
+          depth: 0.34,
           bevelEnabled: true,
-          bevelThickness: 0.05,
-          bevelSize: 0.05,
-          bevelSegments: 2,
-          curveSegments: 4,
+          bevelThickness: 0.07,
+          bevelSize: 0.065,
+          bevelSegments: 3,
+          curveSegments: 6,
         });
         geometry.center();
         this.#geometries.set(key, geometry);
@@ -874,10 +1338,12 @@ export class Board3D {
       head.scale.setScalar(height * 0.86);
       head.position.y = height * 0.58;
       // Tipped back so the profile turns to meet the camera. Straight upright
-      // it sits 56 degrees off the view axis and loses nearly half its width
-      // to foreshortening; this brings it back to about 35 and costs nothing,
+      // it loses most of its width to foreshortening — and more now than it
+      // used to, because the default board size looks down from 70 degrees
+      // rather than 56. Roughly 33 degrees of tip is what keeps the muzzle and
+      // the ears readable across the whole zoom range, and costs nothing,
       // since a horse carrying its head tipped back is what a horse does.
-      head.rotation.x = -0.36;
+      head.rotation.x = -0.58;
       // NOT rotated. The outline is drawn in the XY plane, so the horse's
       // profile already faces the camera down +Z. Turning it a quarter turn to
       // "face the opponent" — which is what a real set does — points the flat
@@ -1359,6 +1825,27 @@ export class Board3D {
       theme: this.#theme,
       orientation: this.#orientation,
       zoom: this.#zoom,
+      /**
+       * What the renderer decided about this device, and what it did with it.
+       *
+       * Exposed because the alternative is judging the finish by eye from a
+       * screenshot, and the interesting claims here — the board surface is not
+       * a flat fill, the pieces only carry the expensive material where there
+       * is a GPU to draw it — are measurable ones.
+       */
+      detail: {
+        rich: this.#richDetail,
+        toneMapping: this.#renderer?.toneMapping,
+        exposure: this.#renderer?.toneMappingExposure,
+        environment: Boolean(this.#environment),
+        pieceMaterial: this.#materials.get('mat:w')?.type ?? null,
+        boardRoughnessMap: Boolean(this.#boardRoughness),
+        anisotropy: this.#boardTexture?.anisotropy ?? 0,
+        // The generated chequer canvas, so a test can read the pixels back and
+        // check the grain is really there rather than trusting the code path.
+        boardCanvas: this.#boardTexture?.image ?? null,
+      },
+      richDetail: this.#richDetail,
       pieces: this.#pieces.size,
       meshes,
       boardMeshes: 1,
