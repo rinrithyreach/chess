@@ -152,6 +152,12 @@ a surface rather than two colours: every square gets its own wood grain, with
 its own direction and its own seed, a matching roughness map so the grain
 catches the light, and a drawn seam at every join.
 
+Both boards draw from **one palette**: the 3D board reads the same colours the
+flat board's CSS names for that theme, and the exposure is what compensates for
+the light and the tone curve. That is deliberate and was learned the hard way —
+see *Things that went wrong*. The rendered pixels are sampled against those CSS
+values in the test suite, so the two cannot drift apart unnoticed.
+
 **Board size**, in the control row next to Flip, in three steps: *Fit*,
 *Large* (the default) and *Max*. It is zoom, but implemented as camera
 elevation rather than as a dolly, which sounds like the wrong lever until you
@@ -705,7 +711,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across fifteen suites — **791 assertions, all passing, with zero console
+project across fifteen suites — **795 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -719,7 +725,7 @@ errors in every browser and viewport tested**:
 | **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |
 | **Multiplayer (Chromium ×2)** | **82** | **The setup form follows the chosen mode, then two devices against the Firebase emulator** |
 | **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
-| **3D board (Chromium)** | **74** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; and the finish is measured — grain in the surface, seams drawn, the no-GPU path detected** |
+| **3D board (Chromium)** | **78** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; and the finish is measured — grain in the surface, seams drawn, the no-GPU path detected** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |
@@ -810,7 +816,21 @@ And two from building that WebGL board:
    board detaches completely when it hands the element over. It is the same
    double-activation shape as the old drag bug (4), from a different cause.
 
-9. **The knight took three goes, and the first two failed the same way.** Its
+9. **The board was rendered nearly black, and nothing noticed.** The 3D
+   board's square colours had been darkened as albedo, on the sound reasoning
+   that they pass through a light and a tone curve before reaching the eye and
+   should be pre-compensated. In the same pass the exposure was lowered to stop
+   highlights clipping. Both were defensible; together they compounded, and the
+   board rendered at **57% of the theme's light squares and 39% of its dark
+   ones**. It shipped, because every assertion was about behaviour and none was
+   about pixels, and because each change looked reasonable next to the one
+   before it. The fix put the compensation in the exposure — one number for the
+   whole scene — and put the palette back to the values the CSS names, so there
+   is a single source for it. The test now screenshots the board and samples a
+   light and a dark square against the CSS custom property for the current
+   theme, which is a check that fails whichever of the two boards moves.
+
+10. **The knight took three goes, and the first two failed the same way.** Its
    head began as an extruded 2D silhouette, which is the natural choice — the
    silhouette is what identifies the piece. But this camera looks down at the
    board from between 56 and 84 degrees, and the silhouette lives in a
@@ -921,18 +941,18 @@ the DOM**. Set it to `false` before shipping.
    routes through `submitAction`, so the change is confined to the session
    provider.
 
-10. **Online games have no clock, no rate limiting and no room cleanup.**
+11. **Online games have no clock, no rate limiting and no room cleanup.**
     Rooms are never deleted, and an authenticated user can create unlimited
     ones. Before running this publicly, add a scheduled cleanup and App Check.
 
-11. **A disconnected player's seat is held indefinitely.** There is no
+12. **A disconnected player's seat is held indefinitely.** There is no
     abandonment timeout, so a game whose opponent never returns stays open. You
     can leave the room, but you cannot claim a win.
 
-12. **Move legality is enforced by clients, not the server.** See
+13. **Move legality is enforced by clients, not the server.** See
     [Trust model](#trust-model) for exactly what that does and does not mean.
 
-13. **Two of the finish refinements are switched off without a GPU.** The
+14. **Two of the finish refinements are switched off without a GPU.** The
     environment map and the pieces' clearcoat are a texture unit and a few ALU
     ops on any GPU made this decade, and hundreds of CPU instructions per
     fragment on a software rasteriser — which is what Chrome falls back to when
@@ -946,7 +966,7 @@ the DOM**. Set it to `false` before shipping.
     is worst by a wide margin, so its real-GPU cost is inferred rather than
     measured.
 
-14. **Perspective still costs tap size, but far less than it did.** The far
+15. **Perspective still costs tap size, but far less than it did.** The far
     rank used to be a 22px target on a 412px phone against the near rank's
     36px — the hardest square on the board to hit. The board-size control
     fixes most of that by raising the camera rather than dollying in, which

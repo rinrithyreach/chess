@@ -70,19 +70,24 @@ const RIM = 0.42; // border width around the playing area
  * equivalent because a flat board draws its frame in CSS instead.
  */
 /*
-   Board colours for the 3D board.
+   Board colours, the same values the flat board uses in CSS.
 
-   Darker than the flat board's equivalents on purpose, and not a mistake to be
-   "corrected" back. These are albedos going through a light of roughly 1.5 and
-   then filmic tone mapping, not pixels going straight to the screen: the flat
-   board's cream arrives at the eye as near-white here, taking the grain with
-   it. Tuned by rendering until what comes OUT is the colour the flat board
-   shows.
+   They were darkened once, on the reasoning that these are albedos going
+   through a light and a tone curve rather than pixels going to the screen, so
+   they should be pre-compensated. The reasoning was fine and the result was
+   not: the board came out at 57% of the flat board's light squares and 39% of
+   its dark ones — nearly black — because the albedo was darkened AND the
+   exposure lowered, and the two compounded. Sampling the rendered pixels
+   against these colours, rather than adjusting by eye, is what found it.
+
+   The compensation belongs in the exposure, which is one number for the whole
+   scene, and not in the palette, which then has to be kept in sync with the
+   CSS by hand and silently drifts. See the exposure note in the constructor.
 */
 const THEMES = {
-  classic: { light: '#c8ab7e', dark: '#7d5530', rim: '#4a3018', inkOnLight: '#6b4a26', inkOnDark: '#e2cba6' },
-  midnight: { light: '#77879f', dark: '#33405a', rim: '#1e2536', inkOnLight: '#2b3549', inkOnDark: '#c2cee2' },
-  wood: { light: '#c5a271', dark: '#6f4826', rim: '#3f2914', inkOnLight: '#5c3c1c', inkOnDark: '#ecd8bc' },
+  classic: { light: '#ecd8b6', dark: '#b07d4f', rim: '#6b4a2c', inkOnLight: '#8a6238', inkOnDark: '#ecd8b6' },
+  midnight: { light: '#9fb0cc', dark: '#4a5a78', rim: '#2c3549', inkOnLight: '#3d4a63', inkOnDark: '#cdd8ea' },
+  wood: { light: '#e8c99b', dark: '#9a6a3d', rim: '#5d3f22', inkOnLight: '#7b5228', inkOnDark: '#f0dcc0' },
 };
 
 const HIGHLIGHT = {
@@ -372,12 +377,19 @@ export class Board3D {
        Without it, everything above 1.0 clips to flat white: a turned piece's
        highlight arrives as a bald patch with no shape in it, which is most of
        why the first pass read as plastic. ACES rolls those highlights off
-       instead, so the brightest part of a curve still shows its curvature. It
-       darkens the midtones as a side effect, which is what the exposure and
-       the retuned light intensities below are compensating for.
+       instead, so the brightest part of a curve still shows its curvature.
+
+       It darkens the midtones as a side effect, and THIS is where that is paid
+       for — one number for the whole scene, not by darkening the palette. The
+       palette was darkened once, in the same pass that lowered the exposure,
+       and the two compounded into a board rendering at 39% of its own dark
+       squares. The exposure and the light intensities below were set by
+       sampling the rendered pixels against the CSS colours the flat board uses
+       for the same theme, until a dark square matched and a light square sat
+       just under it, which is where a filmic curve should leave a highlight.
     */
     this.#renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.#renderer.toneMappingExposure = 0.76;
+    this.#renderer.toneMappingExposure = 1.18;
     this.#renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.#richDetail = this.#hasHardwareGpu();
@@ -542,9 +554,9 @@ export class Board3D {
     // Sky/ground fill, so the underside of a piece is never dead black. Lower
     // than it was: the environment now supplies most of the ambient, and
     // leaving both at full strength washed the shading flat again.
-    this.#scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2620, 0.26));
+    this.#scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2620, 0.52));
 
-    const key = new THREE.DirectionalLight(0xfff4e2, 1.45);
+    const key = new THREE.DirectionalLight(0xfff4e2, 2.05);
     key.position.set(-4.5, 9, 4.5);
     key.castShadow = true;
     // Stays at 1024, and that is a measured decision rather than a default
