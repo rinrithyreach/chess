@@ -14,6 +14,7 @@ import {
   DEFAULT_SETTINGS,
   BOARD_THEMES,
   resolveUiStyle,
+  clampBoardZoom,
   STATUS,
   TERMINAL_STATUSES,
   GAME_MODE,
@@ -107,6 +108,10 @@ export function loadSettings() {
   // resolveUiStyle trusts a stored style only while it is still selectable, so
   // a look that has since been retired cannot come back out of storage.
   merged.uiStyle = resolveUiStyle(source.uiStyle);
+  // Clamped rather than range-checked: a level from a build with more steps
+  // than this one should land on the nearest, not silently reset the player's
+  // preference to the default.
+  if (source.boardZoom !== undefined) merged.boardZoom = clampBoardZoom(source.boardZoom);
   if (typeof source.showCoordinates === 'boolean') merged.showCoordinates = source.showCoordinates;
   if (typeof source.animations === 'boolean') merged.animations = source.animations;
   if (typeof source.autoFlip === 'boolean') merged.autoFlip = source.autoFlip;

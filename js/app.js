@@ -72,6 +72,7 @@ async function boot() {
     board.setOrientation(snapshot.orientation);
     board.setShowCoordinates(snapshot.settings.showCoordinates);
     board.setAnimationsEnabled(snapshot.settings.animations);
+    board.setZoom(snapshot.settings.boardZoom);
     board.render(snapshot, { animateMove: pendingAnimation });
     pendingAnimation = null;
     ui.render(snapshot);
@@ -309,6 +310,10 @@ async function boot() {
       sound.unlock();
       controller.selectSquare(square);
     });
+    // Called once per mount, which is exactly when what the board can do
+    // changes. The flat board has no zoom to sell, so the control goes away
+    // with it rather than sitting there doing nothing.
+    ui.setZoomAvailable(board.canZoom?.() === true);
   }
   wireBoard();
 
@@ -381,6 +386,7 @@ async function boot() {
     board.setOrientation(snapshot.orientation);
     board.setShowCoordinates(snapshot.settings.showCoordinates);
     board.setAnimationsEnabled(snapshot.settings.animations);
+    board.setZoom(snapshot.settings.boardZoom);
     board.render(snapshot);
     ui.render(snapshot);
   }

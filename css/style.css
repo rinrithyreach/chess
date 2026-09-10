@@ -759,10 +759,15 @@ body.is-modal-open {
 
 .controls {
   display: grid;
-  /* minmax(0, 1fr) rather than 1fr: without the zero floor, each button's
+  /* One column per control that is actually shown, rather than a fixed count.
+     Zoom is hidden on the flat board, and a fixed template would leave its
+     column standing there empty.
+
+     minmax(0, 1fr) rather than 1fr: without the zero floor, each button's
      min-content width becomes a hard minimum and the row overflows on narrow
      screens instead of shrinking. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 0.5rem;
 }
 

@@ -228,6 +228,23 @@ export class Board {
     this.#animationsEnabled = Boolean(enabled);
   }
 
+  /**
+   * Zoom, deliberately doing nothing.
+   *
+   * On the 3D board zoom buys two things: bigger squares, and evener ones. A
+   * flat grid has neither to sell. It already fills the frame edge to edge —
+   * 48px a square on a 412px phone against the 3D board's 35 — and every
+   * square is exactly the same size as every other, which is the thing
+   * perspective takes away and zoom is there to give back. There is nothing
+   * left to spend, so the control is hidden rather than made inert: see
+   * canZoom() and ui.setZoomAvailable().
+   */
+  setZoom() { /* deliberately nothing — see above */ }
+
+  canZoom() {
+    return false;
+  }
+
   // -----------------------------------------------------------------------
   // Rendering
   // -----------------------------------------------------------------------

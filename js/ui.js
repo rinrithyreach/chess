@@ -12,6 +12,8 @@ import {
   BLACK,
   STATUS,
   BOARD_THEMES,
+  BOARD_ZOOM_LEVELS,
+  clampBoardZoom,
   GAME_MODE,
   UI_STYLES,
   SELECTABLE_UI_STYLES,
@@ -69,7 +71,7 @@ export class UI {
       'card-top', 'card-bottom', 'top-name', 'top-color', 'top-turn',
       'bottom-name', 'bottom-color', 'bottom-turn',
       'board', 'status', 'status-text', 'status-badge',
-      'btn-undo', 'btn-flip', 'btn-resign',
+      'btn-undo', 'btn-flip', 'btn-resign', 'btn-zoom', 'zoom-label',
       'history-panel', 'btn-history-toggle', 'history-list', 'history-count',
       'modal-promotion', 'promotion-choices',
       'modal-confirm', 'confirm-title', 'confirm-text', 'confirm-actions',
@@ -236,6 +238,19 @@ export class UI {
     });
   }
 
+  /**
+   * Show or hide the board-size control.
+   *
+   * Driven by the mounted renderer rather than by the style setting, because
+   * those two can disagree: a device that refuses a WebGL context is given the
+   * flat board while the setting still says board3d. What matters is which
+   * board is actually on screen, and app.js is the only thing that knows.
+   */
+  setZoomAvailable(available) {
+    const button = this.#dom['btn-zoom'];
+    if (button) button.hidden = !available;
+  }
+
   /** Enable or disable the Online option on the setup screen. */
   setOnlineAvailable(available, reason) {
     const label = this.#dom['mode-online-label'];
@@ -279,9 +294,30 @@ export class UI {
   // Game rendering
   // -----------------------------------------------------------------------
 
+  /**
+   * The board-size button says where you are as well as what it does.
+   *
+   * Refreshed from every render as well as from syncSettings, because the
+   * setting has more than one way to change — restoring a saved game and the
+   * console helper both go through the controller without touching the
+   * settings panel, and a button labelled with the previous level is worse
+   * than one with no label at all.
+   */
+  #renderZoomControl(settings = {}) {
+    const zoom = BOARD_ZOOM_LEVELS[clampBoardZoom(settings.boardZoom)];
+    if (this.#dom['zoom-label']) this.#dom['zoom-label'].textContent = zoom.label;
+    // The accessible name carries what pressing it does; the visible label only
+    // has room to say where you are now.
+    this.#dom['btn-zoom']?.setAttribute(
+      'aria-label',
+      `Board size: ${zoom.label}. ${zoom.hint}. Press to change.`,
+    );
+  }
+
   render(snapshot) {
     const { state } = snapshot;
     if (!state) return;
+    this.#renderZoomControl(snapshot.settings);
     this.#renderPlayers(snapshot);
     this.#renderStatus(snapshot);
     this.#renderHistory(state);
@@ -666,6 +702,7 @@ export class UI {
       option.setAttribute('aria-checked', String(active));
     });
 
+    this.#renderZoomControl(settings);
     this.#dom.board?.setAttribute('data-theme', settings.boardTheme);
     document.documentElement.setAttribute('data-ui-style', settings.uiStyle ?? DEFAULT_UI_STYLE);
   }
@@ -801,6 +838,17 @@ export class UI {
     control('undo', 'onUndo');
     control('flip', 'onFlip');
     control('resign', 'onResign');
+
+    // Zoom cycles rather than stepping, so one button covers every level and
+    // the row keeps its shape. Three steps is few enough that wrapping round
+    // from the largest back to the smallest is quicker than hunting for a
+    // second button — and the label always says where you are.
+    this.#dom['btn-zoom']?.addEventListener('click', () => {
+      const current = clampBoardZoom(this.#controller.getSettings().boardZoom);
+      const next = (current + 1) % BOARD_ZOOM_LEVELS.length;
+      this.#call('onSettingChange', { boardZoom: next });
+      this.toast(`Board size: ${BOARD_ZOOM_LEVELS[next].label}`);
+    });
     this.#dom['btn-restart']?.addEventListener('click', () => this.#call('onRestart'));
     this.#dom['btn-leave']?.addEventListener('click', () => this.#call('onLeaveGame'));
 

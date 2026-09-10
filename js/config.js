@@ -93,6 +93,56 @@ export const BOT_MIN_THINK_MS = 450;
 /** Shown wherever the bot's seat needs a player name. */
 export const BOT_NAME = 'Bot';
 
+/**
+ * Board zoom — how big the squares are, and how even.
+ *
+ * Implemented as camera elevation rather than as a dolly, which sounds like
+ * the wrong lever until you measure the board. On a 412px phone the frame is
+ * square but the board, seen from 56 degrees, projects about 1.35 times wider
+ * than tall: roughly 110px of the frame's height is empty sky above and below
+ * it. Raising the camera spends that empty space on the board instead of
+ * cropping anything, so the whole board stays visible at every level and there
+ * is nothing to pan. A dolly would have to crop to achieve the same thing, and
+ * a chessboard you have to scroll around is worse than a small one.
+ *
+ * It also fixes the more annoying half of the problem. At 56 degrees the far
+ * rank is barely 23px tall while the near rank is 35px — the back rank is the
+ * hardest thing on the board to tap. Elevation flattens that difference out;
+ * at 84 degrees every square is within a few pixels of every other, and all of
+ * them clear the 44px touch target.
+ *
+ * Ordered small to large, and the index is what is stored.
+ */
+/**
+ * `rim` is how much of the board's wooden border has to stay in frame, as a
+ * fraction. The border is 0.84 of the board's 8.84 units across — nearly a
+ * tenth of the width, spent on something you never tap. At the low angle it
+ * has to stay: it is the visible front edge of the slab, and clipping it makes
+ * the board look broken. Seen from above it is just a margin, so the top level
+ * lets the frame crop it and gives the squares the width back.
+ */
+export const BOARD_ZOOM_LEVELS = [
+  { id: 'fit', label: 'Fit', elevation: 56, rim: 1, hint: 'The cinematic angle' },
+  { id: 'large', label: 'Large', elevation: 70, rim: 0.5, hint: 'Bigger, still clearly 3D' },
+  { id: 'max', label: 'Max', elevation: 84, rim: 0, hint: 'Every square the same size' },
+];
+
+/**
+ * Large, not Fit.
+ *
+ * The 3D board is the only board now, and on a phone the cinematic angle makes
+ * the back rank a 23px target. Defaulting to the middle step is the difference
+ * between a board that is pleasant to look at and one that is pleasant to
+ * play; anyone who prefers the low angle is one tap away from it.
+ */
+export const DEFAULT_BOARD_ZOOM = 1;
+
+export function clampBoardZoom(level) {
+  const n = Number(level);
+  if (!Number.isInteger(n)) return DEFAULT_BOARD_ZOOM;
+  return Math.min(Math.max(n, 0), BOARD_ZOOM_LEVELS.length - 1);
+}
+
 /** Board themes. Values map to `data-theme` on the board element. */
 export const BOARD_THEMES = [
   { id: 'classic', label: 'Classic' },
@@ -190,6 +240,7 @@ export const DEFAULT_SETTINGS = {
   // target on every rank the way the flat grid does — the far rank is smaller
   // than the near one, which is what perspective means.
   uiStyle: DEFAULT_UI_STYLE,
+  boardZoom: DEFAULT_BOARD_ZOOM,
   boardTheme: 'classic',
   showCoordinates: true,
   animations: true,

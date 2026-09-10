@@ -222,6 +222,15 @@
           <button type="button" class="btn btn--control" id="btn-flip">
             <span aria-hidden="true">⇅</span> Flip
           </button>
+          <!--
+            Board size. Cycles the zoom levels; the label carries the current
+            one so the button says what it is as well as what it does. Hidden
+            unless the mounted renderer has a zoom to offer — see
+            ui.setZoomAvailable().
+          -->
+          <button type="button" class="btn btn--control" id="btn-zoom" hidden>
+            <span aria-hidden="true">⤢</span> <span id="zoom-label">Size</span>
+          </button>
           <button type="button" class="btn btn--control" id="btn-resign">
             <span aria-hidden="true">⚑</span> Resign
           </button>

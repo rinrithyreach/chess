@@ -43,6 +43,9 @@ import {
   CAPTURE_FADE_RATIO,
   WHITE,
   DEBUG,
+  BOARD_ZOOM_LEVELS,
+  DEFAULT_BOARD_ZOOM,
+  clampBoardZoom,
 } from './config.js';
 import {
   ALL_SQUARES,
@@ -208,6 +211,7 @@ export class Board3D {
   #a11yGrid = null;
   #a11ySquares = new Map();
   #draggedMove = null;
+  #zoom = DEFAULT_BOARD_ZOOM;
 
   constructor(rootElement) {
     if (!rootElement) throw new Error('Board root element is required');
@@ -477,27 +481,40 @@ export class Board3D {
    * nearly inversely proportional to distance.
    */
   #cameraSeat(side) {
-    // A fixed elevation, and the one number here that is a judgement rather
-    // than a calculation. Foreshortening means the board projects to roughly
-    // sin(elevation) as tall as it is wide, so a low angle leaves a third of a
-    // square frame empty; a high one fills it but flattens the board back into
-    // the 2D view this style exists to escape. 56 degrees is where the board
-    // fills its frame and the pieces still clearly stand up off it.
-    const elevation = THREE.MathUtils.degToRad(56);
+    // Elevation is the zoom. Foreshortening means the board projects to
+    // roughly sin(elevation) as tall as it is wide, so a low angle leaves a
+    // third of a square frame empty and a high one spends that space on the
+    // board — see BOARD_ZOOM_LEVELS for why this is the lever rather than a
+    // dolly. 56 degrees is the low end: the board fills its width and the
+    // pieces clearly stand up off it.
+    const level = BOARD_ZOOM_LEVELS[this.#zoom] ?? BOARD_ZOOM_LEVELS[0];
+    const elevation = THREE.MathUtils.degToRad(level.elevation);
     const direction = new THREE.Vector3(
       0,
       Math.sin(elevation),
       side * Math.cos(elevation),
     ).normalize();
 
-    const reach = HALF + RIM;
+    // What actually has to be in frame, and nothing more. The board's own body
+    // out to the rim, and a king standing on a corner SQUARE — not on the rim
+    // corner. That distinction is worth a quarter of the board's size: a rim
+    // corner is the nearest point to the camera, so a king's height there is
+    // the most magnified thing in the volume, and reserving room for it
+    // reserved room for a piece that cannot exist. Fitting the real volume
+    // instead grows every square by about a quarter with nothing else changed.
+    const reach = HALF + RIM * level.rim; // as much of the rim as this level keeps
+    const stand = HALF - 0.5;             // centre of an outermost square
     const corners = [];
     for (const x of [-reach, reach]) {
       for (const z of [-reach, reach]) {
-        // Top of the tallest piece, so a king on the back rank is in frame too.
-        for (const y of [BOARD_Y - 0.5, BOARD_Y + PIECE_HEIGHT.k]) {
-          corners.push(new THREE.Vector3(x, y, z));
-        }
+        // The board is a slab: its underside edge is visible from this angle.
+        corners.push(new THREE.Vector3(x, BOARD_Y - 0.5, z));
+        corners.push(new THREE.Vector3(x, BOARD_Y, z));
+      }
+    }
+    for (const x of [-stand, stand]) {
+      for (const z of [-stand, stand]) {
+        corners.push(new THREE.Vector3(x, BOARD_Y + PIECE_HEIGHT.k, z));
       }
     }
 
@@ -594,6 +611,24 @@ export class Board3D {
 
   setAnimationsEnabled(enabled) {
     this.#animationsEnabled = Boolean(enabled);
+  }
+
+  /**
+   * How big the squares are drawn, as an index into BOARD_ZOOM_LEVELS.
+   *
+   * Animated like a flip, because it is the same motion — the camera swinging
+   * to a new seat — and jumping there makes the board look like it reloaded.
+   */
+  setZoom(level) {
+    const next = clampBoardZoom(level);
+    if (next === this.#zoom) return;
+    this.#zoom = next;
+    this.#applyCamera(true);
+  }
+
+  /** Whether this renderer has a zoom worth offering. It does. */
+  canZoom() {
+    return true;
   }
 
   render(snapshot, options = {}) {
@@ -1323,6 +1358,7 @@ export class Board3D {
       camera: this.#camera.position.clone(),
       theme: this.#theme,
       orientation: this.#orientation,
+      zoom: this.#zoom,
       pieces: this.#pieces.size,
       meshes,
       boardMeshes: 1,

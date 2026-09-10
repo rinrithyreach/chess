@@ -126,6 +126,23 @@ pieces are *generated*, not modelled — chess pieces are surfaces of revolution
 so a dozen profile points produce a real lathe-turned piece, and the knight is
 extruded from a silhouette. There are no model files to ship or keep in sync.
 
+**Board size**, in the control row next to Flip, in three steps: *Fit*,
+*Large* (the default) and *Max*. It is zoom, but implemented as camera
+elevation rather than as a dolly, which sounds like the wrong lever until you
+measure the board. On a 412px phone the frame is square while the board, seen
+from 56 degrees, projects about 1.35 times wider than tall — roughly 110px of
+the frame's height is empty sky. Raising the camera spends that space on the
+board, so **the whole board stays visible at every step and there is nothing to
+pan**; a dolly would have to crop to get squares the same size, and a chessboard
+you have to scroll around is worse than a small one. At the top step the frame
+also crops the wooden rim, which is another tenth of the width spent on
+something you never tap.
+
+It fixes the more annoying half of the problem too. At the low angle the far
+rank is a 23.9px target while the near rank is 36.6px; at Max they are 41.8px
+and 46.2px — **every square within 3px of every other**. Each level is measured
+square by square through the live camera in the board-size suite.
+
 There is no Look & Feel setting any more. Every player gets the 3D board, so
 the picker had nothing left to choose between, and a radiogroup of one is a
 control that cannot do anything — the section hides itself whenever fewer than
@@ -662,7 +679,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across fourteen suites — **712 assertions, all passing, with zero console
+project across fifteen suites — **762 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -680,7 +697,8 @@ errors in every browser and viewport tested**:
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |
-| **Control row (Chromium)** | **38** | **Undo never reaches the controller by any route; Draw is absent; the row still holds 44px targets** |
+| **Control row (Chromium)** | **39** | **Undo never reaches the controller by any route; Draw is absent; the row still holds 44px targets** |
+| **Board size (Chromium)** | **33** | **Every square measured through the live camera at each level: each step bigger, near and far converge, nothing ever cropped, picking still exact** |
 
 The 3D suite's headline check is picking. Every one of the 64 squares is
 projected through the live camera to find where it is actually drawn, clicked
@@ -878,14 +896,18 @@ the DOM**. Set it to `false` before shipping.
 12. **Move legality is enforced by clients, not the server.** See
     [Trust model](#trust-model) for exactly what that does and does not mean.
 
-13. **The 3D board trades tap size for looks, and it is now the only board.**
-    Perspective makes the far ranks smaller, so the back rank is a smaller
-    target than the 44px the flat grid holds everywhere — that is what
-    perspective means, and it is the real cost of making the 3D board
-    automatic. Every square is still reachable: picking is a raycast against
-    real geometry, and all 64 are verified individually. The flat board is
-    still built and still passes its suites, but only a device that refuses a
-    WebGL context is given it.
+13. **Perspective still costs tap size, but far less than it did.** The far
+    rank used to be a 22px target on a 412px phone against the near rank's
+    36px — the hardest square on the board to hit. The board-size control
+    fixes most of that by raising the camera rather than dollying in, which
+    spends the empty sky a tilted board leaves in a square frame instead of
+    cropping anything. Measured on that phone: **23.9px on the far rank at
+    Fit, 32.1px at Large (the default), 41.8px at Max, where every square is
+    within 3px of every other**. Max is a few pixels short of the 44px
+    guideline on the far rank and about 5px short on a 360px phone, so this is
+    reduced rather than eliminated. Every square is still reachable regardless
+    — picking is a raycast against real geometry, and all 64 are verified
+    individually at every zoom level.
 5. **PGN import is not implemented.** Export and clipboard copy work; the
    engine already exposes `loadPgn()`, so import is a small addition.
 6. **No clocks.** Timers are Phase 3.

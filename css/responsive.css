@@ -49,6 +49,26 @@
 }
 
 /* --------------------------------------------------------------------------
+   Phones — give the board the page margin as well
+
+   The board is both the thing you look at and the thing you tap, and on a
+   phone it is capped by the page padding rather than by anything about the
+   board. Trimming that padding is worth a few percent on every square, which
+   at this size is worth having.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 599px) {
+  .game {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+
+  .board-frame {
+    width: min(99vw, 560px);
+  }
+}
+
+/* --------------------------------------------------------------------------
    Large phones / small tablets
    -------------------------------------------------------------------------- */
 
@@ -140,6 +160,10 @@
   }
 
   .controls {
+    /* Back to rows here: the base rule flows controls into a single row of
+       columns, which on a narrow panel would keep adding columns instead of
+       wrapping onto a second line. */
+    grid-auto-flow: row;
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -241,6 +265,7 @@
 
   /* Two columns so labels are never squeezed into the narrow side panel. */
   .controls {
+    grid-auto-flow: row;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
