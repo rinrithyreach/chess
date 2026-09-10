@@ -327,9 +327,33 @@
         <input type="checkbox" id="set-coords" class="switch">
       </div>
 
-      <div class="setting">
-        <label class="setting__label" for="set-animations">Animations</label>
-        <input type="checkbox" id="set-animations" class="switch">
+      <div class="setting setting--demo">
+        <div class="setting__row">
+          <label class="setting__label" for="set-animations">Animations</label>
+          <input type="checkbox" id="set-animations" class="switch">
+        </div>
+        <!--
+          A live demonstration of what the switch above does, replayed every
+          time it is flipped. The strip is three squares of the player's own
+          board theme and the pawn travels the same curve, over the same
+          duration, with the same arc that a real move uses — the keyframes
+          are generated from ANIMATION_EASING rather than approximated in CSS,
+          so this cannot drift away from the board it is describing.
+
+          aria-hidden, and paired with a line of text that says the same
+          thing: the demo is the explanation for people who can see it, and
+          #motion-demo-hint is the explanation for everyone else.
+
+          U+FE0E after the pawn forces text presentation over the emoji one,
+          for the reason board.js sets out at TEXT_PRESENTATION.
+        -->
+        <div class="motion-demo" id="motion-demo" aria-hidden="true">
+          <span class="motion-demo__square"></span>
+          <span class="motion-demo__square"></span>
+          <span class="motion-demo__square"></span>
+          <span class="motion-demo__piece" id="motion-demo-piece">&#9823;&#xFE0E;</span>
+        </div>
+        <p class="setting__hint" id="motion-demo-hint"></p>
       </div>
 
       <div class="setting">

@@ -42,6 +42,8 @@ import {
   ANIMATION_EASING,
   CAPTURE_FADE_RATIO,
   CAPTURE_FADE_DELAY,
+  CARRY_LIFT,
+  CARRY_LIFT_KNIGHT,
   WHITE,
   DEBUG,
   BOARD_ZOOM_LEVELS,
@@ -53,8 +55,9 @@ import {
   ALL_SQUARES,
   boardFromFen,
   describeSquare,
+  cubicBezierEasing,
+  prefersReducedMotion,
 } from './board-shared.js';
-import { cubicBezierEasing } from './board-shared.js';
 
 /** Shared with the DOM board so a move feels the same on either. */
 const ease = cubicBezierEasing(ANIMATION_EASING);
@@ -1835,13 +1838,13 @@ export class Board3D {
     if (this.#draggedMove === `${move.from}|${move.to}`) {
       if (this.#dropPoint) carry(move.from, move.to, 0, this.#dropPoint);
     } else {
-      carry(move.from, move.to, move.piece === 'n' ? 0.85 : 0.32);
+      carry(move.from, move.to, move.piece === 'n' ? CARRY_LIFT_KNIGHT : CARRY_LIFT);
     }
 
     if (move.isCastle) {
       const rank = move.color === WHITE ? '1' : '8';
-      if (move.isKingsideCastle) carry(`h${rank}`, `f${rank}`, 0.32);
-      else carry(`a${rank}`, `d${rank}`, 0.32);
+      if (move.isKingsideCastle) carry(`h${rank}`, `f${rank}`, CARRY_LIFT);
+      else carry(`a${rank}`, `d${rank}`, CARRY_LIFT);
     }
   }
 
@@ -2227,15 +2230,6 @@ export class Board3D {
     this.#focusedSquare = square;
     button.setAttribute('tabindex', '0');
     if (moveFocus) button.focus();
-  }
-}
-
-/** Same check, same reason, as the DOM board's. */
-function prefersReducedMotion() {
-  try {
-    return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-  } catch {
-    return false;
   }
 }
 

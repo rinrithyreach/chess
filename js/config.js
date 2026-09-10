@@ -318,6 +318,19 @@ export const CAPTURE_FADE_RATIO = 0.45;
  */
 export const CAPTURE_FADE_DELAY = Math.round(ANIMATION_MS * (1 - CAPTURE_FADE_RATIO));
 
+/**
+ * How high a piece rides on its way across, in squares.
+ *
+ * A knight goes higher because it is the piece that jumps. Expressed as a
+ * fraction of a square rather than in pixels or world units so that the two
+ * places that draw this arc — the WebGL board, where a square is one unit,
+ * and the Settings preview, where it is thirty CSS pixels — can use the same
+ * number. The preview then keeps matching the board without anyone having to
+ * remember that it should.
+ */
+export const CARRY_LIFT = 0.32;
+export const CARRY_LIFT_KNIGHT = 0.85;
+
 /** How long toasts remain on screen (ms). */
 export const TOAST_MS = 2400;
 

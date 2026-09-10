@@ -9,7 +9,8 @@
    -------------------------------------------------------------------------- */
 
 .board[data-theme="classic"],
-.theme-swatch__preview[data-theme="classic"] {
+.theme-swatch__preview[data-theme="classic"],
+.motion-demo[data-theme="classic"] {
   --board-light: #ecd8b6;
   --board-dark: #b07d4f;
   --board-edge: #6d4c30;
@@ -18,7 +19,8 @@
 }
 
 .board[data-theme="midnight"],
-.theme-swatch__preview[data-theme="midnight"] {
+.theme-swatch__preview[data-theme="midnight"],
+.motion-demo[data-theme="midnight"] {
   --board-light: #9fb0cc;
   --board-dark: #4a5a78;
   --board-edge: #2b3550;
@@ -27,7 +29,8 @@
 }
 
 .board[data-theme="wood"],
-.theme-swatch__preview[data-theme="wood"] {
+.theme-swatch__preview[data-theme="wood"],
+.motion-demo[data-theme="wood"] {
   --board-light: #e8c99b;
   --board-dark: #9a6a3d;
   --board-edge: #5f4126;
@@ -217,8 +220,8 @@
    pieces to their own layers permanently. That is not a stronger version of
    this — it is worse: a phone GPU pays for every one of those layers all the
    time, and the memory it costs is taken from the budget the one animation
-   that is actually running needs. Granting the hint for the ~180ms it is
-   needed, and taking it back afterwards, is what the property is for.
+   that is actually running needs. Granting the hint for the length of the
+   move and taking it back afterwards is what the property is for.
 
    The raised z-index matters too. Every piece sits at z-index 2, so a piece
    crossing the board passed UNDER the ones it travelled over — a rook sliding

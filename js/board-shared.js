@@ -9,7 +9,11 @@
  * two renderers cannot drift apart on any of it; the only thing they disagree
  * about is how a square is drawn.
  *
- * Nothing in this file touches the DOM, WebGL, or the chess rules.
+ * Nothing in this file touches the DOM, WebGL, or the chess rules. The one
+ * browser API it does reach for is `matchMedia`, for the motion preference —
+ * which lives here for the same reason as everything else in the file: three
+ * places now have to agree on what "reduced motion" means, and agreeing by
+ * having three copies of the check is how they stop agreeing.
  */
 
 import { FILES, RANKS, WHITE } from './config.js';
@@ -22,6 +26,32 @@ export const PIECE_NAMES = {
   n: 'knight',
   p: 'pawn',
 };
+
+/**
+ * Whether the player has asked their system for less motion.
+ *
+ * Both boards consult this before animating anything, and so does the motion
+ * preview in Settings — which is the point of it living here. The preview
+ * exists to show what the Animations setting does, so it has to decline in
+ * exactly the circumstances the board declines: a preview that glides while
+ * the board it describes does not would be a lie about the product.
+ *
+ * Checked live rather than cached, and checked in SCRIPT rather than left to
+ * CSS. The `prefers-reduced-motion` block in style.css only neutralises CSS
+ * transitions and CSS animations; a Web Animations API effect is neither and
+ * sails straight past it, and the WebGL board's motion is not CSS at all. So
+ * motion has to be declined here or it is not declined.
+ *
+ * Guarded, because `matchMedia` is absent in jsdom and in older engines, and
+ * a missing preference means the player has not asked for anything.
+ */
+export function prefersReducedMotion() {
+  try {
+    return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+  } catch {
+    return false;
+  }
+}
 
 /** All 64 squares in a8..h1 order (matching chess.js' board() layout). */
 function buildSquareList() {

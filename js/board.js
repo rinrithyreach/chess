@@ -27,24 +27,8 @@ import {
   boardFromFen,
   describeSquare,
   squareShade,
+  prefersReducedMotion,
 } from './board-shared.js';
-
-/**
- * Does this device want motion kept to a minimum?
- *
- * Checked live rather than cached, and checked HERE rather than left to CSS:
- * the `prefers-reduced-motion` block in style.css only neutralises CSS
- * transitions and CSS animations. A Web Animations API effect is neither, so
- * it sails straight past that override — motion has to be declined in script
- * or it is not declined at all.
- */
-function prefersReducedMotion() {
-  try {
-    return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Piece rendering.

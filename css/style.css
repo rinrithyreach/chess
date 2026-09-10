@@ -1127,6 +1127,89 @@ body.is-modal-open {
   font-weight: 600;
 }
 
+/*
+   A setting that demonstrates itself.
+   ----------------------------------
+   Animations was the one switch in here with nothing to show for it: flipping
+   it changed nothing you could see until you went back and made a move. The
+   row below carries a three-square strip and a pawn that replays the real
+   move motion every time the switch is flipped — gliding when it is on,
+   arriving instantly when it is off.
+
+   The strip is deliberately small and deliberately not a board: it is an
+   illustration of one move, not a second place to play.
+*/
+.setting--demo {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.setting__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: var(--tap);
+}
+
+.setting__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-faint);
+}
+
+.motion-demo {
+  position: relative;
+  display: flex;
+  width: max-content;
+  border-radius: 4px;
+  overflow: visible;
+  /*
+     The pawn arcs above the strip on its way across, so the row has to leave
+     room overhead or the top of the arc is clipped off by the panel's own
+     scroll container. Sized from the lift the piece actually takes.
+  */
+  margin-top: 14px;
+}
+
+.motion-demo__square {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  background: var(--board-light, #ecd8b6);
+}
+
+.motion-demo__square:nth-child(even) {
+  background: var(--board-dark, #b07d4f);
+}
+
+.motion-demo__piece {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font-size: 21px;
+  line-height: 1;
+  color: #fbfbf8;
+  /* The same emoji refusal the board makes — see .piece in board.css. */
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
+  filter:
+    drop-shadow(1px 0 0 #14161d)
+    drop-shadow(-1px 0 0 #14161d)
+    drop-shadow(0 1px 0 #14161d)
+    drop-shadow(0 -1px 0 #14161d)
+    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+  pointer-events: none;
+}
+
 /* Accessible toggle built from a native checkbox */
 .switch {
   position: relative;
