@@ -87,6 +87,9 @@ const THEMES = {
 
 const HIGHLIGHT = {
   lastMove: { color: 0xe8b44c, opacity: 0.34 },
+  // Mirrors --hl-last-from in board.css: the same ring, in the same gold, so
+  // the two boards say the same thing the same way.
+  lastFrom: { color: 0xe8b44c, opacity: 0.85 },
   selected: { color: 0xe8b44c, opacity: 0.55 },
   check: { color: 0xe5594d, opacity: 0.75 },
   focus: { color: 0x7fb2ff, opacity: 0.5 },
@@ -1413,14 +1416,31 @@ export class Board3D {
   // Highlights
   // -----------------------------------------------------------------------
 
-  /** A flat, board-hugging quad used for every highlight. */
-  #makeMarkerMesh() {
-    const key = 'geo:marker';
+  /**
+   * Highlight shapes, cached and shared.
+   *
+   * `square` fills the cell; `ring` is the empty circle that marks the square
+   * a piece came from. They are separate geometries rather than one quad with
+   * a texture because a ring drawn in a texture would need a transparent
+   * bitmap per theme and would soften as the camera came down; real geometry
+   * stays a crisp circle at every zoom level.
+   */
+  #markerGeometry(shape) {
+    const key = `geo:marker:${shape}`;
     if (!this.#geometries.has(key)) {
-      this.#geometries.set(key, new THREE.PlaneGeometry(SQUARE, SQUARE));
+      this.#geometries.set(key, shape === 'ring'
+        // Radii chosen to match the flat board's ring, which is drawn as a
+        // gradient stop at 27–33% of the square.
+        ? new THREE.RingGeometry(SQUARE * 0.27, SQUARE * 0.33, 40)
+        : new THREE.PlaneGeometry(SQUARE, SQUARE));
     }
+    return this.#geometries.get(key);
+  }
+
+  /** A flat, board-hugging mesh used for every highlight. */
+  #makeMarkerMesh() {
     const mesh = new THREE.Mesh(
-      this.#geometries.get(key),
+      this.#markerGeometry('square'),
       new THREE.MeshBasicMaterial({
         transparent: true,
         depthWrite: false,
@@ -1455,10 +1475,14 @@ export class Board3D {
       this.#markerPool.push(child);
     });
 
-    const place = (square, spec, lift) => {
+    // Markers come out of one pool, so the shape is set on the way out rather
+    // than being a property of the mesh: a quad recycled as a ring is the same
+    // object with a different geometry.
+    const place = (square, spec, lift, shape = 'square') => {
       const marker = this.#takeMarker();
       const world = this.#squareToWorld(square);
       marker.position.set(world.x, BOARD_Y + lift, world.z);
+      marker.geometry = this.#markerGeometry(shape);
       marker.material.color.setHex(spec.color);
       marker.material.opacity = spec.opacity;
       marker.scale.setScalar(1);
@@ -1469,6 +1493,9 @@ export class Board3D {
     if (lastMove) {
       place(lastMove.from, HIGHLIGHT.lastMove, 0.004);
       place(lastMove.to, HIGHLIGHT.lastMove, 0.004);
+      // The ring on top of the from-square's tint, lifted clear of it. Tinting
+      // both ends says a move happened; only the ring says which way it went.
+      place(lastMove.from, HIGHLIGHT.lastFrom, 0.005, 'ring');
     }
     if (state.checkSquare) place(state.checkSquare, HIGHLIGHT.check, 0.006);
     if (view?.selected) place(view.selected, HIGHLIGHT.selected, 0.008);
@@ -1814,7 +1841,13 @@ export class Board3D {
       if (!marker.visible) return;
       const square = this.#worldToSquare(marker.position);
       const hex = marker.material.color.getHex();
+      // Shape first, then colour. The from-square ring is the same gold as the
+      // selection at a similar opacity, so classifying on colour alone
+      // reported it as a selected square — which was wrong in the debug output
+      // and would have been wrong in any test that trusted it.
+      const isRing = marker.geometry?.type === 'RingGeometry';
       if (marker === this.#focusMarker) markers.focus = square;
+      else if (isRing) markers.lastFrom = square;
       else if (hex === HIGHLIGHT.check.color) markers.check = square;
       else if (hex === HIGHLIGHT.selected.color && marker.material.opacity > 0.4) {
         markers.selected = square;

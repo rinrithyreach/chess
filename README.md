@@ -69,6 +69,12 @@ turn/legality validation. Illegal moves never touch game state.
 mouse/pen. Selected square, legal-move dots, capture rings, last-move
 highlight and a pulsing check indicator.
 
+Both ends of the last move are tinted, and **the square the piece came from
+also carries a ring** — an empty circle behind, the piece ahead. Tinting both
+ends says a move happened; it does not say which way, and which way is the
+thing you want when you look up and someone has moved. Both boards draw the
+same ring in the same gold at the same radius.
+
 **Three game modes** — *Local Two Player* (share one device), *Player vs Bot*,
 and *Online Multiplayer*. Each is a session provider and nothing else: the
 board, the UI and the controller are identical in all three.
@@ -693,7 +699,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across fifteen suites — **772 assertions, all passing, with zero console
+project across fifteen suites — **778 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -701,13 +707,13 @@ errors in every browser and viewport tested**:
 | Engine (Node) | 81 | Every rule scenario in the spec, plus error handling |
 | **Bot engine (Node)** | **13** | **Its chess: mate in one, free material, no self-blunders, promotion, timing** |
 | **Bot mode (Chromium)** | **34** | **Replies, refuses its own pieces to the player, never blocks a frame, survives a reload** |
-| App (jsdom) | 131 | Boots the real app, drives it by tap/click, asserts DOM |
+| App (jsdom) | 134 | Boots the real app, drives it by tap/click, asserts DOM |
 | Layout (Chromium) | 145 | 9 viewports: overflow, board geometry, touch targets |
 | Interaction (Chromium) | 42 | Real page refresh, drag-and-drop, keyboard, clipboard |
 | **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |
 | **Multiplayer (Chromium ×2)** | **82** | **The setup form follows the chosen mode, then two devices against the Firebase emulator** |
 | **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
-| **3D board (Chromium)** | **58** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; and the finish is measured — grain in the surface, seams drawn, the no-GPU path detected** |
+| **3D board (Chromium)** | **61** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; and the finish is measured — grain in the surface, seams drawn, the no-GPU path detected** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |

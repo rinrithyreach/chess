@@ -41,6 +41,11 @@
   /* Strong enough to read at a glance, soft enough that a dark piece standing
      on it is still clearly dark. */
   --hl-last-move: rgba(232, 180, 76, 0.34);
+  /* The ring on the square the piece left. Fully opaque and a shade deeper
+     than the tint, because it is painted UNDER it: the last-move wash is 34%
+     gold over the top, and a ring in the same gold at the same strength
+     disappears into it. */
+  --hl-last-from: rgb(214, 154, 40);
   --hl-legal: rgba(20, 22, 28, 0.32);
   --hl-legal-on-dark: rgba(245, 240, 230, 0.34);
   --hl-check: #e5594d;
@@ -336,6 +341,30 @@
   inset: 0;
   background: var(--hl-last-move);
   pointer-events: none;
+}
+
+/*
+   The square the piece came FROM: a ring, on top of the tint both ends of the
+   move already get.
+
+   Tinting both ends says a move happened here; it does not say which way. The
+   ring is what makes the last move readable as a direction — empty circle
+   behind, piece ahead — which is the thing you actually want to see when you
+   look up and someone has moved.
+
+   Drawn as a background-image rather than a pseudo-element on purpose: this
+   square already uses ::before for the last-move tint, and ::after can be
+   taken at the same time by is-legal or is-capture — the from square of the
+   last move is perfectly able to be a legal destination for the next one.
+   Painting into the background needs no third layer and can never collide.
+*/
+.square.is-last-from {
+  background-image: radial-gradient(
+    circle at center,
+    transparent 0 27%,
+    var(--hl-last-from) 27% 34%,
+    transparent 34%
+  );
 }
 
 /* Selected square */

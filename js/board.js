@@ -286,6 +286,9 @@ export class Board {
         'is-last-move',
         Boolean(lastMove) && (square === lastMove.from || square === lastMove.to),
       );
+      // Both ends of the move are tinted; only the square it left gets the
+      // ring. See .square.is-last-from in board.css for why that matters.
+      el.classList.toggle('is-last-from', Boolean(lastMove) && square === lastMove.from);
       el.classList.toggle('is-check', square === state.checkSquare);
 
       el.setAttribute('aria-label', describeSquare(square, piece, target));
