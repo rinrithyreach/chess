@@ -119,26 +119,37 @@ own UI during `beforeunload`, and browsers replace whatever it supplies with
 fixed wording of their own — so the dialog goes on the other side of the
 reload, where the app is in charge of it.
 
-**Two visual styles** — **Classic** (dark, flat, focused) is the default and
-is rendered as a DOM grid. **3D Board** is a real WebGL board: turned pieces
-with genuine depth, a lit scene with cast shadows, a camera that swings round
-the board when you flip it, and moves that carry the piece through the air.
-Its pieces are *generated*, not modelled — chess pieces are surfaces of
-revolution, so a dozen profile points produce a real lathe-turned piece, and
-the knight is extruded from a silhouette. There are no model files to ship or
-keep in sync. With `DEBUG` on, `?ui=<id>` previews either without changing the
-saved setting.
+**One board, and it is the 3D one.** A real WebGL board: turned pieces with
+genuine depth, a lit scene with cast shadows, a camera that swings round the
+board when you flip it, and moves that carry the piece through the air. Its
+pieces are *generated*, not modelled — chess pieces are surfaces of revolution,
+so a dozen profile points produce a real lathe-turned piece, and the knight is
+extruded from a silhouette. There are no model files to ship or keep in sync.
 
-A third style, a CSS-perspective *Arcade 3D* skin, was built and then removed;
-`js/board-3d.js` explains why in its header, and the history is in git. A saved
-`uiStyle` of `arcade` left over from that build simply falls back to Classic.
+There is no Look & Feel setting any more. Every player gets the 3D board, so
+the picker had nothing left to choose between, and a radiogroup of one is a
+control that cannot do anything — the section hides itself whenever fewer than
+two styles are selectable, and would come back on its own if a second one were
+ever added.
 
-The 3D board is loaded only when it is chosen, so nobody who stays on Classic
-ever downloads three.js. If a device refuses a WebGL context, the app says so
-and stays on Classic rather than showing an empty frame.
+**Classic**, the flat DOM grid, is still built and still tested, but as the
+*fallback* rather than an option: if a device refuses a WebGL context the app
+says so and mounts it, rather than showing an empty frame. That refusal is
+remembered for the visit only and never written to settings — persisting it
+would strand the player on the flat board for good, with no picker left to
+climb back out of. `?ui=classic` reaches it deliberately while `DEBUG` is on,
+which is how it stays previewable and how the renderer-agnostic suites drive
+the app.
+
+Retiring a look needs one flag. `selectable: false` in `UI_STYLES` takes it out
+of the picker, and `resolveUiStyle` then declines to trust it out of storage —
+so a saved `uiStyle` of `arcade` from the removed CSS-perspective *Arcade 3D*
+skin, and a saved `classic` from back when it was on offer, both land on the
+3D board with no migration step and nobody left behind. (`js/board-3d.js`
+explains in its header why Arcade went; the history is in git.)
 
 **Interface** — start screen, new-game setup, waiting room with the shareable
-code, responsive game screen, settings (look & feel, sound, board theme,
+code, responsive game screen, settings (sound, board theme,
 coordinates, animations, auto-flip), custom confirmation modals, toasts, and a
 collapsible move history.
 
@@ -668,7 +679,7 @@ errors in every browser and viewport tested**:
 | **3D board (Chromium)** | **48** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
-| Styles | 22 | Two styles listed, both selectable, and a retired one cannot return by any route |
+| **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |
 | **Control row (Chromium)** | **38** | **Undo never reaches the controller by any route; Draw is absent; the row still holds 44px targets** |
 
 The 3D suite's headline check is picking. Every one of the 64 squares is
@@ -867,13 +878,14 @@ the DOM**. Set it to `false` before shipping.
 12. **Move legality is enforced by clients, not the server.** See
     [Trust model](#trust-model) for exactly what that does and does not mean.
 
-13. **The 3D board trades tap size for looks.** Perspective makes the far ranks
-    smaller, so the back rank is a smaller target than the 44px the Classic
-    board holds everywhere. Every square is still reachable — picking is a
-    raycast against real geometry, and all 64 are verified individually — but
-    Classic is the more comfortable choice for serious play, which is why it
-    remains the default. It also needs no GPU context, so it is the one that
-    always works.
+13. **The 3D board trades tap size for looks, and it is now the only board.**
+    Perspective makes the far ranks smaller, so the back rank is a smaller
+    target than the 44px the flat grid holds everywhere — that is what
+    perspective means, and it is the real cost of making the 3D board
+    automatic. Every square is still reachable: picking is a raycast against
+    real geometry, and all 64 are verified individually. The flat board is
+    still built and still passes its suites, but only a device that refuses a
+    WebGL context is given it.
 5. **PGN import is not implemented.** Export and clipboard copy work; the
    engine already exposes `loadPgn()`, so import is a small addition.
 6. **No clocks.** Timers are Phase 3.

@@ -14,6 +14,8 @@ import {
   BOARD_THEMES,
   GAME_MODE,
   UI_STYLES,
+  SELECTABLE_UI_STYLES,
+  DEFAULT_UI_STYLE,
   LOCKED_CONTROLS,
   isControlLocked,
   TOAST_MS,
@@ -111,11 +113,24 @@ export class UI {
       });
     }
 
-    // Look & feel picker. Every listed style is selectable.
+    // Look & feel picker, listing only the styles a player may pick — the flat
+    // board is still built, but as the fallback for a device that refuses a
+    // WebGL context, not as an option.
+    //
+    // With one style left there is nothing to choose between, so the whole
+    // section goes: a radiogroup of one is a control that cannot do anything,
+    // and a heading over it only draws the eye to that. Driven from the data
+    // rather than deleted, so adding a second selectable style brings the
+    // section back with no markup to restore.
     const stylePicker = this.#dom['style-picker'];
     if (stylePicker) {
+      const choices = UI_STYLES.filter((style) => SELECTABLE_UI_STYLES.includes(style.id));
+      const offerAChoice = choices.length > 1;
+      const section = stylePicker.closest('.setting');
+      if (section) section.hidden = !offerAChoice;
+
       stylePicker.innerHTML = '';
-      UI_STYLES.forEach((style) => {
+      (offerAChoice ? choices : []).forEach((style) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'style-option';
@@ -652,7 +667,7 @@ export class UI {
     });
 
     this.#dom.board?.setAttribute('data-theme', settings.boardTheme);
-    document.documentElement.setAttribute('data-ui-style', settings.uiStyle ?? 'classic');
+    document.documentElement.setAttribute('data-ui-style', settings.uiStyle ?? DEFAULT_UI_STYLE);
   }
 
   // -----------------------------------------------------------------------

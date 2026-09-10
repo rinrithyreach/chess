@@ -313,20 +313,33 @@ async function boot() {
   wireBoard();
 
   /**
+   * Set when this device refuses a WebGL context.
+   *
+   * Session-scoped on purpose. The flat board is a fallback now rather than a
+   * choice, so a refusal is not written to settings: writing it would strand
+   * the player on the flat board for good, with no picker left to climb back
+   * out of it. Kept in memory instead, so this visit stops retrying — CHANGE
+   * fires on every move, and re-importing three.js to fail again each time
+   * would be both slow and a toast per move — while the next visit tries
+   * afresh. Refusals are often transient: too many live contexts on the page,
+   * a driver reset, a profile the player has since relaxed.
+   */
+  let webglRefused = false;
+
+  /**
    * Mount the board renderer the chosen style calls for.
    *
-   * Loading three.js is deferred to the moment a player actually picks the 3D
-   * board, and never happens for anyone who does not: it is by far the largest
-   * thing the app can load, and making every player on every visit pay for a
-   * skin most will never open would be a poor trade for a game whose whole
-   * point is that it starts instantly.
+   * three.js is still imported lazily rather than bundled into the first
+   * paint: the menu is interactive immediately and the 3D board mounts itself
+   * when its module arrives, which matters more now that every player loads it
+   * rather than only the ones who went looking for it in Settings.
    *
    * A refused WebGL context is treated as a normal outcome, not an error. Some
    * devices and hardened browser profiles simply will not grant one, and the
    * honest response is to say so and stay on a board that works.
    */
   async function applyBoardStyle(styleId) {
-    const wanted = uiStyleNeedsWebgl(styleId) ? styleId : 'classic';
+    const wanted = uiStyleNeedsWebgl(styleId) && !webglRefused ? styleId : 'classic';
     if (wanted === boardStyle) return true;
 
     if (wanted === 'classic') {
@@ -349,14 +362,13 @@ async function boot() {
       return true;
     } catch (error) {
       warn('3D board unavailable, staying on the flat board', error);
+      webglRefused = true;
       // Whatever half-built state the attempt left behind, replace it with a
       // board that definitely works before telling the player.
       boardEl.innerHTML = '';
       board = new Board(boardEl);
       boardStyle = 'classic';
       wireBoard();
-      controller.updateSettings({ uiStyle: 'classic' });
-      ui.syncSettings(controller.getSettings());
       repaint();
       ui.toast('This device cannot run the 3D board', 'error');
       return false;

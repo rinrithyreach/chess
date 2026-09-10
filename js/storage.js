@@ -104,8 +104,8 @@ export function loadSettings() {
   const merged = { ...DEFAULT_SETTINGS };
 
   if (typeof source.sound === 'boolean') merged.sound = source.sound;
-  // resolveUiStyle honours LOCKED_UI_STYLE, so a value stored before the lock
-  // was applied cannot resurrect the other skin.
+  // resolveUiStyle trusts a stored style only while it is still selectable, so
+  // a look that has since been retired cannot come back out of storage.
   merged.uiStyle = resolveUiStyle(source.uiStyle);
   if (typeof source.showCoordinates === 'boolean') merged.showCoordinates = source.showCoordinates;
   if (typeof source.animations === 'boolean') merged.animations = source.animations;
