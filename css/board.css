@@ -9,8 +9,7 @@
    -------------------------------------------------------------------------- */
 
 .board[data-theme="classic"],
-.theme-swatch__preview[data-theme="classic"],
-.motion-demo[data-theme="classic"] {
+.theme-swatch__preview[data-theme="classic"] {
   --board-light: #ecd8b6;
   --board-dark: #b07d4f;
   --board-edge: #6d4c30;
@@ -19,8 +18,7 @@
 }
 
 .board[data-theme="midnight"],
-.theme-swatch__preview[data-theme="midnight"],
-.motion-demo[data-theme="midnight"] {
+.theme-swatch__preview[data-theme="midnight"] {
   --board-light: #9fb0cc;
   --board-dark: #4a5a78;
   --board-edge: #2b3550;
@@ -29,8 +27,7 @@
 }
 
 .board[data-theme="wood"],
-.theme-swatch__preview[data-theme="wood"],
-.motion-demo[data-theme="wood"] {
+.theme-swatch__preview[data-theme="wood"] {
   --board-light: #e8c99b;
   --board-dark: #9a6a3d;
   --board-edge: #5f4126;

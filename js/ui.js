@@ -21,12 +21,8 @@ import {
   LOCKED_CONTROLS,
   isControlLocked,
   TOAST_MS,
-  ANIMATION_MS,
-  ANIMATION_EASING,
-  CARRY_LIFT,
   warn,
 } from './config.js';
-import { cubicBezierEasing, prefersReducedMotion } from './board-shared.js';
 
 // See TEXT_PRESENTATION in board.js: without it these can render as colour
 // emoji, which ignore CSS `color` and make white pieces paint black.
@@ -34,16 +30,6 @@ const VS = '\uFE0E';
 const PIECE_GLYPHS = {
   k: `♚${VS}`, q: `♛${VS}`, r: `♜${VS}`, b: `♝${VS}`, n: `♞${VS}`, p: `♟${VS}`,
 };
-/**
- * How long to leave the Settings dialog alone before playing its motion demo.
- *
- * The panel fades and slides in over 0.2s (`.modal__panel` in style.css).
- * Running the demo underneath that puts one animation on top of another, and
- * the thing the demo exists to show — this is what a move looks like — is the
- * one that loses.
- */
-const MODAL_SETTLE_MS = 260;
-
 const PROMOTION_PIECES = [
   { type: 'q', name: 'Queen' },
   { type: 'r', name: 'Rook' },
@@ -68,17 +54,6 @@ export class UI {
   #confirmDismiss = false;
   #confirmAltValue = 'alt';
   #historyExpanded = false;
-  /**
-   * Which end of the Settings motion demo the pawn is currently standing on.
-   *
-   * The demo plays one move per flip and leaves the pawn where it lands, then
-   * plays back the other way on the next flip. The alternative — always
-   * running left to right — needs the pawn returned to the start before each
-   * play, and that reset is itself a jump, in a control whose entire job is
-   * to show you the difference between moving and jumping.
-   */
-  #motionDemoAt = 0;
-  #motionDemoAnimation = null;
 
   constructor(controller) {
     this.#controller = controller;
@@ -104,7 +79,6 @@ export class UI {
       'modal-gameover', 'gameover-icon', 'gameover-title', 'gameover-result',
       'gameover-detail', 'btn-rematch', 'btn-gameover-new', 'check-swap-colors',
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
-      'motion-demo', 'motion-demo-piece', 'motion-demo-hint',
       'theme-picker',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
@@ -545,15 +519,6 @@ export class UI {
       'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
     focusTarget?.focus();
-
-    // Show the demo once on arrival, so the strip is not a dead illustration
-    // sitting there until something is flipped — and so the setting explains
-    // itself to someone who only came in to look.
-    if (name === 'settings') {
-      window.setTimeout(() => {
-        if (this.#openModal === 'settings') this.#playMotionDemo();
-      }, MODAL_SETTLE_MS);
-    }
   }
 
   closeModal(name = this.#openModal) {
@@ -713,91 +678,7 @@ export class UI {
   // Settings
   // -----------------------------------------------------------------------
 
-  /**
-   * Play the Settings motion demo: one move of a pawn, exactly as the board
-   * would make it under the current setting.
-   *
-   * The keyframes are generated here from ANIMATION_EASING rather than handed
-   * to the browser as a timing function, because the pawn does not travel in
-   * a straight line — it arcs, and the height of that arc is a function of
-   * how far along the travel it is, which no single CSS curve can express.
-   * Sampling the real easing and emitting positions along the real trajectory
-   * makes this the same motion as the board's rather than an impression of
-   * it: change the curve, the duration or the arc, and this changes with it.
-   *
-   * With animations off the pawn simply appears on the far square. That is
-   * not a degraded demo, it IS the demo — it is what the board does.
-   */
-  #playMotionDemo() {
-    const piece = this.#dom['motion-demo-piece'];
-    const strip = this.#dom['motion-demo'];
-    if (!piece || !strip) return;
-
-    const enabled = Boolean(this.#dom['set-animations']?.checked);
-    const reduced = prefersReducedMotion();
-    const hint = this.#dom['motion-demo-hint'];
-    if (hint) {
-      hint.textContent = reduced
-        ? 'Your device asks for reduced motion, so pieces move instantly whatever this is set to.'
-        : enabled
-          ? 'Pieces are carried to their square.'
-          : 'Pieces appear on their square instantly.';
-    }
-
-    const square = strip.querySelector('.motion-demo__square');
-    const travel = (square?.offsetWidth ?? 0) * 2;
-    // Zero while the modal is still hidden: nothing has been laid out to
-    // measure. Returning before the pawn is touched matters — advancing it to
-    // a distance of zero would leave the bookkeeping believing it had moved
-    // while the screen shows it where it was, and the next real play would
-    // start with a jump. The replay on open covers this.
-    if (!travel) return;
-
-    const from = this.#motionDemoAt * travel;
-    this.#motionDemoAt = this.#motionDemoAt === 0 ? 1 : 0;
-    const to = this.#motionDemoAt * travel;
-
-    this.#motionDemoAnimation?.cancel();
-    this.#motionDemoAnimation = null;
-    piece.style.transform = `translateX(${to}px)`;
-
-    if (!enabled || reduced || typeof piece.animate !== 'function') return;
-
-    // The same arc the 3D board flies: a half-sine over the TRAVEL, so its
-    // top is above the middle of the move. See #animateMove in board-3d.js.
-    const ease = cubicBezierEasing(ANIMATION_EASING);
-    // travel / 2 is one square; CARRY_LIFT is the board's own lift, in squares.
-    const lift = (travel / 2) * CARRY_LIFT;
-    const STEPS = 24;
-    const frames = [];
-    for (let i = 0; i <= STEPS; i += 1) {
-      const t = i / STEPS;
-      const k = ease(t);
-      const x = from + (to - from) * k;
-      const y = -Math.sin(k * Math.PI) * lift;
-      frames.push({ transform: `translate(${x}px, ${y}px)`, offset: t });
-    }
-
-    try {
-      // `linear`, because the easing is already baked into the positions
-      // above. Applying it again here would ease the eased curve.
-      this.#motionDemoAnimation = piece.animate(frames, {
-        duration: ANIMATION_MS,
-        easing: 'linear',
-        fill: 'none',
-      });
-    } catch {
-      // Has `animate`, rejected the effect. The pawn is already on its
-      // destination square, which is the state that matters.
-      this.#motionDemoAnimation = null;
-    }
-  }
-
   syncSettings(settings) {
-    // The demo strip borrows the player's own board theme, through the same
-    // per-theme blocks the board and the swatches use in board.css.
-    this.#dom['motion-demo']?.setAttribute('data-theme', settings.boardTheme ?? 'classic');
-
     const map = {
       'set-sound': 'sound',
       'set-coords': 'showCoordinates',
@@ -1023,10 +904,6 @@ export class UI {
     Object.entries(settingInputs).forEach(([id, key]) => {
       this.#dom[id]?.addEventListener('change', (event) => {
         this.#call('onSettingChange', { [key]: event.target.checked });
-        // Answer the flip on the spot. Every other switch in here changes
-        // something you can see from where you are standing; this one used to
-        // change nothing until you closed the dialog and made a move.
-        if (id === 'set-animations') this.#playMotionDemo();
       });
     });
 

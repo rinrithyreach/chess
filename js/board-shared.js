@@ -11,9 +11,9 @@
  *
  * Nothing in this file touches the DOM, WebGL, or the chess rules. The one
  * browser API it does reach for is `matchMedia`, for the motion preference —
- * which lives here for the same reason as everything else in the file: three
- * places now have to agree on what "reduced motion" means, and agreeing by
- * having three copies of the check is how they stop agreeing.
+ * which lives here for the same reason as everything else in the file: both
+ * boards have to agree on what "reduced motion" means, and they were agreeing
+ * by keeping a copy of the check each.
  */
 
 import { FILES, RANKS, WHITE } from './config.js';
@@ -30,11 +30,7 @@ export const PIECE_NAMES = {
 /**
  * Whether the player has asked their system for less motion.
  *
- * Both boards consult this before animating anything, and so does the motion
- * preview in Settings — which is the point of it living here. The preview
- * exists to show what the Animations setting does, so it has to decline in
- * exactly the circumstances the board declines: a preview that glides while
- * the board it describes does not would be a lie about the product.
+ * Consulted by both boards before they animate anything.
  *
  * Checked live rather than cached, and checked in SCRIPT rather than left to
  * CSS. The `prefers-reduced-motion` block in style.css only neutralises CSS

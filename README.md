@@ -175,17 +175,6 @@ cannot legally reach is animated back rather than teleported. The timings live
 in `config.js` and the tests read them from there, so tuning them cannot leave
 a stale number behind in an assertion.
 
-**The Animations setting demonstrates itself.** It was the one switch in
-Settings with nothing to show for it — flipping it changed nothing you could
-see until you closed the dialog and made a move. It now carries a three-square
-strip in your own board theme, and a pawn replays the real move on every flip:
-carried across when the setting is on, simply present on the far square when
-it is off. The keyframes are generated from `ANIMATION_EASING` and sampled
-along the same arc the board flies rather than approximated by a CSS curve, so
-the preview cannot drift away from the thing it is previewing. If the device
-asks for reduced motion the demo declines exactly as the board does, and says
-so in words — otherwise the switch would appear to be broken.
-
 **Board size**, in the control row next to Flip, in three steps: *Fit*,
 *Large* (the default) and *Max*. It is zoom, but implemented as camera
 elevation rather than as a dolly, which sounds like the wrong lever until you
@@ -227,8 +216,8 @@ explains in its header why Arcade went; the history is in git.)
 
 **Interface** — start screen, new-game setup, waiting room with the shareable
 code, responsive game screen, settings (sound, board theme,
-coordinates, animations — with a live preview of what they do — and auto-flip),
-custom confirmation modals, toasts, and a collapsible move history.
+coordinates, animations, auto-flip), custom confirmation modals, toasts, and a
+collapsible move history.
 
 **Accessibility** — real `<button>` elements, ARIA labels on every square,
 arrow-key board navigation with a roving tabindex, visible focus rings, and
@@ -739,7 +728,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across fifteen suites — **833 assertions, all passing, with zero console
+project across fifteen suites — **812 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -752,7 +741,7 @@ errors in every browser and viewport tested**:
 | Interaction (Chromium) | 42 | Real page refresh, drag-and-drop, keyboard, clipboard |
 | **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |
 | **Multiplayer (Chromium ×2)** | **82** | **The setup form follows the chosen mode, then two devices against the Firebase emulator** |
-| **Animation (Chromium)** | **65** | **The move animation actually runs, every time, and leaves nothing stranded; the capture is held and lands with it; and the Settings preview flies the real trajectory, sampled mid-flight** |
+| **Animation (Chromium)** | **44** | **The move animation actually runs, every time, and leaves nothing stranded; the capture is held and lands with it** |
 | **3D board (Chromium)** | **93** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; the finish is measured — grain, seams, the no-GPU path — and so is the motion: the velocity profile of the shipped curve, the arc's top over the middle of the move, and a drag that moves the piece on every pointer move rather than once per square** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |

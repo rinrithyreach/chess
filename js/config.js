@@ -321,12 +321,14 @@ export const CAPTURE_FADE_DELAY = Math.round(ANIMATION_MS * (1 - CAPTURE_FADE_RA
 /**
  * How high a piece rides on its way across, in squares.
  *
- * A knight goes higher because it is the piece that jumps. Expressed as a
- * fraction of a square rather than in pixels or world units so that the two
- * places that draw this arc — the WebGL board, where a square is one unit,
- * and the Settings preview, where it is thirty CSS pixels — can use the same
- * number. The preview then keeps matching the board without anyone having to
- * remember that it should.
+ * A knight goes higher because it is the piece that jumps. Here rather than
+ * inline in board-3d.js because every other number that decides what a move
+ * looks like — how long it takes, how it accelerates, when the captured piece
+ * goes — is here, and a lift buried in the renderer is the one you would not
+ * think to look for when the motion needs tuning again.
+ *
+ * A fraction of a square, not a distance: the board happens to make a square
+ * one world unit, and this should not quietly depend on that.
  */
 export const CARRY_LIFT = 0.32;
 export const CARRY_LIFT_KNIGHT = 0.85;
