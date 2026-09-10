@@ -97,6 +97,14 @@ a way to start one from this build.
 **Game management** — restart (local), resign, rematch, board flip, and copy
 PGN. The control row is **Undo, Flip, Resign**.
 
+A rematch always swaps colours, with nothing to tick. It used to be an option
+in the game-over dialog, which turned out to be an option only some of the
+time: the online session swaps seats inside the transaction that resets the
+room — agreed by both devices, with nowhere to honour one player's preference
+— so the checkbox only ever changed what a *local* game did. Removing it makes
+the rule the same everywhere, and it is the ordinary one: whoever had Black has
+White next.
+
 **Undo is locked**: built and correct, but shown with a padlock and refused on
 tap and on keyboard alike. Remove its id from `LOCKED_CONTROLS`
 (`js/config.js`) to restore it — nothing else needs changing.
@@ -728,7 +736,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across fifteen suites — **812 assertions, all passing, with zero console
+project across fifteen suites — **815 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -736,7 +744,7 @@ errors in every browser and viewport tested**:
 | Engine (Node) | 81 | Every rule scenario in the spec, plus error handling |
 | **Bot engine (Node)** | **13** | **Its chess: mate in one, free material, no self-blunders, promotion, timing** |
 | **Bot mode (Chromium)** | **34** | **Replies, refuses its own pieces to the player, never blocks a frame, survives a reload** |
-| App (jsdom) | 134 | Boots the real app, drives it by tap/click, asserts DOM |
+| App (jsdom) | 137 | Boots the real app, drives it by tap/click, asserts DOM; a rematch swaps colours every time and offers no way not to |
 | Layout (Chromium) | 145 | 9 viewports: overflow, board geometry, touch targets |
 | Interaction (Chromium) | 42 | Real page refresh, drag-and-drop, keyboard, clipboard |
 | **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |

@@ -1022,23 +1022,6 @@ body.is-modal-open {
   letter-spacing: 0.04em;
 }
 
-.checkbox {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.checkbox input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
-}
-
 /* Promotion picker */
 .promotion {
   display: grid;

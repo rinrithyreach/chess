@@ -77,7 +77,7 @@ export class UI {
       'modal-confirm', 'confirm-title', 'confirm-text', 'confirm-actions',
       'btn-confirm-ok', 'btn-confirm-cancel', 'btn-confirm-alt',
       'modal-gameover', 'gameover-icon', 'gameover-title', 'gameover-result',
-      'gameover-detail', 'btn-rematch', 'btn-gameover-new', 'check-swap-colors',
+      'gameover-detail', 'btn-rematch', 'btn-gameover-new',
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
       'theme-picker',
       'modal-menu', 'btn-restart', 'btn-leave',
@@ -887,7 +887,7 @@ export class UI {
     // --- Game over ---
     this.#dom['btn-rematch']?.addEventListener('click', () => {
       this.closeModal('gameover');
-      this.#call('onRematch', this.#dom['check-swap-colors']?.checked ?? true);
+      this.#call('onRematch');
     });
     this.#dom['btn-gameover-new']?.addEventListener('click', () => {
       this.closeModal('gameover');

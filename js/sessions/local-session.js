@@ -243,7 +243,7 @@ export class LocalSession {
       case SESSION_ACTION.RESTART:
         return this.#restart();
       case SESSION_ACTION.REMATCH:
-        return this.#rematch(payload.swapColors === true);
+        return this.#rematch();
       default:
         warn('Unknown session action', action);
         return { ok: false, error: `Unknown action: ${action}` };
@@ -308,13 +308,18 @@ export class LocalSession {
     return { ok: true, state: this.getState() };
   }
 
-  /** Restart, optionally swapping which player holds which colour. */
-  #rematch(swapColors) {
-    if (swapColors) {
-      const white = this.#players[WHITE];
-      this.#players[WHITE] = this.#players[BLACK];
-      this.#players[BLACK] = white;
-    }
+  /**
+   * Restart with the two players swapping colours.
+   *
+   * Always, with nothing to opt out of: the online session has no way to
+   * offer the choice — the swap is part of the transaction that resets the
+   * room, agreed by both devices — so making it conditional here only bought
+   * a local game that behaved differently from an online one.
+   */
+  #rematch() {
+    const white = this.#players[WHITE];
+    this.#players[WHITE] = this.#players[BLACK];
+    this.#players[BLACK] = white;
     return this.#restart();
   }
 

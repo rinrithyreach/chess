@@ -499,7 +499,7 @@ async function boot() {
       if (confirmed) await controller.restart();
     },
 
-    onRematch: (swapColors) => controller.rematch(swapColors),
+    onRematch: () => controller.rematch(),
 
 
     onLeaveGame: async () => {

@@ -623,13 +623,24 @@ export class GameController {
   }
 
   /**
-   * Start a rematch.
+   * Start a rematch. Colours always swap.
+   *
+   * They used to swap only if a checkbox in the game-over dialog said so —
+   * but that checkbox never reached an online game at all: the Firebase
+   * session swaps seats unconditionally inside the transaction that resets
+   * the room, because a swap has to be agreed by both devices and there is
+   * nowhere for one player's preference to be honoured. So the option was
+   * really "swap, unless this is a local game and you unticked this", which
+   * is not a rule anyone would choose to write down. Now the loser of the
+   * last game gets White everywhere, which is the convention it was defaulting
+   * to anyway.
+   *
    * Locally this is immediate. Online it registers a request; the board only
    * resets once both players have asked, which the session handles.
    */
-  async rematch(swapColors = true) {
+  async rematch() {
     this.#expectReset();
-    const result = await this.#session.submitAction(SESSION_ACTION.REMATCH, { swapColors });
+    const result = await this.#session.submitAction(SESSION_ACTION.REMATCH);
 
     if (!result.ok) {
       if (result.error) this.#toast(result.error, 'warn');
@@ -645,7 +656,7 @@ export class GameController {
       this.#toast(bothAgreed ? 'Rematch starting' : 'Rematch requested — waiting for opponent');
     } else {
       this.#save();
-      this.#toast(swapColors ? 'Rematch — colors swapped' : 'Rematch started');
+      this.#toast('Rematch — colors swapped');
     }
 
     this.#emitChange();
