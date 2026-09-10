@@ -252,24 +252,71 @@ export const DEFAULT_PLAYER_NAMES = {
   black: 'Player 2',
 };
 
-/** Move animation duration (ms). Kept short so play never feels gated on it. */
-export const ANIMATION_MS = 180;
+/**
+ * Move animation duration (ms).
+ *
+ * This was 180ms, chosen so play would never feel gated on it. Nothing waits
+ * on the animation — input is accepted the whole time it runs — so the only
+ * thing 180ms actually bought was fewer frames to move in: eleven, of which a
+ * measured four carried less than two pixels each. The motion had no room to
+ * be anything but a jump.
+ *
+ * At 260ms the same move gets sixteen frames and twelve of them carry real
+ * distance. The one thing that does key off this — the game-over dialog in
+ * app.js — is written as `ANIMATION_MS + 120`, so it follows on its own.
+ */
+export const ANIMATION_MS = 260;
 
 /**
  * Easing for the piece slide.
  *
- * A decelerating curve, not `ease` — `ease` eases IN as well, so the piece
- * hesitates for its first few frames and the move reads as laggy even though
- * it started instantly. Leaving at full speed and settling into the square is
- * what makes a short animation feel immediate rather than delayed.
+ * The previous curve, `cubic-bezier(0.2, 0.8, 0.3, 1)`, was picked to avoid
+ * easing IN, on the reasoning that a piece which hesitates for its first few
+ * frames reads as laggy. The goal was right and the curve overshot it: with
+ * the control point at (0.2, 0.8) the piece left the square at FOUR times its
+ * own average speed, from a standing start, and was 72% of the way there by
+ * the first quarter of the animation — leaving the last quarter of the
+ * distance to fill three quarters of the time. That instantaneous launch is
+ * what "not smooth" looks like: there is no acceleration to see, only a jump
+ * followed by a crawl.
+ *
+ * This curve answers the original concern with a number rather than a shape.
+ * Peak speed is 2.1x the average instead of 4x and arrives at t=0.35 rather
+ * than at t=0; the first frame of a two-square move travels 1.9px and the
+ * second 6px, so the piece is visibly under way within two frames without
+ * ever jumping. It accelerates, carries, and settles.
+ *
+ * The other thing this curve is chosen for is the 3D board's arc. That arc is
+ * driven by the eased travel, not by the clock, which makes it symmetric over
+ * the PATH — the top is above the midpoint of the move, always. Where the
+ * easing then puts that top is in TIME, and that is this curve's `t_half`,
+ * the moment it passes the halfway mark: 0.39 here, against 0.145 for the
+ * curve it replaces. See #animateMove in board-3d.js.
  */
-export const ANIMATION_EASING = 'cubic-bezier(0.2, 0.8, 0.3, 1)';
+export const ANIMATION_EASING = 'cubic-bezier(0.38, 0.06, 0.35, 1)';
 
 /**
- * The captured piece fades out over this fraction of ANIMATION_MS, so it is
- * gone by the time the capturing piece lands on top of it.
+ * How long the captured piece takes to go, as a fraction of ANIMATION_MS.
+ *
+ * The fade is scheduled to END on the landing rather than to start with the
+ * move — see CAPTURE_FADE_DELAY. So this is not "how long until it is gone"
+ * but "how long it takes to go, once the piece taking it is nearly there",
+ * which is why it is shorter than it used to be.
  */
-export const CAPTURE_FADE_RATIO = 0.8;
+export const CAPTURE_FADE_RATIO = 0.45;
+
+/**
+ * When the captured piece starts leaving.
+ *
+ * It used to start fading the instant the capturing piece set off, and was
+ * gone before that piece arrived: the square emptied itself and was then
+ * landed on, which reads as two unrelated events. Holding it until the
+ * attacker is most of the way across makes them one event — the piece is
+ * displaced by the piece taking it.
+ *
+ * Derived, so the two always end together whatever the ratio is set to.
+ */
+export const CAPTURE_FADE_DELAY = Math.round(ANIMATION_MS * (1 - CAPTURE_FADE_RATIO));
 
 /** How long toasts remain on screen (ms). */
 export const TOAST_MS = 2400;

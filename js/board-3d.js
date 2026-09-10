@@ -41,6 +41,7 @@ import {
   ANIMATION_MS,
   ANIMATION_EASING,
   CAPTURE_FADE_RATIO,
+  CAPTURE_FADE_DELAY,
   WHITE,
   DEBUG,
   BOARD_ZOOM_LEVELS,
@@ -63,6 +64,9 @@ const SQUARE = 1;
 const HALF = 4; // half the board, in squares
 const BOARD_Y = 0; // top surface of the playing area
 const RIM = 0.42; // border width around the playing area
+
+/** How high a piece rides while the pointer is carrying it. */
+const DRAG_LIFT = 0.5;
 
 /**
  * Themes mirror the CSS ones in board.css so the two boards look like the same
@@ -301,6 +305,8 @@ export class Board3D {
   #markerGroup = null;
   #raycaster = new THREE.Raycaster();
   #pointer = new THREE.Vector2();
+  /** The horizontal sheet a dragged piece rides on, at DRAG_LIFT above it. */
+  #dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(BOARD_Y + DRAG_LIFT));
 
   // Reusable resources, disposed together in dispose().
   #geometries = new Map();
@@ -312,6 +318,16 @@ export class Board3D {
 
   // Animation bookkeeping
   #animations = [];
+  /**
+   * The carry currently running on each square, by destination.
+   *
+   * Without this an animation could only ever be started, never found again:
+   * a second move onto a square that is still receiving one would leave two
+   * updates writing to the same piece on the same frame, and `#syncPieces`
+   * had no way to tell a piece standing still from one halfway through the
+   * air. Both are settled by looking the square up here.
+   */
+  #moving = new Map(); // square -> animation record
   #cameraSpin = null;
   #needsRender = true;
   #frame = null;
@@ -332,6 +348,8 @@ export class Board3D {
   #a11yGrid = null;
   #a11ySquares = new Map();
   #draggedMove = null;
+  /** Where the pointer released a piece, so it can be seated from there. */
+  #dropPoint = null;
   #zoom = DEFAULT_BOARD_ZOOM;
 
   constructor(rootElement) {
@@ -1003,7 +1021,11 @@ export class Board3D {
       start: performance.now(),
       // Longer than a move: the whole view is turning, and at move speed it
       // reads as a glitch rather than a deliberate change of seat.
-      duration: ANIMATION_MS * 2.4,
+      //
+      // The multiplier was 2.4 against a 180ms move. The move is 260ms now
+      // and a flip has no reason to have got longer with it, so this is
+      // retuned to land in the same 430ms it always took.
+      duration: Math.round(ANIMATION_MS * 1.65),
     };
   }
 
@@ -1095,6 +1117,7 @@ export class Board3D {
     if (move) this.#animateMove(move);
 
     this.#draggedMove = null;
+    this.#dropPoint = null;
     this.#needsRender = true;
   }
 
@@ -1118,6 +1141,8 @@ export class Board3D {
 
     this.#pieces.forEach((piece) => this.#releasePiece(piece));
     this.#pieces.clear();
+    this.#animations = [];
+    this.#moving.clear();
 
     this.#geometries.forEach((geometry) => geometry.dispose());
     this.#materials.forEach((material) => material.dispose());
@@ -1485,8 +1510,15 @@ export class Board3D {
         this.#pieces.set(square, group);
       }
       const world = this.#squareToWorld(square);
-      // A piece that is about to be animated is placed by the animation.
-      const animating = move && move.to === square;
+      // A piece that is about to be animated is placed by the animation —
+      // and so is one already in the air from an earlier move, which is what
+      // #moving is consulted for. Without that second test this method's own
+      // promise ("a piece that did not change is left exactly as it is") was
+      // untrue: every unrelated re-render, including the opponent's reply
+      // arriving mid-flight, wrote your piece back down onto the board. The
+      // draw only ever came out right because the loop happens to update the
+      // animations again before it renders.
+      const animating = (move && move.to === square) || this.#moving.has(square);
       if (!animating) {
         group.position.set(world.x, BOARD_Y, world.z);
         group.rotation.y = group.userData.faces === -1 ? Math.PI : 0;
@@ -1640,11 +1672,14 @@ export class Board3D {
       return;
     }
 
-    const start = performance.now();
+    // Held until the piece taking it is nearly there, then displaced — the
+    // two motions end on the same frame. See CAPTURE_FADE_DELAY.
+    const start = performance.now() + CAPTURE_FADE_DELAY;
     const duration = ANIMATION_MS * CAPTURE_FADE_RATIO;
     const from = group.position.clone();
     this.#animations.push({
       update: (now) => {
+        if (now < start) return false;
         const t = Math.min(1, (now - start) / duration);
         const k = ease(t);
         group.position.set(from.x, from.y - k * 0.55, from.z);
@@ -1656,31 +1691,134 @@ export class Board3D {
   }
 
   /**
+   * Put a piece down on the square it belongs to, from wherever it is now.
+   *
+   * Used when a drag ends without a move — released off the board, or onto a
+   * square the piece cannot legally reach. Nothing re-renders in that case,
+   * so this is the only thing that returns it, and it used to do so by
+   * assignment: the piece vanished from under the pointer and reappeared on
+   * its square in the same frame. A refusal is worth animating precisely
+   * because it is a refusal — the piece is seen to go back.
+   */
+  #settlePiece(square, origin = null) {
+    const group = this.#pieces.get(square);
+    if (!group) return;
+    const home = this.#squareToWorld(square);
+
+    if (!this.#animationsEnabled || prefersReducedMotion()) {
+      group.position.copy(home);
+      this.#needsRender = true;
+      return;
+    }
+
+    // Where the piece is NOW is not good enough. Releasing over a square the
+    // piece cannot reach still counts as touching that square, so the app
+    // re-renders to clear the selection — and that render puts the piece back
+    // on its home square before this ever runs. The caller therefore reads
+    // the held position before it activates anything, and hands it in here.
+    const from = origin ?? group.position.clone();
+    // Apply the first frame now rather than leaving it to the loop. Between
+    // creating an animation and its first tick there is one frame in which
+    // the piece is wherever the last render left it — on its home square —
+    // and a settle that starts by flashing the piece to its destination is
+    // not a settle.
+    group.position.copy(from);
+    this.#needsRender = true;
+
+    const start = performance.now();
+    this.#startCarry(square, {
+      update: (now) => {
+        const t = Math.min(1, (now - start) / ANIMATION_MS);
+        const k = ease(t);
+        group.position.lerpVectors(from, home, k);
+        return t >= 1;
+      },
+      done: () => group.position.copy(home),
+    });
+  }
+
+  /**
+   * Register a carry as THE carry for its destination square.
+   *
+   * A square can only be receiving one piece at a time, so a second carry
+   * onto one that is still animating replaces the first rather than joining
+   * it — two updates writing to the same piece on the same frame is a fight
+   * whose winner is decided by array order, which is no way to decide it.
+   * Cancelling means the earlier flight's `done` never runs, so it cannot
+   * snap the piece back to a destination that is no longer where it is going.
+   */
+  #startCarry(square, animation) {
+    this.#moving.get(square)?.cancel();
+    let cancelled = false;
+    const record = {
+      cancel: () => { cancelled = true; },
+      update: (now) => cancelled || animation.update(now),
+      done: () => {
+        if (this.#moving.get(square) === record) this.#moving.delete(square);
+        if (!cancelled) animation.done?.();
+      },
+    };
+    this.#moving.set(square, record);
+    this.#animations.push(record);
+  }
+
+  /**
    * Move a piece through the air from its origin to where it now stands.
    *
    * The flat board slides; here the piece is picked up, carried and set down,
    * which is what the extra dimension is actually for. The knight arcs higher
    * than everything else because it is the one piece that jumps.
+   *
+   * `origin` overrides where the flight starts, for the one case where the
+   * square is the wrong answer: a piece the player dropped somewhere between
+   * two squares has to be seated from where their hand left it.
    */
   #animateMove(move) {
-    const carry = (fromSquare, toSquare, lift) => {
+    const carry = (fromSquare, toSquare, lift, origin = null) => {
       const group = this.#pieces.get(toSquare);
       if (!group) return;
 
-      const from = this.#squareToWorld(fromSquare);
+      const from = origin ?? this.#squareToWorld(fromSquare);
       const to = this.#squareToWorld(toSquare);
+      // The piece starts at the origin, from this frame — see #settlePiece.
+      // #syncPieces has just placed it on the destination square, and it must
+      // not be drawn there even once before it sets off.
+      group.position.copy(from);
+
       const start = performance.now();
 
-      this.#animations.push({
-        key: toSquare,
+      this.#startCarry(toSquare, {
         update: (now) => {
           const t = Math.min(1, (now - start) / ANIMATION_MS);
           const k = ease(t);
           group.position.x = from.x + (to.x - from.x) * k;
           group.position.z = from.z + (to.z - from.z) * k;
-          // A half-sine arc: zero at both ends, highest in the middle, so the
-          // piece lands flat on the board rather than dropping onto it.
-          group.position.y = BOARD_Y + Math.sin(k * Math.PI) * lift;
+          // A half-sine arc over the TRAVEL, so the top of it is above the
+          // middle of the move — not above wherever the piece happens to be
+          // when half the time has gone.
+          //
+          // Both were tried. Driving the arc from the clock instead puts its
+          // apex at the midpoint of the flight, which sounds right and is
+          // not: the travel curve has spent 81% of the distance by then, so
+          // the whole descent gets squeezed into the last fifth of the path
+          // and the piece drops onto its square rather than being set on it.
+          // Measured off a live trace, six of seventeen frames were spent
+          // falling almost vertically over e4.
+          //
+          // Driving it from `k` cannot do that, because the arc is then a
+          // function of position: half the height at a quarter of the way and
+          // at three quarters, apex over the middle, whatever the timing. All
+          // the easing decides is when the piece reaches that midpoint, and
+          // ANIMATION_EASING is picked partly for that — see its note.
+          //
+          // The height is two terms, and the first is zero for every ordinary
+          // move: a flight that begins on a square begins at board height. It
+          // is not zero for a piece released from the pointer above the
+          // board, which has to come down as it goes across rather than drop
+          // first and slide after.
+          group.position.y = BOARD_Y
+            + (from.y - BOARD_Y) * (1 - k)
+            + Math.sin(k * Math.PI) * lift;
           return t >= 1;
         },
         done: () => {
@@ -1689,9 +1827,14 @@ export class Board3D {
       });
     };
 
-    // A piece the player dragged here is already where they put it; carrying it
-    // back to the origin to re-travel undoes their own gesture.
-    if (this.#draggedMove !== `${move.from}|${move.to}`) {
+    // A piece the player dragged here is already where they put it; carrying
+    // it back to the origin to re-travel undoes their own gesture. But it was
+    // dropped wherever their pointer happened to be, which is only rarely the
+    // middle of a square, so it still has to be seated — a short settle from
+    // the hand to the centre, rather than the teleport this used to be.
+    if (this.#draggedMove === `${move.from}|${move.to}`) {
+      if (this.#dropPoint) carry(move.from, move.to, 0, this.#dropPoint);
+    } else {
       carry(move.from, move.to, move.piece === 'n' ? 0.85 : 0.32);
     }
 
@@ -1764,6 +1907,34 @@ export class Board3D {
     return this.#lastPick;
   }
 
+  /**
+   * Where the pointer is, on the invisible sheet a carried piece rides on.
+   *
+   * The square under the pointer is a different question, answered by
+   * #squareFromEvent against the board itself. This one has to be a plane and
+   * not the board because a piece being carried is ABOVE the board, and
+   * because its answer has to be continuous: snapping a held piece to the
+   * middle of whatever square it is over makes a drag a sequence of jumps,
+   * which is what this replaces.
+   */
+  #pointerOnDragPlane(event) {
+    const rect = this.#canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    this.#pointer.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.#raycaster.setFromCamera(this.#pointer, this.#camera);
+    const hit = new THREE.Vector3();
+    if (!this.#raycaster.ray.intersectPlane(this.#dragPlane, hit)) return null;
+    // The plane is infinite and the board is not. Past the rim the piece is
+    // pinned to the edge rather than sent off toward the horizon.
+    const edge = HALF + RIM;
+    hit.x = Math.min(Math.max(hit.x, -edge), edge);
+    hit.z = Math.min(Math.max(hit.z, -edge), edge);
+    return hit;
+  }
+
   #attachListeners() {
     const root = this.#root;
     // Every listener carries the abort signal, so dispose() detaches the
@@ -1801,12 +1972,15 @@ export class Board3D {
       }
 
       // Carry the piece under the pointer at a slight lift, so it reads as
-      // picked up rather than shoved along the surface.
+      // picked up rather than shoved along the surface — and at the pointer
+      // itself, not at the centre of the square the pointer is over. Those
+      // differ by up to half a square, which at drag speed is the difference
+      // between a piece held in the hand and a piece teleporting between
+      // squares one jump behind the cursor.
       const group = this.#pieces.get(drag.square);
-      const target = this.#squareFromEvent(event);
-      if (group && target) {
-        const world = this.#squareToWorld(target);
-        group.position.set(world.x, BOARD_Y + 0.5, world.z);
+      const point = this.#pointerOnDragPlane(event);
+      if (group && point) {
+        group.position.copy(point);
         this.#needsRender = true;
       }
     });
@@ -1823,20 +1997,29 @@ export class Board3D {
       }
 
       const dropSquare = this.#squareFromEvent(event);
-      // Put the lifted piece back on the board. If the move is legal the
-      // render that follows will place it properly; if not, this is what
-      // returns it home.
       const group = this.#pieces.get(drag.square);
-      if (group) {
-        const home = this.#squareToWorld(drag.square);
-        group.position.set(home.x, BOARD_Y, home.z);
-        this.#needsRender = true;
-      }
+      // Read before anything is activated: activating re-renders, and a
+      // re-render moves this piece. See #settlePiece.
+      const held = group ? group.position.clone() : null;
 
       if (dropSquare && dropSquare !== drag.square) {
+        // Where their hand actually let go. If the move is legal the render
+        // that follows replaces this piece with one already standing on the
+        // destination, and #animateMove seats it from this point instead of
+        // letting it appear there.
+        this.#dropPoint = held;
         this.#draggedMove = `${drag.square}|${dropSquare}`;
         this.#onSquareActivate(dropSquare);
+        // Still the same piece on the same square? Then the move was refused.
+        // Put it back rather than leaving it standing where it was dropped.
+        if (this.#pieces.get(drag.square) === group) {
+          this.#settlePiece(drag.square, held);
+        }
+        return;
       }
+
+      // Dropped on its own square, or off the board entirely.
+      this.#settlePiece(drag.square, held);
     };
 
     on(root, 'pointerup', finish);

@@ -19,6 +19,7 @@ import {
   ANIMATION_MS,
   ANIMATION_EASING,
   CAPTURE_FADE_RATIO,
+  CAPTURE_FADE_DELAY,
   WHITE,
 } from './config.js';
 import {
@@ -373,7 +374,15 @@ export class Board {
     ]);
   }
 
-  /** Fade a captured piece out from under the piece landing on top of it. */
+  /**
+   * Fade a captured piece out from under the piece landing on top of it.
+   *
+   * Delayed rather than immediate, and for the same reason the 3D board holds
+   * its captured piece: starting both at once empties the square before the
+   * capturing piece has crossed it, so the two read as separate events rather
+   * than as one displacing the other. The delay and the duration are set to
+   * end together — see CAPTURE_FADE_DELAY.
+   */
   #fadeOut(ghost) {
     const remove = () => ghost.remove();
     const animation = this.#run(
@@ -383,7 +392,11 @@ export class Board {
         { opacity: 1, transform: 'scale(1)' },
         { opacity: 0, transform: 'scale(0.72)' },
       ],
-      { duration: Math.round(ANIMATION_MS * CAPTURE_FADE_RATIO), easing: 'ease-in' },
+      {
+        duration: Math.round(ANIMATION_MS * CAPTURE_FADE_RATIO),
+        delay: CAPTURE_FADE_DELAY,
+        easing: 'ease-in',
+      },
     );
     if (!animation) {
       remove();

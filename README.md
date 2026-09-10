@@ -158,6 +158,23 @@ the light and the tone curve. That is deliberate and was learned the hard way �
 see *Things that went wrong*. The rendered pixels are sampled against those CSS
 values in the test suite, so the two cannot drift apart unnoticed.
 
+**Moving a piece is a motion, not a cut.** Both boards share one duration and
+one easing curve so a move feels the same whichever is on screen, and the 3D
+board spends them on a carry: the piece is lifted, taken across, and set down,
+with the knight arcing higher because it is the piece that jumps. The arc is a
+function of the *travel* rather than of the clock, which is what puts its top
+over the middle of the move instead of over wherever the piece happens to be
+when half the time has gone — drive it from the clock and the piece arrives
+above its square and drops onto it. A captured piece is held until the piece
+taking it is most of the way across, then displaced, so the two are one event
+rather than a square emptying itself and then being landed on.
+
+Dragging follows the pointer continuously rather than snapping the piece to the
+centre of whichever square it is over, and a piece released onto a square it
+cannot legally reach is animated back rather than teleported. The timings live
+in `config.js` and the tests read them from there, so tuning them cannot leave
+a stale number behind in an assertion.
+
 **Board size**, in the control row next to Flip, in three steps: *Fit*,
 *Large* (the default) and *Max*. It is zoom, but implemented as camera
 elevation rather than as a dolly, which sounds like the wrong lever until you
@@ -711,7 +728,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across fifteen suites — **795 assertions, all passing, with zero console
+project across fifteen suites — **812 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -724,8 +741,8 @@ errors in every browser and viewport tested**:
 | Interaction (Chromium) | 42 | Real page refresh, drag-and-drop, keyboard, clipboard |
 | **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |
 | **Multiplayer (Chromium ×2)** | **82** | **The setup form follows the chosen mode, then two devices against the Firebase emulator** |
-| **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
-| **3D board (Chromium)** | **78** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; and the finish is measured — grain in the surface, seams drawn, the no-GPU path detected** |
+| **Animation (Chromium)** | **44** | **The move animation actually runs, every time, and leaves nothing stranded; the capture is held and lands with it** |
+| **3D board (Chromium)** | **93** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; the finish is measured — grain, seams, the no-GPU path — and so is the motion: the velocity profile of the shipped curve, the arc's top over the middle of the move, and a drag that moves the piece on every pointer move rather than once per square** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |
