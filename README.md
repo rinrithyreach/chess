@@ -130,9 +130,15 @@ genuine depth, a lit scene with cast shadows, a camera that swings round the
 board when you flip it, and moves that carry the piece through the air. Its
 pieces are *generated*, not modelled — chess pieces are surfaces of revolution,
 so a two-dozen-point profile produces a real lathe-turned piece with its
-plinth, chamfer, collar and coronet, and the knight is extruded from a
-silhouette traced to have a muzzle, a dished nose, two ears and a notched mane.
-There are no model files to ship or keep in sync.
+plinth, chamfer, collar and coronet. There are no model files to ship or keep
+in sync.
+
+The knight is the exception twice over: it is not a surface of revolution, and
+after two attempts it is no longer an extruded silhouette either. It is built
+from eight solids — neck, cranium, jaw, muzzle, two ears and three mane lobes —
+placed and then baked into a single geometry at build time, so it costs the
+same two draw calls a lathe-turned piece does. See *Things that went wrong*
+for why the silhouette approach could not work on a board seen from above.
 
 **The finish.** Filmic tone mapping, so a highlight on a turned surface rolls
 off and keeps its shape instead of clipping to a bald white patch. A small
@@ -699,7 +705,7 @@ Game* is only offered for a valid, unfinished game.
 ### Automated
 
 The app ships with no test dependencies; verification was run from outside the
-project across fifteen suites — **778 assertions, all passing, with zero console
+project across fifteen suites — **791 assertions, all passing, with zero console
 errors in every browser and viewport tested**:
 
 | Suite | Assertions | What it covers |
@@ -713,7 +719,7 @@ errors in every browser and viewport tested**:
 | **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |
 | **Multiplayer (Chromium ×2)** | **82** | **The setup form follows the chosen mode, then two devices against the Firebase emulator** |
 | **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
-| **3D board (Chromium)** | **61** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; and the finish is measured — grain in the surface, seams drawn, the no-GPU path detected** |
+| **3D board (Chromium)** | **74** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown; and the finish is measured — grain in the surface, seams drawn, the no-GPU path detected** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |
@@ -804,12 +810,22 @@ And two from building that WebGL board:
    board detaches completely when it hands the element over. It is the same
    double-activation shape as the old drag bug (4), from a different cause.
 
-9. **The knight rendered as a standing card.** Its head is an extruded 2D
-   silhouette, and the silhouette is the only thing that identifies the piece.
-   Extruded thin and stood upright it sits ~56 degrees off the camera axis, so
-   what you see is the *edge* of the plate. Fixed by extruding it much deeper
-   and tipping it back toward the viewer. The general lesson: an extruded
-   silhouette only works if the camera can actually see the silhouette.
+9. **The knight took three goes, and the first two failed the same way.** Its
+   head began as an extruded 2D silhouette, which is the natural choice — the
+   silhouette is what identifies the piece. But this camera looks down at the
+   board from between 56 and 84 degrees, and the silhouette lives in a
+   vertical plane: at 56 degrees that plane keeps about half its height on
+   screen, at 84 degrees a tenth. The identity of the piece was in the part
+   you cannot see. Attempt one extruded it deeper; attempt two tapered the
+   extrusion so the muzzle was narrower than the cheek and tipped the head
+   back to turn the profile toward the camera — which laid the horse on its
+   back and rendered, in the words of the screenshot, as a crumpled paper
+   cone. Attempt three throws the silhouette away and builds the head as
+   solids, sized so the **muzzle projects forward past the edge of the base**.
+   That overhang is the one feature that survives a top-down view, and it is
+   what the tests now measure. The general lesson is not "extrude deeper": it
+   is that a piece has to be identifiable in the projection the camera
+   actually produces, and for a board seen from above that is the plan view.
 
 ### Manual checklist
 

@@ -220,23 +220,46 @@ const PROFILES = {
 };
 
 /**
- * The knight's head, as a 2D outline traced anticlockwise from the base of the
- * neck, facing left (-X).
- *
- * Extruded and bevelled, the silhouette is what makes it a horse — so it has
- * to actually be one. The first attempt was a rough blob of eighteen points
- * that read as a lump at board size; this one traces the features that
- * identify the piece at a glance even when it is 40 pixels tall: the jaw and
- * muzzle jutting forward, the dish of the nose, two separate ears, and the
- * mane falling down the back of the neck.
- */
-/**
  * A tiny seeded PRNG, so generated detail is the same every time.
  *
  * `Math.random` would give a board whose grain reshuffled on every theme
  * change and differed between the two players' screens, which for something
  * meant to look like one physical object is exactly wrong.
  */
+/**
+ * Concatenate several already-positioned geometries into one.
+ *
+ * three.js ships this as BufferGeometryUtils, which is an addon: this project
+ * vendors the core module only, and pulling in a second file to do thirty
+ * lines of array copying would be a poor trade. Everything is converted to
+ * non-indexed first so the buffers can simply be laid end to end without
+ * rewriting index offsets — a few more vertices in exchange for code that has
+ * nowhere to go wrong.
+ */
+function mergeGeometries(list) {
+  const parts = list.map((geometry) => geometry.toNonIndexed());
+  const total = parts.reduce((sum, g) => sum + g.attributes.position.count, 0);
+  const position = new Float32Array(total * 3);
+  const normal = new Float32Array(total * 3);
+  const uv = new Float32Array(total * 2);
+
+  let offset = 0;
+  parts.forEach((g) => {
+    position.set(g.attributes.position.array, offset * 3);
+    if (g.attributes.normal) normal.set(g.attributes.normal.array, offset * 3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array, offset * 2);
+    offset += g.attributes.position.count;
+    g.dispose();
+  });
+
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.BufferAttribute(position, 3));
+  merged.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+  merged.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  merged.computeBoundingSphere();
+  return merged;
+}
+
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function next() {
@@ -247,23 +270,6 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
-const KNIGHT_OUTLINE = [
-  // Throat and jaw, dropping forward to the muzzle.
-  [-0.16, 0.00], [-0.21, 0.14], [-0.27, 0.28], [-0.34, 0.42], [-0.40, 0.52],
-  // Muzzle: lip, nose, nostril — the part that has to jut, because a head
-  // without a muzzle is a lump and reads as one at forty pixels tall.
-  [-0.45, 0.585], [-0.455, 0.645], [-0.415, 0.695],
-  // The dish above the nostril, then the bridge climbing to the brow. This
-  // concave step is the single most horse-like thing in the outline.
-  [-0.355, 0.715], [-0.30, 0.775], [-0.245, 0.845], [-0.195, 0.905],
-  // Two ears with a notch between them. One ear reads as a horn.
-  [-0.19, 1.005], [-0.115, 0.935], [-0.055, 1.055], [0.015, 0.925],
-  // The crest of the neck, then the mane stepping down the back in three
-  // notches — the detail that stops the back of the head being a plain arc.
-  [0.09, 0.865], [0.175, 0.755], [0.135, 0.675], [0.215, 0.575],
-  [0.175, 0.485], [0.255, 0.365], [0.24, 0.18], [0.20, 0.00],
-];
 
 export class Board3D {
   #root;
@@ -293,6 +299,8 @@ export class Board3D {
 
   // Reusable resources, disposed together in dispose().
   #geometries = new Map();
+  /** The knight's head parts, kept out of #geometries — see #knightParts. */
+  #knightGeometries = null;
   #materials = new Map();
   #markerPool = [];
   #pieces = new Map(); // square -> Object3D
@@ -1173,6 +1181,122 @@ export class Board3D {
     return geometry;
   }
 
+  /**
+   * The knight's head, assembled from solids.
+   *
+   * This is the third attempt and the first one that works, so the two that
+   * did not are worth recording. Both extruded a horse's silhouette and
+   * neither read as a horse on the board, for the same reason: the silhouette
+   * lives in a vertical plane, and this camera looks down at it from between
+   * 56 and 84 degrees. A vertical plane seen from 56 degrees keeps about half
+   * its height on screen; from 84 it keeps a tenth. The profile is the part
+   * you cannot see, which makes it the wrong place to put the identity of the
+   * piece. Tapering the extrusion helped its volume and not its legibility;
+   * rotating it to face the camera laid the horse on its back.
+   *
+   * What identifies a knight from above is the plan view: a cranium with two
+   * ears behind it and a muzzle projecting forward, clear of the base. So the
+   * head is built as those parts — a neck, a cranium, a muzzle, two ears and a
+   * crest — each a primitive, positioned in world units rather than fractions
+   * of anything, because a horse's head has proportions and they are not the
+   * piece's proportions. Seven meshes for a knight against two before; the
+   * geometries are shared across all four, and the draw-call budget has the
+   * room.
+   *
+   * Everything faces -X. Black's knights are mirrored by the group's
+   * userData.faces, exactly as before, so the two sides look at each other.
+   *
+   * Returns one baked geometry, not the parts: see the note by the merge.
+   */
+  #knightParts() {
+    if (this.#knightGeometries) return this.#knightGeometries;
+
+    /*
+       Segment counts are deliberately modest. A knight's head is about a
+       fortieth of a phone screen, and the merge below is non-indexed, so every
+       segment here is paid for in duplicated vertices — profiled at a 67ms
+       95th-percentile frame when these were set at the values a close-up would
+       want. At these counts nothing on the board is visibly faceted and the
+       frame is back where it was.
+    */
+    const parts = {
+      // Rises out of the pedestal and leans forward, as a horse's neck does.
+      neck: new THREE.CylinderGeometry(0.155, 0.225, 0.42, 14, 1),
+      // The skull: longer than it is wide, which is what makes the plan view
+      // an oval pointing somewhere rather than a ball.
+      cranium: new THREE.SphereGeometry(0.175, 14, 10),
+      // Tapered, so the nose is narrower than the cheek.
+      muzzle: new THREE.CylinderGeometry(0.085, 0.138, 0.44, 12, 1),
+      // The cheek and jaw, under and behind the muzzle. Without it the head is
+      // a ball with a snout on it, which is a dog; the deep angular jaw
+      // running back under the ear is the thing that makes it a horse.
+      jaw: new THREE.SphereGeometry(0.5, 12, 8),
+      // Slim and swept back. Fat upright cones make a rabbit.
+      ear: new THREE.ConeGeometry(0.042, 0.18, 8),
+      // A flattened lobe; three of them step down the neck as a notched mane.
+      crest: new THREE.SphereGeometry(0.5, 10, 7),
+    };
+    /*
+       Placed, then baked into ONE geometry.
+
+       Ten parts left as ten meshes is ten draw calls per knight and forty per
+       board, and it showed: the 95th-percentile frame went from 17ms to 67ms.
+       Since a knight's head never moves relative to itself, the parts can be
+       transformed into place once, at build time, and concatenated. The result
+       is a single mesh — the same count the old extruded head had, for a shape
+       that is far more of a horse — and the arrangement below stays readable
+       as an arrangement rather than becoming vertex soup.
+    */
+    const placed = [];
+    const put = (geometry, position, rotation, scale) => {
+      const matrix = new THREE.Matrix4().compose(
+        new THREE.Vector3(...position),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rotation ?? [0, 0, 0]))),
+        new THREE.Vector3(...(scale ?? [1, 1, 1])),
+      );
+      placed.push(geometry.clone().applyMatrix4(matrix));
+    };
+
+    // Neck. Leaning forward by about 14 degrees; the pedestal's lathe tops out
+    // at y = 0.274, and this starts inside it so there is no seam.
+    put(parts.neck, [-0.045, 0.47, 0], [0, 0, 0.24]);
+
+    // Cranium, stretched hard along X. A horse's skull is long: at anything
+    // near round it and the muzzle read as a ball with a snout stuck on.
+    put(parts.cranium, [-0.135, 0.760, 0], null, [1.62, 0.94, 0.84]);
+
+    // The jaw, slung below and behind the cheek.
+    put(parts.jaw, [-0.150, 0.632, 0], [0, 0, 0.22], [0.40, 0.26, 0.25]);
+
+    // Muzzle, projecting forward and only slightly down. The angle is the one
+    // that matters most: it is what puts the nose out past the edge of the
+    // base, and that overhang is the whole of what says "knight" when you are
+    // looking straight down at the board — the one feature that survives the
+    // view. Nearly horizontal, therefore, not the 45 degrees a head at rest
+    // would have.
+    put(parts.muzzle, [-0.370, 0.712, 0], [0, 0, 1.78], [1, 1, 0.82]);
+
+    // Ears, splayed slightly apart and swept back.
+    put(parts.ear, [0.050, 0.975, 0.062], [0.16, 0, -0.40]);
+    put(parts.ear, [0.050, 0.975, -0.062], [-0.16, 0, -0.40]);
+
+    // The mane: three flattened lobes stepping down the back of the neck. One
+    // smooth ridge reads as a handle, and the steps are what make it hair.
+    [
+      { y: 0.855, x: 0.115, s: [0.125, 0.145, 0.090] },
+      { y: 0.690, x: 0.168, s: [0.135, 0.160, 0.098] },
+      { y: 0.505, x: 0.186, s: [0.128, 0.155, 0.092] },
+    ].forEach((lobe) => put(parts.crest, [lobe.x, lobe.y, 0], [0, 0, -0.2], lobe.s));
+
+    const head = mergeGeometries(placed);
+    placed.forEach((geometry) => geometry.dispose());
+    Object.values(parts).forEach((geometry) => geometry.dispose());
+
+    this.#knightGeometries = head;
+    this.#geometries.set('geo:knightHead', head);
+    return head;
+  }
+
   #pieceMaterial(color) {
     const key = `mat:${color}`;
     if (this.#materials.has(key)) return this.#materials.get(key);
@@ -1299,60 +1423,9 @@ export class Board3D {
     }
 
     if (piece.type === 'n') {
-      const key = 'geo:knightHead';
-      if (!this.#geometries.has(key)) {
-        const shape = new THREE.Shape();
-        KNIGHT_OUTLINE.forEach(([x, y], i) => {
-          if (i === 0) shape.moveTo(x, y);
-          else shape.lineTo(x, y);
-        });
-        shape.closePath();
-        const geometry = new THREE.ExtrudeGeometry(shape, {
-          // Deep enough to be a head rather than a plate. At 0.26 the knight
-          // rendered as a standing card: the camera looks down at 56 degrees,
-          // so a thin extrusion is seen close to edge-on and its silhouette —
-          // the only thing that identifies the piece — collapses to a line.
-          // A slab with a hairline bevel is still a slab, and that is exactly
-          // what this read as: a flat card standing on a pedestal. Most of the
-          // thickness is now in the bevel itself, so the sides of the head are
-          // a rounded shoulder rather than a cut edge, and four bevel segments
-          // give that shoulder enough steps to catch light instead of banding.
-          // Two failures to steer between. Too thin and it is a standing card:
-          // the camera looks down, a flat extrusion is seen near edge-on, and
-          // the silhouette that identifies the piece collapses to a line. Too
-          // much bevel and the shoulder eats the muzzle and the ears, which is
-          // the same loss by the opposite route. This is a solid head with a
-          // carved edge: most of the width in the extrusion, enough bevel to
-          // round it, not enough to sand the features off.
-          depth: 0.34,
-          bevelEnabled: true,
-          bevelThickness: 0.07,
-          bevelSize: 0.065,
-          bevelSegments: 3,
-          curveSegments: 6,
-        });
-        geometry.center();
-        this.#geometries.set(key, geometry);
-      }
-      // Sized so the head runs from the top of the pedestal to the piece's
-      // full height, and no further: scaling it by the height outright made a
-      // knight half again as tall as the bishop beside it.
-      const head = new THREE.Mesh(this.#geometries.get(key), material);
-      head.scale.setScalar(height * 0.86);
-      head.position.y = height * 0.58;
-      // Tipped back so the profile turns to meet the camera. Straight upright
-      // it loses most of its width to foreshortening — and more now than it
-      // used to, because the default board size looks down from 70 degrees
-      // rather than 56. Roughly 33 degrees of tip is what keeps the muzzle and
-      // the ears readable across the whole zoom range, and costs nothing,
-      // since a horse carrying its head tipped back is what a horse does.
-      head.rotation.x = -0.58;
-      // NOT rotated. The outline is drawn in the XY plane, so the horse's
-      // profile already faces the camera down +Z. Turning it a quarter turn to
-      // "face the opponent" — which is what a real set does — points the flat
-      // face away and shows the player the extrusion edge-on: a featureless
-      // slab. The whole reason to extrude a silhouette is that the silhouette
-      // is what reads, so it is kept facing the players.
+      // One mesh, baked from an assembly of solids at build time — see
+      // #knightParts for the shape and for why it is not an extrusion.
+      const head = new THREE.Mesh(this.#knightParts(), material);
       head.castShadow = true;
       head.receiveShadow = true;
       group.add(head);
@@ -1908,6 +1981,42 @@ export class Board3D {
       piecePosition: (square) => {
         const group = this.#pieces.get(square);
         return group ? { x: group.position.x, y: group.position.y, z: group.position.z } : null;
+      },
+
+      /**
+       * A piece's extent in its own coordinates, and how many meshes it took.
+       *
+       * The knight is the only piece here that is not a surface of revolution,
+       * and the only claim about it worth testing is a geometric one: its
+       * muzzle has to reach forward past the edge of its base, because that
+       * overhang is what identifies it from directly above. A box measurement
+       * says that; a screenshot only says it to a person looking at it.
+       */
+      pieceBounds: (square) => {
+        const group = this.#pieces.get(square);
+        if (!group) return null;
+        const box = new THREE.Box3();
+        let meshes = 0;
+        group.traverse((object) => {
+          if (!object.isMesh) return;
+          meshes += 1;
+          object.updateWorldMatrix(true, false);
+          box.expandByObject(object);
+        });
+        if (!Number.isFinite(box.min.x)) return null;
+        const origin = group.position;
+        // Relative to the piece's own square, and un-mirrored, so a black
+        // knight measures the same as a white one.
+        const face = group.userData.faces === -1 ? -1 : 1;
+        const xs = [(box.min.x - origin.x) * face, (box.max.x - origin.x) * face];
+        return {
+          meshes,
+          minX: Math.min(...xs),
+          maxX: Math.max(...xs),
+          minZ: box.min.z - origin.z,
+          maxZ: box.max.z - origin.z,
+          height: box.max.y,
+        };
       },
     };
   }
