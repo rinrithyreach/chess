@@ -663,7 +663,7 @@ errors in every browser and viewport tested**:
 | Layout (Chromium) | 145 | 9 viewports: overflow, board geometry, touch targets |
 | Interaction (Chromium) | 42 | Real page refresh, drag-and-drop, keyboard, clipboard |
 | **Resume after refresh (Chromium)** | **42** | **The dialog is the app's own, appears only after a reload, and all three answers do the right thing** |
-| **Multiplayer (Chromium ×2)** | **71** | **Two devices against the Firebase emulator** |
+| **Multiplayer (Chromium ×2)** | **82** | **The setup form follows the chosen mode, then two devices against the Firebase emulator** |
 | **Animation (Chromium)** | **42** | **The move animation actually runs, every time, and leaves nothing stranded** |
 | **3D board (Chromium)** | **48** | **All 64 squares pick correctly; play, flip, themes, keyboard, GPU teardown** |
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |

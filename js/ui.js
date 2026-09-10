@@ -62,7 +62,7 @@ export class UI {
     const ids = [
       'screen-menu', 'screen-setup', 'screen-game',
       'btn-new-game', 'btn-continue-game', 'continue-meta', 'btn-menu-settings',
-      'btn-setup-back', 'form-new-game', 'input-white', 'input-black',
+      'btn-setup-back', 'form-new-game', 'btn-start-game', 'input-white', 'input-black',
       'btn-game-menu', 'btn-game-settings',
       'card-top', 'card-bottom', 'top-name', 'top-color', 'top-turn',
       'bottom-name', 'bottom-color', 'bottom-turn',
@@ -703,8 +703,17 @@ export class UI {
     this.#dom['btn-setup-back']?.addEventListener('click', () => this.showScreen('menu'));
     this.#dom['form-new-game']?.addEventListener('submit', (event) => {
       event.preventDefault();
+      const mode = this.#selectedMode();
+
+      // Online has no Start: the game begins when somebody joins, so the room
+      // buttons are the only way in. Hiding the button is not enough on its
+      // own — a hidden submit button is still the form's default button, so
+      // Enter in the room-code field would submit anyway, and a submit online
+      // starts a two-player game on the wrong session. Refuse it here.
+      if (mode === GAME_MODE.ONLINE) return;
+
       this.#call('onStartGame', {
-        mode: this.#selectedMode(),
+        mode,
         whiteName: this.#dom['input-white']?.value ?? '',
         blackName: this.#dom['input-black']?.value ?? '',
       });
