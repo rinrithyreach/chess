@@ -170,7 +170,7 @@
             <div class="join-row">
               <!-- maxlength is re-applied from ROOM_CODE_LENGTH at startup. -->
               <input class="field__input field__input--code" type="text" id="input-room-code"
-                     maxlength="4" autocomplete="off" spellcheck="false"
+                     maxlength="6" autocomplete="off" spellcheck="false"
                      placeholder="CODE" aria-label="Room code"
                      inputmode="latin" autocapitalize="characters">
               <button type="button" class="btn btn--ghost" id="btn-join-room">Join</button>
@@ -193,7 +193,7 @@
       <div class="room-code" id="room-code-display">
         <!-- The dashes are a placeholder only: UI sets how many from
              ROOM_CODE_LENGTH before this is ever shown. -->
-        <span class="room-code__value" id="room-code-value">----</span>
+        <span class="room-code__value" id="room-code-value">------</span>
         <button type="button" class="icon-btn" id="btn-copy-code" aria-label="Copy room code">⧉</button>
       </div>
 
@@ -217,7 +217,7 @@
     <!-- Online room bar: only rendered for network games -->
     <div class="room-bar" id="room-bar" hidden>
       <span class="room-bar__code">
-        Room <strong id="room-bar-code">----</strong>
+        Room <strong id="room-bar-code">------</strong>
       </span>
       <span class="room-bar__status" id="room-bar-status" data-state="connecting">
         <span class="room-bar__dot" aria-hidden="true"></span>

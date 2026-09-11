@@ -44,6 +44,7 @@ import {
   EMULATOR,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
+  ONLINE_AVATARS,
   isFirebaseConfigured,
   firebaseConfigError,
   isEmulatorMode,
@@ -133,10 +134,14 @@ export function normalizeRoomCode(input) {
  * the right outcome but a confusing thing to read in a transaction that is
  * building a record from scratch — and the rules validate `avatar` only when
  * it is present, so an absent key is the shape they are written for.
+ *
+ * ONLINE_AVATARS gates it entirely: while the deployed rules do not know the
+ * field, sending one does not merely lose the picture, it makes the room write
+ * illegal and the game unstartable. See js/firebase-config.js.
  */
 function seatRecord(uid, name, avatar) {
   const seat = { uid, name, connected: true };
-  if (isAvatar(avatar)) seat.avatar = avatar;
+  if (ONLINE_AVATARS && isAvatar(avatar)) seat.avatar = avatar;
   return seat;
 }
 
@@ -966,6 +971,11 @@ export class FirebaseSession {
       // here rather than anywhere downstream. The security rules cap its size
       // and shape too, but rules protect the ROOM; this is what protects this
       // device from whatever a modified client felt like writing.
+      //
+      // Left reading the field even while ONLINE_AVATARS is off. Nothing this
+      // build writes will be there, but a peer on a build that does write one
+      // costs nothing to display, and this is the check that makes doing so
+      // safe either way.
       players: {
         [WHITE]: {
           name: players[WHITE]?.name ?? 'Waiting…',

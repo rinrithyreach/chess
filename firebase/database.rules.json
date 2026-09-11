@@ -7,7 +7,7 @@
       "$roomCode": {
         ".read": "auth != null",
 
-        ".write": "auth != null && ($roomCode.matches(/^[A-HJ-NP-Z2-9]{4}$/)) && (!data.exists() || data.child('players/w/uid').val() === auth.uid || data.child('players/b/uid').val() === auth.uid || !data.child('players/w/uid').exists() || !data.child('players/b/uid').exists())",
+        ".write": "auth != null && ($roomCode.matches(/^[A-HJ-NP-Z2-9]{6}$/)) && (!data.exists() || data.child('players/w/uid').val() === auth.uid || data.child('players/b/uid').val() === auth.uid || !data.child('players/w/uid').exists() || !data.child('players/b/uid').exists())",
 
         ".validate": "newData.hasChildren(['status', 'fen', 'turn', 'players'])",
 
@@ -71,9 +71,6 @@
             },
             "name": {
               ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20"
-            },
-            "avatar": {
-              ".validate": "newData.isString() && newData.val().length <= 24576 && newData.val().matches(/^data:image\\/(png|jpeg|webp);base64,/)"
             },
             "connected": { ".validate": "newData.isBoolean()" },
             "$other": { ".validate": false }

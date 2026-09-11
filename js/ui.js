@@ -24,7 +24,7 @@ import {
   warn,
 } from './config.js';
 import { fileToAvatar, isAvatar } from './avatar.js';
-import { ROOM_CODE_LENGTH } from './firebase-config.js';
+import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
 
 /** What an empty room code looks like: one dash per character. */
 const ROOM_CODE_BLANK = '-'.repeat(ROOM_CODE_LENGTH);
@@ -197,6 +197,16 @@ export class UI {
     document.querySelectorAll('.avatar-picker').forEach((node) => {
       const slot = node.dataset.avatarSlot;
       if (!slot) return;
+
+      // A picture cannot reach the other device while the deployed rules
+      // reject the field, so the online seat does not offer one. Better no
+      // control than a control that quietly does nothing — and hiding it is
+      // driven by the same flag the session reads, so the two cannot disagree.
+      if (slot === 'online' && !ONLINE_AVATARS) {
+        node.hidden = true;
+        return;
+      }
+
       this.#avatarPickers.set(slot, node);
       // Stashed on the element so #showAvatar can rewrite the accessible name
       // without having to be told which seat it is looking at.

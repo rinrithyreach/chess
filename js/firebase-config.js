@@ -147,25 +147,43 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 /**
  * How many characters a room code has.
  *
- * Four. Shorter is genuinely better at the job this code does — it gets read
- * out loud across a room and typed with thumbs — and two fewer characters is
- * two fewer chances to mishear a C for a G.
+ * SIX, because that is what the deployed security rules accept. This was four
+ * for a while, which is genuinely the better length — a room code is read out
+ * loud and typed with thumbs, and two fewer characters is two fewer chances to
+ * mishear a C for a G. It went back to six because the rules are the gate: they
+ * match {6}, and a four-character room is refused before anything else about
+ * the request is even considered.
  *
- * What it costs is the size of the space: 32^4 is about a million codes,
- * against a billion at six. That is still far more than enough for codes that
- * live as long as one game, and a collision only costs a retry (createGame
- * tries eight fresh codes before giving up). It does make the space small
- * enough to sweep, though, so a determined stranger could hunt for rooms
- * waiting for a player. There is no rate limiting to stop them — see the
- * Trust model in README.md, which said as much at six characters too.
+ * ONE SOURCE OF TRUTH for the client. Everything derives from this:
+ * generation, the join field's maxlength, the placeholder dashes, the error
+ * text. The one place it cannot reach is the security rules, which import
+ * nothing — so firebase/database.rules.json carries the same number by hand,
+ * and the two must be changed together.
  *
- * ONE SOURCE OF TRUTH. Everything derives from this: generation, the join
- * field's maxlength, the placeholder dashes, the error text. The one place it
- * has to be repeated is the security rules, which cannot import anything —
- * firebase/database.rules.json matches {4} and must be redeployed if this
- * changes, or every room creation will be rejected.
+ * TO GO BACK TO FOUR: set this to 4, change {6} to {4} in the rules file, and
+ * deploy the rules. Doing either without the other breaks every room creation.
  */
-export const ROOM_CODE_LENGTH = 4;
+export const ROOM_CODE_LENGTH = 6;
+
+/**
+ * Do profile pictures travel to the other device?
+ *
+ * No, because the deployed rules end `players/$color` with
+ * `"$other": { ".validate": false }` and know nothing about an `avatar` field,
+ * so a seat carrying one is rejected outright — taking the whole room write
+ * with it, which is the difference between "no picture" and "cannot create a
+ * room at all".
+ *
+ * Pictures still work everywhere the database is not involved: local two-player
+ * and bot games are unaffected, and the New Game form still remembers them.
+ * Only the online seats go without.
+ *
+ * TO TURN THIS ON: add the `avatar` rule to firebase/database.rules.json, and
+ * deploy it, then set this to true. In that order — the rules first, because a
+ * client that sends a field the rules do not know about cannot create rooms.
+ * The rule that does it is in git history at commit 2dc721e.
+ */
+export const ONLINE_AVATARS = false;
 
 /**
  * Is online play available?
