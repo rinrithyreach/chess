@@ -249,8 +249,8 @@ cannot legally reach is animated back rather than teleported. The timings live
 in `config.js` and the tests read them from there, so tuning them cannot leave
 a stale number behind in an assertion.
 
-**Board size**, in the control row next to Flip, in three steps: *Fit*,
-*Large* (the default) and *Max*. It is zoom, but implemented as camera
+**Board size**, in the control row next to Flip, in three steps: *Fit* (the
+default), *Large* and *Max*. It is zoom, but implemented as camera
 elevation rather than as a dolly, which sounds like the wrong lever until you
 measure the board. On a 412px phone the frame is square while the board, seen
 from 56 degrees, projects about 1.35 times wider than tall — roughly 110px of
@@ -829,7 +829,7 @@ Game* is only offered for a valid, unfinished game.
 The app ships with no test dependencies; verification is run from outside the
 project. Fifteen suites cover the game itself — **815 assertions, all passing,
 with zero console errors in every browser and viewport tested** — and
-eight more cover profile pictures, the room code and the mobile board, a further **161 assertions**, run against the
+eight more cover profile pictures, the room code and the mobile board, a further **164 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator. The
 two groups were run separately, so the totals are reported separately rather
 than as one number:
@@ -856,7 +856,7 @@ than as one number:
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | **Live two-device game (Chromium ×2 + real project)** | **11** | **Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, no pictures online, room deleted afterwards** |
-| **Mobile board + captures (Chromium)** | **21** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
+| **Mobile board + captures (Chromium)** | **24** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
 | **Room code length (Chromium + emulator)** | **14** | **Six characters everywhere the length appears independently: the constant, `ONLINE_AVATARS`, the normaliser, the join field's maxlength and typing limit, both placeholders, and the security rules — which cannot import the constant, so they are checked to accept 6 and reject 3, 4 and look-alike characters** |
 
@@ -1111,13 +1111,31 @@ the DOM**. Set it to `false` before shipping.
     36px — the hardest square on the board to hit. The board-size control
     fixes most of that by raising the camera rather than dollying in, which
     spends the empty sky a tilted board leaves in a square frame instead of
-    cropping anything. Measured on that phone: **23.9px on the far rank at
-    Fit, 32.1px at Large (the default), 41.8px at Max, where every square is
-    within 3px of every other**. Max is a few pixels short of the 44px
-    guideline on the far rank and about 5px short on a 360px phone, so this is
-    reduced rather than eliminated. Every square is still reachable regardless
-    — picking is a raycast against real geometry, and all 64 are verified
-    individually at every zoom level.
+    cropping anything.
+
+    **The default is Fit, which is the level that costs the most here.** It is
+    chosen for how the board looks rather than for reach, and the numbers are
+    worth stating plainly. Measured through the live camera on a 390px phone,
+    with the board now running edge to edge:
+
+    | Level | Board drawn | Far rank | Near rank | Far square area |
+    | --- | --- | --- | --- | --- |
+    | **Fit** (default) | 321px (82% of the screen) | **24px** | 36px | 745px² |
+    | Large | 345px (88%) | 32px | 43px | 1171px² |
+    | Max | 366px (94%) | 42px | 47px | 1819px² |
+
+    So a far-rank square at Fit is under half the area of one at Max, and a
+    24px target against the 44px this app uses everywhere else. Fit also draws
+    the board across only 82% of the screen even though the canvas is full
+    width — that is the level's own geometry rather than slack, because the
+    camera reserves headroom for a king standing on the far rank, which at a
+    low angle projects well above the board.
+
+    None of this is a trap: the Size control cycles the three levels and says
+    which one you are on, so a player who finds the back rank fiddly is one tap
+    from Large and two from Max, and the choice is remembered. Every square is
+    reachable at every level regardless — picking is a raycast against real
+    geometry, and all 64 are verified individually at every zoom level.
 5. **PGN import is not implemented.** Export and clipboard copy work; the
    engine already exposes `loadPgn()`, so import is a small addition.
 6. **No clocks.** Timers are Phase 3.

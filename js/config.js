@@ -142,14 +142,26 @@ export const BOARD_ZOOM_LEVELS = [
 ];
 
 /**
- * Large, not Fit.
+ * Fit — the first level, and the cinematic angle.
  *
- * The 3D board is the only board now, and on a phone the cinematic angle makes
- * the back rank a 23px target. Defaulting to the middle step is the difference
- * between a board that is pleasant to look at and one that is pleasant to
- * play; anyone who prefers the low angle is one tap away from it.
+ * This is a deliberate choice of looks over reach, and it is worth being
+ * precise about what it trades. Measured through the live camera on a 390px
+ * phone, with the board now running edge to edge:
+ *
+ *   Fit    far square 31x24   near 40x36
+ *   Large  far square 36x32   near 43x43
+ *   Max    far square 43x42   near 46x47
+ *
+ * So the back rank is a 24px target here against 42px at Max. That is well
+ * under the 44px this app uses everywhere else, and it is the cost of seeing
+ * the board in perspective: a board drawn at an angle cannot hold the same
+ * target on every rank, because that is what perspective means.
+ *
+ * It is a default, not a decision. The Size control cycles the three levels
+ * and says which one you are on, so a player who finds the back rank fiddly is
+ * one tap from Large and two from Max — and the choice is remembered.
  */
-export const DEFAULT_BOARD_ZOOM = 1;
+export const DEFAULT_BOARD_ZOOM = 0;
 
 export function clampBoardZoom(level) {
   const n = Number(level);
