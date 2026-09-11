@@ -160,6 +160,19 @@ and controls keep their margins. On a 390px phone the board went from 348px to
 384px: a tenth wider, a fifth more area. Tablets and desktop are untouched —
 there the board is capped long before the screen runs out.
 
+**Drawn header icons** — the menu and settings buttons are inline SVG rather
+than the `☰` and `⚙` characters. A text glyph is at the mercy of whatever font
+the device falls back to: `⚙` lands thin and spindly on most, and as a *colour
+emoji* on some, which ignores the CSS `color` entirely and so cannot be tinted
+to match the button it sits in or respond to hover. The drawn versions use
+`currentColor`, so every state the button already had keeps working with
+nothing added. Both are generated shapes rather than an imported icon set, so
+there is no third-party licence or attribution attached.
+
+The `←` and `⧉` buttons are still glyphs. `⧉` (U+29C9) is the one with real
+risk left in it — font coverage is patchy and it can land as a missing-glyph
+box — so it is the next one worth drawing.
+
 **Game management** — restart (local), resign, rematch, board flip, and copy
 PGN. The control row is **Undo, Flip, Resign**.
 
