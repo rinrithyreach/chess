@@ -133,10 +133,31 @@ URLs of `png`, `jpeg` or `webp` are ever rendered: never a remote URL, which
 could otherwise report who looked at the board, and never SVG, which is a
 document rather than a picture.
 
-**Captured pieces, on both sides** — each player card shows the pieces that
-player has taken, strongest first, with the running material lead (`+2`) on
-whoever is ahead. They share the line with the colour label, so the pile costs
-the card no extra height on a phone.
+**Captured pieces, either side of the board** — the pieces each player has
+taken sit in a column beside the board: the left one belongs to the player at
+the top and fills downward, the right one to the player at the bottom and fills
+upward, so a pile always starts at the same edge as the card it belongs to.
+Both follow a board flip. The running material lead (`+2`) stays on the card,
+next to the name, because that is the part you read at a glance.
+
+The columns are **overlaid, not laid out beside the board**, and that is the
+whole trick. The board is square and limited by width, so a column in the flow
+costs a pixel off each side of every square — measured at 14%, more than the
+full-bleed change had just won back. It does not have to cost anything, because
+the canvas is already not full of board: the camera reserves headroom for a
+king standing on the far rank, so at the default angle the board is drawn
+across 84% of the canvas and the rest is empty either side. 32px of it on a
+390px phone, against a 20px column. The tray goes there, free.
+
+That margin narrows as the camera rises, so the board takes real padding at
+**Max** alone, where there is none left to borrow. Measured, with the tray
+clearing the board at every level:
+
+| Level | Board drawn | Margin per side | Tray | Overlap |
+| --- | --- | --- | --- | --- |
+| Fit (default) | 321px | 32px | 20px | none |
+| Large | 345px | 20px | 20px | none |
+| Max | 328px | 8px | 20px | none (board padded) |
 
 The piles come from the **move history**, not from comparing the position
 against a full starting set. That distinction is the whole correctness story: a
@@ -842,7 +863,8 @@ Game* is only offered for a valid, unfinished game.
 The app ships with no test dependencies; verification is run from outside the
 project. Fifteen suites cover the game itself — **815 assertions, all passing,
 with zero console errors in every browser and viewport tested** — and
-eight more cover profile pictures, the room code and the mobile board, a further **164 assertions**, run against the
+nine more cover profile pictures, the room code, the mobile board and the
+capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator. The
 two groups were run separately, so the totals are reported separately rather
 than as one number:
@@ -869,6 +891,7 @@ than as one number:
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | **Live two-device game (Chromium ×2 + real project)** | **11** | **Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, no pictures online, room deleted afterwards** |
+| **Capture trays (Chromium)** | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at all three zooms — must vanish when empty, must follow a board flip, and a full pile of 15 must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
 | **Mobile board + captures (Chromium)** | **24** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
 | **Room code length (Chromium + emulator)** | **14** | **Six characters everywhere the length appears independently: the constant, `ONLINE_AVATARS`, the normaliser, the join field's maxlength and typing limit, both placeholders, and the security rules — which cannot import the constant, so they are checked to accept 6 and reject 3, 4 and look-alike characters** |
@@ -1019,7 +1042,8 @@ And two from building that WebGL board:
 | 24 | Tap the × on a picker | Picture gone, king glyph back, and it is not offered next time |
 | 25 | Pick a non-image file | Refused with a message naming the problem; nothing changes |
 | 26 | Create a room with the phone's text size at maximum | All six characters of the code still readable |
-| 27 | Capture a piece | It appears on the capturing player's card, in the other side's colour |
+| 27 | Capture a piece | It appears in the tray at that player's end of the board, in the other side's colour |
+| 27b | Flip the board after an even trade | Both piles swap sides and keep their own colours |
 | 28 | Trade evenly, then win a piece | The lead badge appears only on the side that is ahead, and vanishes at level material |
 | 29 | Promote a pawn | Neither pile changes — a promotion is not a capture |
 | 30 | Play on a phone | The board reaches both edges of the screen; cards and controls keep their margins |

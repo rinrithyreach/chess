@@ -99,8 +99,8 @@ export class UI {
       'btn-game-menu', 'btn-game-settings',
       'card-top', 'card-bottom', 'top-name', 'top-color', 'top-turn',
       'bottom-name', 'bottom-color', 'bottom-turn',
-      'top-captures', 'bottom-captures', 'top-edge', 'bottom-edge',
-      'board', 'status', 'status-text', 'status-badge',
+      'tray-top', 'tray-bottom', 'top-edge', 'bottom-edge',
+      'board', 'board-area', 'status', 'status-text', 'status-badge',
       'btn-undo', 'btn-flip', 'btn-resign', 'btn-zoom', 'zoom-label',
       'history-panel', 'btn-history-toggle', 'history-list', 'history-count',
       'modal-promotion', 'promotion-choices',
@@ -370,6 +370,12 @@ export class UI {
   #renderZoomControl(settings = {}) {
     const zoom = BOARD_ZOOM_LEVELS[clampBoardZoom(settings.boardZoom)];
     if (this.#dom['zoom-label']) this.#dom['zoom-label'].textContent = zoom.label;
+
+    // How much empty margin the camera leaves either side of the board depends
+    // on the angle, and that is what decides whether the capture trays can sit
+    // in it for free. CSS needs to know which level is on — see .board-area
+    // in board.css.
+    this.#dom['board-area']?.setAttribute('data-zoom', zoom.id);
     // The accessible name carries what pressing it does; the visible label only
     // has room to say where you are now.
     this.#dom['btn-zoom']?.setAttribute(
@@ -490,7 +496,7 @@ export class UI {
    * that usually has not changed at all.
    */
   #renderCaptures(prefix, taken, color) {
-    const strip = this.#dom[`${prefix}-captures`];
+    const strip = this.#dom[`tray-${prefix}`];
     const edgeEl = this.#dom[`${prefix}-edge`];
     if (!strip || !edgeEl) return;
 
@@ -503,7 +509,14 @@ export class UI {
     const sorted = [...mine].sort(
       (a, b) => CAPTURE_ORDER.indexOf(a) - CAPTURE_ORDER.indexOf(b),
     );
-    const key = `${sorted.join('')}|${edge}`;
+    // The colour is part of the key, not just the pieces.
+    //
+    // A tray belongs to whichever player is at that end of the board, and a
+    // flip swaps them. When both piles happen to hold the same pieces — after
+    // an even trade, which is common — a key of pieces alone is unchanged
+    // across the flip, the early return fires, and the tray keeps the previous
+    // player's pile: the right shapes in the wrong colour.
+    const key = `${color}|${sorted.join('')}|${edge}`;
     if (strip.dataset.key === key) return;
     strip.dataset.key = key;
 

@@ -70,11 +70,28 @@
 .board-area {
   display: flex;
   justify-content: center;
+  /* The capture trays are positioned against this box, so they span exactly
+     the board's height whatever the board is sized to. */
+  position: relative;
+}
+
+/*
+   At the top zoom the board is drawn across 94% of the canvas, so there is no
+   longer any empty margin for the trays to sit in. Here alone they cost real
+   width, because the alternative is a pile of captured pieces sitting on top
+   of the a- and h-files.
+*/
+.board-area[data-zoom="max"] {
+  padding-left: 20px;
+  padding-right: 20px;
 }
 
 .board-frame {
   width: min(94vw, 560px);
   max-width: 100%;
+  /* A flex item beside the trays; without this its content sets a floor and
+     the row would rather overflow than let the board give up any width. */
+  min-width: 0;
   padding: 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);

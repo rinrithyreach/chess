@@ -935,32 +935,90 @@ body.is-modal-open {
   text-transform: uppercase;
 }
 
-.player-card__captures {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  overflow: hidden;
-}
-
 /*
   The glyphs overlap slightly. A full set of captures is fifteen pieces and a
   phone card has room for about eight at their natural width; tucking each one
   a third behind the last fits the lot while leaving every piece identifiable,
   which is the same trick a stack of poker chips uses.
 */
+/*
+   The taken pieces, in a column either side of the board.
+
+   Overlaid rather than laid out beside it, and that is the whole trick. The
+   board is square and limited by WIDTH, so a column in the flow costs a pixel
+   off each side of every square — measured at 14% of the board, which is more
+   than the full-bleed change had just won back.
+
+   It does not have to cost anything, because the canvas is already not full of
+   board. The camera reserves headroom for a king standing on the far rank, so
+   at the low angle the board is drawn across about 84% of the canvas and the
+   rest is empty sky either side: 32px of it on a 390px phone, against a 26px
+   column. The tray goes there, for free.
+
+   That margin shrinks as the camera rises — 23px at Large, 12px at Max — so
+   the board-area takes real padding at Max, where there is no longer room to
+   borrow. See [data-zoom] below.
+*/
+.capture-tray {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /*
+    20px, which is the margin the camera leaves at the MIDDLE zoom — the
+    tightest level the tray still has to fit inside. Sizing to the widest
+    level instead put 3px of captured pieces on top of the a-file.
+  */
+  width: 20px;
+  padding: 6px 0;
+  border-radius: 999px;
+  /*
+    A faint column behind the pile, so a handful of small glyphs against a
+    board reads as a deliberate tray rather than as pieces that have come
+    loose. It hugs the pile rather than running the board's full height —
+    an empty full-height panel is just a stripe.
+  */
+  background: rgba(255, 255, 255, 0.06);
+  /* Decoration over a board that is tapped: never intercept a move. */
+  pointer-events: none;
+}
+
+/* Nothing taken yet means nothing to show, not an empty pill. */
+.capture-tray:empty {
+  display: none;
+}
+
+/* Each pile grows from the same edge as the card of the player it belongs to. */
+.capture-tray--top {
+  left: 0;
+  top: 2px;
+}
+
+.capture-tray--bottom {
+  right: 0;
+  bottom: 2px;
+}
+
 .capture {
   font-family:
     "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
     "DejaVu Sans", "FreeSerif", sans-serif;
   font-variant-emoji: text;
   flex: none;
-  margin-right: -0.28em;
-  font-size: 1rem;
+  /*
+    The glyphs overlap vertically. A full pile is fifteen pieces and the column
+    is as tall as the board — about 340px on a phone, which fifteen glyphs at
+    their natural line height do not fit. Tucking each one a quarter behind the
+    last does, and still leaves every piece identifiable: the same trick a
+    stack of poker chips uses.
+  */
+  margin-bottom: -0.25em;
+  font-size: 0.95rem;
   line-height: 1;
 }
 
 .capture:last-child {
-  margin-right: 0;
+  margin-bottom: 0;
 }
 
 /*
@@ -978,7 +1036,7 @@ body.is-modal-open {
 }
 
 .capture[data-color="b"] {
-  color: #7e8ba6;
+  color: #94a1bd;
 }
 
 /* Only ever shown on the side that is actually ahead. */
