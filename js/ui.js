@@ -23,6 +23,7 @@ import {
   TOAST_MS,
   warn,
 } from './config.js';
+import { fileToAvatar, isAvatar } from './avatar.js';
 
 // See TEXT_PRESENTATION in board.js: without it these can render as colour
 // emoji, which ignore CSS `color` and make white pieces paint black.
@@ -54,6 +55,15 @@ export class UI {
   #confirmDismiss = false;
   #confirmAltValue = 'alt';
   #historyExpanded = false;
+
+  /**
+   * The picker element for each New Game seat, by slot id.
+   *
+   * Held rather than re-queried because the same three elements are read on
+   * every sync and written on every pick, and because the slot ids come from
+   * the markup — one place decides which seats exist, and it is the form.
+   */
+  #avatarPickers = new Map();
 
   constructor(controller) {
     this.#controller = controller;
@@ -176,6 +186,18 @@ export class UI {
       lock.setAttribute('aria-hidden', 'true');
       lock.textContent = '🔒';
       button.append(lock);
+    });
+
+    // Profile-picture pickers. The markup declares which seats have one, via
+    // `data-avatar-slot`, so adding a seat to the form is the whole change.
+    document.querySelectorAll('.avatar-picker').forEach((node) => {
+      const slot = node.dataset.avatarSlot;
+      if (!slot) return;
+      this.#avatarPickers.set(slot, node);
+      // Stashed on the element so #showAvatar can rewrite the accessible name
+      // without having to be told which seat it is looking at.
+      node.dataset.avatarWho = this.#avatarWho(slot);
+      this.#showAvatar(node, null);
     });
 
     // Theme picker
@@ -412,6 +434,7 @@ export class UI {
 
       const avatar = card?.querySelector('.player-card__avatar');
       if (avatar) avatar.dataset.color = color;
+      this.#renderCardPhoto(card, state.players[color]?.avatar);
 
       const isTurn = state.turn === color && !state.isGameOver;
       if (turnEl) turnEl.hidden = !isTurn;
@@ -420,6 +443,33 @@ export class UI {
 
     apply('top', topColor);
     apply('bottom', bottomColor);
+  }
+
+  /**
+   * Put a player's picture on their card, or fall back to the king glyph.
+   *
+   * Validated here as well as at every other boundary. This is the last point
+   * before a value becomes an `img src`, and online that value came off the
+   * network — so it is checked where it is used rather than only where it was
+   * received.
+   *
+   * `src` is only assigned when it actually changes. render() runs on every
+   * move, and reassigning the same data URL restarts the decode: the card
+   * would blink once per move for the whole game.
+   */
+  #renderCardPhoto(card, avatar) {
+    const photo = card?.querySelector('.player-card__photo');
+    const glyph = card?.querySelector('.player-card__glyph');
+    if (!photo || !glyph) return;
+
+    const usable = isAvatar(avatar);
+    if (usable) {
+      if (photo.getAttribute('src') !== avatar) photo.setAttribute('src', avatar);
+    } else {
+      photo.removeAttribute('src');
+    }
+    photo.hidden = !usable;
+    glyph.hidden = usable;
   }
 
   #renderStatus({ state }) {
@@ -675,6 +725,64 @@ export class UI {
   }
 
   // -----------------------------------------------------------------------
+  // Profile pictures
+  // -----------------------------------------------------------------------
+
+  /** Show the remembered picture, if any, in each seat's picker. */
+  syncAvatars(avatars = {}) {
+    this.#avatarPickers.forEach((node, slot) => {
+      this.#showAvatar(node, avatars[slot]);
+    });
+  }
+
+  /**
+   * Paint one picker, and say in its accessible name what pressing it does.
+   *
+   * The label has to change with the state: a button that says "Add a picture"
+   * when there already is one is telling a screen-reader user the opposite of
+   * what the sighted user can see.
+   */
+  #showAvatar(node, avatar) {
+    const image = node.querySelector('.avatar-picker__img');
+    const glyph = node.querySelector('.avatar-picker__glyph');
+    const clear = node.querySelector('.avatar-picker__clear');
+    const button = node.querySelector('.avatar-picker__btn');
+    const usable = isAvatar(avatar);
+
+    if (image) {
+      if (usable) image.setAttribute('src', avatar);
+      else image.removeAttribute('src');
+      image.hidden = !usable;
+    }
+    if (glyph) glyph.hidden = usable;
+    if (clear) clear.hidden = !usable;
+    node.classList.toggle('has-photo', usable);
+
+    if (button) {
+      const who = node.dataset.avatarWho ?? 'this player';
+      button.setAttribute(
+        'aria-label',
+        usable ? `Change the profile picture for ${who}` : `Add a profile picture for ${who}`,
+      );
+    }
+  }
+
+  /** What a picker's seat is called, for its accessible name. */
+  #avatarWho(slot) {
+    if (slot === 'p1') return 'Player 1';
+    if (slot === 'p2') return 'Player 2';
+    // The online form asks for YOUR name, so its picker is your own picture.
+    return 'yourself';
+  }
+
+  /** The picture chosen for a seat, or null. Read straight off the preview. */
+  #avatarFor(slot) {
+    const image = this.#avatarPickers.get(slot)?.querySelector('.avatar-picker__img');
+    const src = image?.getAttribute('src');
+    return isAvatar(src) ? src : null;
+  }
+
+  // -----------------------------------------------------------------------
   // Settings
   // -----------------------------------------------------------------------
 
@@ -745,6 +853,52 @@ export class UI {
     this.handlers?.[name]?.(...args);
   }
 
+  /**
+   * Wire every profile-picture picker on the form.
+   *
+   * One loop rather than three sets of handlers, because the three seats
+   * differ only in which slot they write to. The file input is opened from
+   * the button in front of it — a bare file input can show neither a preview
+   * nor a way to take the picture back off.
+   */
+  #attachAvatarPickers() {
+    this.#avatarPickers.forEach((node, slot) => {
+      const file = node.querySelector('.avatar-picker__file');
+      const button = node.querySelector('.avatar-picker__btn');
+      const clear = node.querySelector('.avatar-picker__clear');
+
+      button?.addEventListener('click', () => file?.click());
+
+      clear?.addEventListener('click', () => {
+        this.#showAvatar(node, null);
+        this.#call('onAvatarChange', { slot, avatar: null });
+        this.toast('Picture removed');
+        button?.focus();
+      });
+
+      file?.addEventListener('change', async () => {
+        const [picked] = file.files ?? [];
+        // Cleared straight away, so choosing the same file twice still fires a
+        // change event — otherwise re-picking after a failure does nothing at
+        // all, which reads as the app ignoring you.
+        file.value = '';
+        if (!picked) return;
+
+        node.classList.add('is-busy');
+        const result = await fileToAvatar(picked);
+        node.classList.remove('is-busy');
+
+        if (!result.ok) {
+          this.toast(result.error, 'error');
+          return;
+        }
+
+        this.#showAvatar(node, result.avatar);
+        this.#call('onAvatarChange', { slot, avatar: result.avatar });
+      });
+    });
+  }
+
   #attachListeners() {
     // --- Menu screen ---
     this.#dom['btn-new-game']?.addEventListener('click', () => this.#call('onNewGameScreen'));
@@ -768,8 +922,12 @@ export class UI {
         mode,
         whiteName: this.#dom['input-white']?.value ?? '',
         blackName: this.#dom['input-black']?.value ?? '',
+        whiteAvatar: this.#avatarFor('p1'),
+        blackAvatar: this.#avatarFor('p2'),
       });
     });
+
+    this.#attachAvatarPickers();
 
     // --- Mode toggle: each mode needs a different part of this form ---
     this.#dom['form-new-game']?.addEventListener('change', (event) => {
@@ -778,12 +936,16 @@ export class UI {
     });
 
     this.#dom['btn-create-room']?.addEventListener('click', () =>
-      this.#call('onCreateRoom', this.#dom['input-online-name']?.value ?? ''));
+      this.#call('onCreateRoom', {
+        name: this.#dom['input-online-name']?.value ?? '',
+        avatar: this.#avatarFor('online'),
+      }));
 
     this.#dom['btn-join-room']?.addEventListener('click', () =>
       this.#call('onJoinRoom', {
         code: this.#dom['input-room-code']?.value ?? '',
         name: this.#dom['input-online-name']?.value ?? '',
+        avatar: this.#avatarFor('online'),
       }));
 
     // Room codes are always upper case, and only ever contain code characters.
@@ -797,6 +959,7 @@ export class UI {
       this.#call('onJoinRoom', {
         code: this.#dom['input-room-code']?.value ?? '',
         name: this.#dom['input-online-name']?.value ?? '',
+        avatar: this.#avatarFor('online'),
       });
     });
 

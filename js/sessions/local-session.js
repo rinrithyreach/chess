@@ -48,6 +48,7 @@ import {
   log,
   warn,
 } from '../config.js';
+import { isAvatar } from '../avatar.js';
 
 /** How a finished game ended. */
 export const END_REASON = {
@@ -67,12 +68,28 @@ export const SESSION_ACTION = {
 
 const colorName = (color) => (color === WHITE ? 'White' : 'Black');
 
+/**
+ * Build a player record from whatever a caller supplied.
+ *
+ * One helper for both entry points — a new game and a restored one — because
+ * they are the same problem seen twice: an object of unknown provenance that
+ * has to become a player. The saved record in particular can be anything, so
+ * the picture is validated here rather than trusted and rendered later. An
+ * avatar that does not pass is simply absent; the player keeps their seat.
+ */
+function makePlayer(source, fallbackName) {
+  return {
+    name: source?.name?.trim() || fallbackName,
+    avatar: isAvatar(source?.avatar) ? source.avatar : null,
+  };
+}
+
 export class LocalSession {
   #engine = new ChessEngine();
   #listeners = new Set();
   #players = {
-    [WHITE]: { name: DEFAULT_PLAYER_NAMES.white },
-    [BLACK]: { name: DEFAULT_PLAYER_NAMES.black },
+    [WHITE]: { name: DEFAULT_PLAYER_NAMES.white, avatar: null },
+    [BLACK]: { name: DEFAULT_PLAYER_NAMES.black, avatar: null },
   };
   #status = STATUS.SETUP;
   #result = null;
@@ -92,8 +109,8 @@ export class LocalSession {
   /**
    * Start a new game.
    * @param {object} config
-   * @param {{name:string}} [config.white]
-   * @param {{name:string}} [config.black]
+   * @param {{name:string, avatar?:string}} [config.white]
+   * @param {{name:string, avatar?:string}} [config.black]
    * @param {string} [config.startFen] Non-standard starting position (DEBUG).
    */
   async createGame(config = {}) {
@@ -110,8 +127,8 @@ export class LocalSession {
     }
 
     this.#players = {
-      [WHITE]: { name: config.white?.name?.trim() || DEFAULT_PLAYER_NAMES.white },
-      [BLACK]: { name: config.black?.name?.trim() || DEFAULT_PLAYER_NAMES.black },
+      [WHITE]: makePlayer(config.white, DEFAULT_PLAYER_NAMES.white),
+      [BLACK]: makePlayer(config.black, DEFAULT_PLAYER_NAMES.black),
     };
     this.#mode = config.mode ?? GAME_MODE.LOCAL;
     this.#result = null;
@@ -153,8 +170,8 @@ export class LocalSession {
     }
 
     this.#players = {
-      [WHITE]: { name: saved.players?.[WHITE]?.name || DEFAULT_PLAYER_NAMES.white },
-      [BLACK]: { name: saved.players?.[BLACK]?.name || DEFAULT_PLAYER_NAMES.black },
+      [WHITE]: makePlayer(saved.players?.[WHITE], DEFAULT_PLAYER_NAMES.white),
+      [BLACK]: makePlayer(saved.players?.[BLACK], DEFAULT_PLAYER_NAMES.black),
     };
     this.#mode = saved.mode ?? GAME_MODE.LOCAL;
     this.#startFen = saved.startFen ?? null;
@@ -296,7 +313,7 @@ export class LocalSession {
     return { ok: true, move: undone, state: this.getState() };
   }
 
-  /** Reset the position but keep both player names. */
+  /** Reset the position but keep both players — names and pictures. */
   #restart() {
     this.#engine = new ChessEngine();
     if (this.#startFen) this.#engine.loadFen(this.#startFen);

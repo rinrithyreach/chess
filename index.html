@@ -69,16 +69,51 @@
       </header>
 
       <form class="setup__form" id="form-new-game" novalidate>
+        <!--
+          Name and picture are one row: the picture belongs to the player the
+          name box names, and a separate section for it would have to say so
+          all over again. The picker is a button in front of a file input,
+          which is the only way to get a preview and a way to remove it — a
+          bare file input can show neither.
+        -->
         <div class="field">
           <label class="field__label" for="input-white">Player 1 <span class="field__hint">White</span></label>
-          <input class="field__input" type="text" id="input-white" name="white"
-                 maxlength="20" autocomplete="off" placeholder="Player 1" spellcheck="false">
+          <div class="name-row">
+            <span class="avatar-picker" data-avatar-slot="p1">
+              <button type="button" class="avatar-picker__btn"
+                      aria-label="Add a profile picture for Player 1">
+                <img class="avatar-picker__img" alt="" hidden>
+                <span class="avatar-picker__glyph" aria-hidden="true">♚&#xFE0E;</span>
+              </button>
+              <span class="avatar-picker__badge" aria-hidden="true">+</span>
+              <button type="button" class="avatar-picker__clear"
+                      aria-label="Remove Player 1's profile picture" hidden>×</button>
+              <input type="file" class="avatar-picker__file" accept="image/*"
+                     tabindex="-1" aria-hidden="true">
+            </span>
+            <input class="field__input" type="text" id="input-white" name="white"
+                   maxlength="20" autocomplete="off" placeholder="Player 1" spellcheck="false">
+          </div>
         </div>
 
         <div class="field">
           <label class="field__label" for="input-black">Player 2 <span class="field__hint">Black</span></label>
-          <input class="field__input" type="text" id="input-black" name="black"
-                 maxlength="20" autocomplete="off" placeholder="Player 2" spellcheck="false">
+          <div class="name-row">
+            <span class="avatar-picker" data-avatar-slot="p2">
+              <button type="button" class="avatar-picker__btn"
+                      aria-label="Add a profile picture for Player 2">
+                <img class="avatar-picker__img" alt="" hidden>
+                <span class="avatar-picker__glyph" aria-hidden="true">♚&#xFE0E;</span>
+              </button>
+              <span class="avatar-picker__badge" aria-hidden="true">+</span>
+              <button type="button" class="avatar-picker__clear"
+                      aria-label="Remove Player 2's profile picture" hidden>×</button>
+              <input type="file" class="avatar-picker__file" accept="image/*"
+                     tabindex="-1" aria-hidden="true">
+            </span>
+            <input class="field__input" type="text" id="input-black" name="black"
+                   maxlength="20" autocomplete="off" placeholder="Player 2" spellcheck="false">
+          </div>
         </div>
 
         <fieldset class="field field--modes">
@@ -110,8 +145,22 @@
         <div class="online-fields" id="online-fields" hidden>
           <div class="field">
             <label class="field__label" for="input-online-name">Your Name</label>
-            <input class="field__input" type="text" id="input-online-name"
-                   maxlength="20" autocomplete="off" placeholder="Your name" spellcheck="false">
+            <div class="name-row">
+              <span class="avatar-picker" data-avatar-slot="online">
+                <button type="button" class="avatar-picker__btn"
+                        aria-label="Add your profile picture">
+                  <img class="avatar-picker__img" alt="" hidden>
+                  <span class="avatar-picker__glyph" aria-hidden="true">♚&#xFE0E;</span>
+                </button>
+                <span class="avatar-picker__badge" aria-hidden="true">+</span>
+                <button type="button" class="avatar-picker__clear"
+                        aria-label="Remove your profile picture" hidden>×</button>
+                <input type="file" class="avatar-picker__file" accept="image/*"
+                       tabindex="-1" aria-hidden="true">
+              </span>
+              <input class="field__input" type="text" id="input-online-name"
+                     maxlength="20" autocomplete="off" placeholder="Your name" spellcheck="false">
+            </div>
           </div>
           <div class="online-choice">
             <button type="button" class="btn btn--primary btn--block" id="btn-create-room">
@@ -176,7 +225,16 @@
     <div class="game">
       <!-- Opponent card (top of board) -->
       <section class="player-card" id="card-top" aria-label="Player at top of board">
-        <span class="player-card__avatar" data-color="b" aria-hidden="true">♚&#xFE0E;</span>
+        <!--
+          The picture and the king glyph share one circle; whichever is not in
+          use is hidden. aria-hidden on the wrapper covers both: the player's
+          name sits immediately beside it, so neither the photo nor the piece
+          has anything to add to what is announced.
+        -->
+        <span class="player-card__avatar" data-color="b" aria-hidden="true">
+          <img class="player-card__photo" alt="" hidden>
+          <span class="player-card__glyph">♚&#xFE0E;</span>
+        </span>
         <span class="player-card__info">
           <span class="player-card__name" id="top-name">Player 2</span>
           <span class="player-card__color" id="top-color">Black</span>
@@ -193,7 +251,10 @@
 
       <!-- Current player card (bottom of board) -->
       <section class="player-card" id="card-bottom" aria-label="Player at bottom of board">
-        <span class="player-card__avatar" data-color="w" aria-hidden="true">♚&#xFE0E;</span>
+        <span class="player-card__avatar" data-color="w" aria-hidden="true">
+          <img class="player-card__photo" alt="" hidden>
+          <span class="player-card__glyph">♚&#xFE0E;</span>
+        </span>
         <span class="player-card__info">
           <span class="player-card__name" id="bottom-name">Player 1</span>
           <span class="player-card__color" id="bottom-color">White</span>

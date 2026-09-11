@@ -38,6 +38,7 @@ import {
   log,
   warn,
 } from '../config.js';
+import { isAvatar } from '../avatar.js';
 import {
   FIREBASE_MODULES,
   EMULATOR,
@@ -115,6 +116,21 @@ export function normalizeRoomCode(input) {
     .filter((c) => ROOM_CODE_ALPHABET.includes(c))
     .join('')
     .slice(0, ROOM_CODE_LENGTH);
+}
+
+/**
+ * One player's entry in a room.
+ *
+ * The picture is omitted rather than written as null when there is not one.
+ * Realtime Database treats a null child as a deletion instruction, which is
+ * the right outcome but a confusing thing to read in a transaction that is
+ * building a record from scratch — and the rules validate `avatar` only when
+ * it is present, so an absent key is the shape they are written for.
+ */
+function seatRecord(uid, name, avatar) {
+  const seat = { uid, name, connected: true };
+  if (isAvatar(avatar)) seat.avatar = avatar;
+  return seat;
 }
 
 export class FirebaseSession {
@@ -235,6 +251,7 @@ export class FirebaseSession {
   async createGame(config = {}) {
     const { ref, runTransaction, serverTimestamp } = this.#sdk;
     const name = config.white?.name?.trim() || config.name?.trim() || DEFAULT_PLAYER_NAMES.white;
+    const avatar = config.white?.avatar ?? config.avatar;
     const hostColor = config.hostColor === BLACK ? BLACK : WHITE;
 
     this.#engine = new ChessEngine();
@@ -254,7 +271,7 @@ export class FirebaseSession {
       drawOffer: null,
       rematch: null,
       players: {
-        [hostColor]: { uid: this.#uid, name, connected: true },
+        [hostColor]: seatRecord(this.#uid, name, avatar),
       },
     };
 
@@ -293,7 +310,7 @@ export class FirebaseSession {
   }
 
   /** Join an existing room as the free colour. */
-  async joinRoom(rawCode, { name } = {}) {
+  async joinRoom(rawCode, { name, avatar } = {}) {
     const { ref, get, runTransaction, serverTimestamp } = this.#sdk;
     const code = normalizeRoomCode(rawCode);
 
@@ -368,7 +385,7 @@ export class FirebaseSession {
         ...room,
         players: {
           ...players,
-          [free]: { uid: this.#uid, name: playerName, connected: true },
+          [free]: seatRecord(this.#uid, playerName, avatar),
         },
         status: STATUS.PLAYING,
         updatedAt: serverTimestamp(),
@@ -938,9 +955,19 @@ export class FirebaseSession {
       moves: room?.moves ?? engine.getHistory(),
       verboseMoves: engine.getVerboseHistory(),
       lastMove: engine.getLastMove(),
+      // The opponent's picture arrives over the network, so it is validated
+      // here rather than anywhere downstream. The security rules cap its size
+      // and shape too, but rules protect the ROOM; this is what protects this
+      // device from whatever a modified client felt like writing.
       players: {
-        [WHITE]: { name: players[WHITE]?.name ?? 'Waiting…' },
-        [BLACK]: { name: players[BLACK]?.name ?? 'Waiting…' },
+        [WHITE]: {
+          name: players[WHITE]?.name ?? 'Waiting…',
+          avatar: isAvatar(players[WHITE]?.avatar) ? players[WHITE].avatar : null,
+        },
+        [BLACK]: {
+          name: players[BLACK]?.name ?? 'Waiting…',
+          avatar: isAvatar(players[BLACK]?.avatar) ? players[BLACK].avatar : null,
+        },
       },
       result: room?.result ?? null,
       isCheck,

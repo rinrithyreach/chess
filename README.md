@@ -94,6 +94,33 @@ players to agree (and swap colours). The network draw-offer path is still
 implemented and still tested, but with the Draw button gone there is no longer
 a way to start one from this build.
 
+**Profile pictures** — each player can put a picture on their seat from the
+New Game screen: tap the circle beside a name box and pick one, and it shows
+on their player card for the whole game. Optional everywhere — a seat without
+one keeps the king glyph it always had.
+
+Nothing is stored as picked. Whatever comes in — a 12-megapixel photo, a
+screenshot, an 8MB PNG — is cropped to a centred square, scaled to 128px and
+re-encoded (WebP, falling back to JPEG) until it fits a **24KB** budget, which
+is roughly three times what a picture of that size actually costs. The scaling
+steps down by halves rather than leaping straight to 128px: a single draw from
+a 4000px photo throws away the thousand pixels around each one it samples,
+which is what makes a shrunken photograph look like it has been through a fax
+machine.
+
+The picture is **remembered per seat**, not per name, so it is offered back on
+the next New Game rather than having to be hunted down in the camera roll
+again. The name is not remembered — a name is eight characters and takes a
+moment to retype. A rematch swaps colours, and each player's picture goes with
+them.
+
+Online, the picture travels in the room document and the opponent sees it. It
+is validated on arrival as well as in the rules, because the rules protect the
+*room* and the check on arrival is what protects *this device*. Only `data:`
+URLs of `png`, `jpeg` or `webp` are ever rendered: never a remote URL, which
+could otherwise report who looked at the board, and never SVG, which is a
+document rather than a picture.
+
 **Game management** — restart (local), resign, rematch, board flip, and copy
 PGN. The control row is **Undo, Flip, Resign**.
 
@@ -249,6 +276,7 @@ chess-game/
 ├── js/
 │   ├── config.js                 Constants, DEBUG flag, logger
 │   ├── app.js                    Composition root (entry point)
+│   ├── avatar.js                 Profile pictures: crop, scale, re-encode, validate
 │   ├── firebase-config.js        YOUR Firebase project config (empty by default)
 │   ├── chess-engine.js           Defensive wrapper around chess.js
 │   ├── game-controller.js        Orchestration, selection, autosave
@@ -638,7 +666,9 @@ Being straight about this matters more than sounding secure.
 write. Only the two seated players can write to a room. A seat can only be
 claimed when empty and only for your own uid. The host never changes. Every
 field is type-, pattern- and length-checked, and unknown fields are rejected.
-A draw can only be offered in your own name.
+A draw can only be offered in your own name. A profile picture must be a
+`data:` URL of a raster image and at most 24KB, so a room cannot be used as
+file hosting and a picture cannot be a URL pointing at somebody's server.
 
 **What they cannot enforce.** Database rules cannot run a chess engine, so
 they cannot verify that a submitted FEN is a legal continuation. A player
@@ -688,11 +718,16 @@ Behaviours verified against 1.4.0 and handled in the wrapper:
 Autosave runs after every move, promotion, undo, restart, resignation, draw,
 rematch, board flip and settings change. There is no save button.
 
-Two independent `localStorage` keys are used so a corrupt game never costs you
-your preferences:
+Three independent `localStorage` keys are used so a corrupt game never costs
+you your preferences:
 
 - `chess-arena:game` — the current game
 - `chess-arena:settings` — sound, theme, coordinates, animations, auto-flip
+- `chess-arena:avatars` — the remembered profile picture for each New Game seat
+
+Profile pictures get their own key rather than living inside settings. They
+are the only thing here measured in kilobytes rather than bytes, and a quota
+failure writing a picture must not take the settings record down with it.
 
 Both records are versioned:
 
@@ -706,7 +741,10 @@ Both records are versioned:
     "pgn": "[Event \"Chess Arena — Local Game\"] ... 1. e4 e5 *",
     "moves": ["e4", "e5"],
     "lastMove": { "from": "e7", "to": "e5", "...": "..." },
-    "players": { "w": { "name": "Alex" }, "b": { "name": "Sam" } },
+    "players": {
+      "w": { "name": "Alex", "avatar": "data:image/webp;base64,UklGR..." },
+      "b": { "name": "Sam", "avatar": null }
+    },
     "result": null,
     "orientation": "white"
   }
@@ -735,9 +773,13 @@ Game* is only offered for a valid, unfinished game.
 
 ### Automated
 
-The app ships with no test dependencies; verification was run from outside the
-project across fifteen suites — **815 assertions, all passing, with zero console
-errors in every browser and viewport tested**:
+The app ships with no test dependencies; verification is run from outside the
+project. Fifteen suites cover the game itself — **815 assertions, all passing,
+with zero console errors in every browser and viewport tested** — and
+four more cover profile pictures, a further **80 assertions**, run against the
+real app in Chromium and the shipped security rules in the database emulator. The
+two groups were run separately, so the totals are reported separately rather
+than as one number:
 
 | Suite | Assertions | What it covers |
 | --- | --- | --- |
@@ -756,6 +798,10 @@ errors in every browser and viewport tested**:
 | **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |
 | **Control row (Chromium)** | **39** | **Undo never reaches the controller by any route; Draw is absent; the row still holds 44px targets** |
 | **Board size (Chromium)** | **33** | **Every square measured through the live camera at each level: each step bigger, near and far converge, nothing ever cropped, picking still exact** |
+| **Profile pictures (Chromium)** | **39** | **A real file through the real picker: centre-cropped, scaled to 128px, under budget; shown on the card, saved, restored after a reload, offered back next game; a 6-megapixel photo still fits; a non-image is refused and says why; remote, `javascript:` and SVG values all rejected** |
+| **Profile pictures — rules (emulator)** | **14** | **The shipped rules loaded into the database emulator and driven as an ordinary signed-in user: PNG, JPEG and WebP accepted; remote URLs, `javascript:`, SVG, HTML, a 40KB payload and a non-string all rejected; unknown player fields still rejected; the rematch seat swap still allowed, and a stranger's uid still not** |
+| **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
+| **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 
 The 3D suite's headline check is picking. Every one of the 64 squares is
 projected through the live camera to find where it is actually drawn, clicked
@@ -895,6 +941,13 @@ And two from building that WebGL board:
 | 16b | Refresh again, tap Exit Game | Back on the menu, nothing lost — Continue still offers the same game |
 | 17 | Flip Board | Only orientation changes |
 | 18 | Move after checkmate | Rejected |
+| 19 | Pick a picture for Player 1, start a game | It shows on White's card; Black keeps the king glyph |
+| 20 | Pick a sideways phone photo | Arrives upright — EXIF rotation is applied, not ignored |
+| 21 | Pick a wide photo | Cropped to the centre square, never squashed |
+| 22 | Rematch | Colours swap and each picture goes with its player |
+| 23 | Return to the menu and start another game | The picture is offered back, already in place |
+| 24 | Tap the × on a picker | Picture gone, king glyph back, and it is not offered next time |
+| 25 | Pick a non-image file | Refused with a message naming the problem; nothing changes |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 

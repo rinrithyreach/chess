@@ -16,9 +16,11 @@ import {
   BLACK,
   GAME_MODE,
   DEFAULT_SETTINGS,
+  AVATAR_SLOTS,
   log,
   warn,
 } from './config.js';
+import { isAvatar } from './avatar.js';
 import { LocalSession, SESSION_ACTION } from './sessions/local-session.js';
 import * as storage from './storage.js';
 import sound from './sound.js';
@@ -48,6 +50,16 @@ export class GameController {
   };
 
   #settings = { ...DEFAULT_SETTINGS };
+
+  /**
+   * Remembered profile pictures, by New Game form slot.
+   *
+   * Not game state and not settings — see storage.js. They live here only
+   * because the controller is the one layer allowed to touch storage, and
+   * ui.js has to be able to offer a picture back next time without becoming
+   * the second.
+   */
+  #avatars = Object.fromEntries(AVATAR_SLOTS.map((slot) => [slot, null]));
 
   /** Input lock — blocks duplicate submissions from rapid tapping. */
   #processing = false;
@@ -120,6 +132,7 @@ export class GameController {
 
   async init() {
     this.#settings = storage.loadSettings();
+    this.#avatars = storage.loadAvatars();
     sound.setEnabled(this.#settings.sound);
     await this.#session.initialize();
     this.#attachSession();
@@ -258,14 +271,24 @@ export class GameController {
    * Start a brand-new game. Clears previous game data but deliberately keeps
    * user settings, which survive across games.
    */
-  async newGame({ whiteName, blackName, mode = GAME_MODE.LOCAL, startFen } = {}) {
+  async newGame({
+    whiteName,
+    blackName,
+    whiteAvatar = null,
+    blackAvatar = null,
+    mode = GAME_MODE.LOCAL,
+    startFen,
+  } = {}) {
     storage.clearGame();
     this.#resetView();
     this.#expectReset();
 
+    // The picture is copied into the game rather than referenced from the
+    // remembered set, so changing it later — or clearing it — leaves the game
+    // already under way exactly as it was.
     await this.#session.createGame({
-      white: { name: whiteName },
-      black: { name: blackName },
+      white: { name: whiteName, avatar: whiteAvatar },
+      black: { name: blackName, avatar: blackAvatar },
       mode,
       startFen,
     });
@@ -316,11 +339,15 @@ export class GameController {
   // -----------------------------------------------------------------------
 
   /** Host a new online room. Resolves with the room code to share. */
-  async createRoom({ name } = {}) {
+  async createRoom({ name, avatar = null } = {}) {
     this.#resetView();
     this.#expectReset();
 
-    const result = await this.#session.createGame({ white: { name }, name });
+    const result = await this.#session.createGame({
+      white: { name, avatar },
+      name,
+      avatar,
+    });
     if (!result?.ok) {
       const error = result?.error ?? 'Could not create a room';
       this.#toast(error, 'error');
@@ -336,11 +363,11 @@ export class GameController {
   }
 
   /** Join someone else's room by code. */
-  async joinRoom(code, { name } = {}) {
+  async joinRoom(code, { name, avatar = null } = {}) {
     this.#resetView();
     this.#expectReset();
 
-    const result = await this.#session.joinRoom(code, { name });
+    const result = await this.#session.joinRoom(code, { name, avatar });
     if (!result?.ok) {
       const error = result?.error ?? 'Could not join that room';
       this.#toast(error, 'error');
@@ -712,6 +739,38 @@ export class GameController {
 
     this.#emitChange();
     return this.getSettings();
+  }
+
+  // -----------------------------------------------------------------------
+  // Profile pictures
+  // -----------------------------------------------------------------------
+
+  /** Remembered pictures, by form slot. Always every slot, valid or null. */
+  getAvatars() {
+    return { ...this.#avatars };
+  }
+
+  /**
+   * Remember, or forget, the picture for one seat on the New Game form.
+   *
+   * Deliberately does NOT emit a change: this touches no game state, and the
+   * picture on a player card comes from the session's player record rather
+   * than from here. Changing your picture mid-game therefore does nothing to
+   * the game in progress, which is the honest behaviour — the seat was taken
+   * with the picture it had.
+   *
+   * Returns whether it was actually written. A failure here is almost always
+   * a full quota, and it is worth saying so: the picture still works for the
+   * game about to be started, it just will not be offered back next time.
+   */
+  setAvatar(slot, avatar) {
+    if (!AVATAR_SLOTS.includes(slot)) return false;
+    this.#avatars[slot] = isAvatar(avatar) ? avatar : null;
+    const saved = storage.saveAvatars(this.#avatars);
+    if (!saved && this.#avatars[slot]) {
+      this.#toast('Picture set, but could not be saved for next time', 'warn');
+    }
+    return saved;
   }
 
   // -----------------------------------------------------------------------

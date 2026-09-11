@@ -20,7 +20,21 @@ export const STORAGE_VERSION = 1;
 export const STORAGE_KEYS = {
   GAME: 'chess-arena:game',
   SETTINGS: 'chess-arena:settings',
+  AVATARS: 'chess-arena:avatars',
 };
+
+/**
+ * Seats on the New Game form that remember a profile picture between games.
+ *
+ * Seats, not colours: `p1` is whoever fills in the first name box, and a
+ * rematch swapping colours does not move their picture to the other slot. The
+ * form is the only place these ids mean anything.
+ *
+ * The picture is remembered, the name is not. A name is eight characters and
+ * takes a moment to retype; a picture means opening the camera roll and
+ * hunting for it again, which is the part nobody will do twice.
+ */
+export const AVATAR_SLOTS = ['p1', 'p2', 'online'];
 
 /** Colors, mirroring chess.js' single-character notation. */
 export const WHITE = 'w';

@@ -401,7 +401,7 @@ async function boot() {
       document.getElementById('input-white')?.focus();
     },
 
-    onStartGame: async ({ mode, whiteName, blackName }) => {
+    onStartGame: async ({ mode, whiteName, blackName, whiteAvatar, blackAvatar }) => {
       sound.unlock();
 
       // The mode picks the session provider, and that is the whole of the
@@ -416,10 +416,12 @@ async function boot() {
         // anyone who only ever plays another person.
         const { BotSession } = await import('./sessions/bot-session.js');
         await controller.useSession(new BotSession());
-        await controller.newGame({ whiteName, mode: GAME_MODE.BOT });
+        // Only the human's picture travels: the bot takes the other seat, and
+        // bot-session.js builds that seat itself so it cannot inherit one.
+        await controller.newGame({ whiteName, whiteAvatar, mode: GAME_MODE.BOT });
       } else {
         await controller.useSession(new LocalSession());
-        await controller.newGame({ whiteName, blackName });
+        await controller.newGame({ whiteName, blackName, whiteAvatar, blackAvatar });
       }
       ui.showScreen('game');
     },
@@ -428,18 +430,18 @@ async function boot() {
 
     // --- Online room handlers ---
 
-    onCreateRoom: async (name) => {
+    onCreateRoom: async ({ name, avatar }) => {
       sound.unlock();
       const started = await goOnline();
       if (!started.ok) {
         ui.toast(started.error ?? 'Online play unavailable', 'error');
         return;
       }
-      const result = await controller.createRoom({ name });
+      const result = await controller.createRoom({ name, avatar });
       if (result.ok) ui.showWaitingRoom(result.roomCode);
     },
 
-    onJoinRoom: async ({ code, name }) => {
+    onJoinRoom: async ({ code, name, avatar }) => {
       sound.unlock();
       if (!code?.trim()) {
         ui.toast('Enter a room code', 'warn');
@@ -450,7 +452,7 @@ async function boot() {
         ui.toast(started.error ?? 'Online play unavailable', 'error');
         return;
       }
-      const result = await controller.joinRoom(code, { name });
+      const result = await controller.joinRoom(code, { name, avatar });
       if (result.ok) ui.showScreen('game');
     },
 
@@ -524,6 +526,11 @@ async function boot() {
 
     onPromotionChoice: (piece) => controller.completePromotion(piece),
 
+    // Remembering a picture is not a setting and touches no game state, so it
+    // does not go through onSettingChange: nothing needs re-rendering, and a
+    // game already under way keeps the picture its players sat down with.
+    onAvatarChange: ({ slot, avatar }) => controller.setAvatar(slot, avatar),
+
     onSettingChange: (patch) => {
       const settings = controller.updateSettings(patch);
       ui.syncSettings(settings);
@@ -540,6 +547,7 @@ async function boot() {
   // -----------------------------------------------------------------------
 
   ui.syncSettings(controller.getSettings());
+  ui.syncAvatars(controller.getAvatars());
   ui.refreshContinueButton();
   ui.setOnlineAvailable(isFirebaseConfigured(), firebaseConfigError());
   ui.showScreen('menu');

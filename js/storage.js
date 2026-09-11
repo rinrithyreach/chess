@@ -12,6 +12,7 @@ import {
   STORAGE_KEYS,
   STORAGE_VERSION,
   DEFAULT_SETTINGS,
+  AVATAR_SLOTS,
   BOARD_THEMES,
   resolveUiStyle,
   clampBoardZoom,
@@ -21,6 +22,7 @@ import {
   log,
   warn,
 } from './config.js';
+import { isAvatar } from './avatar.js';
 import { ChessEngine } from './chess-engine.js';
 
 /** Probe localStorage once; if it is unusable the app still runs, just without saves. */
@@ -129,11 +131,61 @@ export function saveSettings(settings) {
 }
 
 // -------------------------------------------------------------------------
+// Profile pictures
+//
+// Kept under their own key rather than inside settings, for two reasons. They
+// are the only thing here measured in kilobytes rather than bytes, and a
+// quota failure writing a picture must not take the whole settings record
+// down with it. And they are not settings: nothing reads them during a game,
+// only the New Game form, which is where a picture is chosen and where it is
+// offered back.
+// -------------------------------------------------------------------------
+
+const noAvatars = () => Object.fromEntries(AVATAR_SLOTS.map((slot) => [slot, null]));
+
+/**
+ * The remembered picture for each seat on the New Game form.
+ *
+ * Every slot is always present and is either a valid avatar or null, so
+ * callers never have to ask which. Anything that fails validation is dropped
+ * silently rather than discarding the whole record — a picture is decoration,
+ * and losing one is not a reason to forget the other two.
+ */
+export function loadAvatars() {
+  const { value: raw } = readJson(STORAGE_KEYS.AVATARS);
+  const avatars = noAvatars();
+  const source = raw && typeof raw === 'object' ? raw.avatars : null;
+  if (!source || typeof source !== 'object') return avatars;
+
+  AVATAR_SLOTS.forEach((slot) => {
+    if (isAvatar(source[slot])) avatars[slot] = source[slot];
+  });
+  return avatars;
+}
+
+export function saveAvatars(avatars) {
+  return writeJson(STORAGE_KEYS.AVATARS, {
+    version: STORAGE_VERSION,
+    savedAt: Date.now(),
+    avatars,
+  });
+}
+
+// -------------------------------------------------------------------------
 // Game
 // -------------------------------------------------------------------------
 
 const VALID_STATUSES = Object.values(STATUS);
 
+/**
+ * A player record only has to carry a name to be usable.
+ *
+ * The avatar is deliberately not part of this check. A picture that fails
+ * validation is dropped when the session rebuilds the player (see
+ * makePlayer in local-session.js), which loses the picture and keeps the
+ * game — and throwing away a finished-but-for-the-picture game would be a
+ * ludicrous price for a corrupt thumbnail.
+ */
 function isPlayer(value) {
   return value && typeof value === 'object' && typeof value.name === 'string';
 }

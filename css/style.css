@@ -333,6 +333,160 @@ body.is-modal-open {
   outline: none;
 }
 
+/* Name box and profile picture, side by side. */
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.name-row .field__input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   Profile picture picker
+
+   A round button showing either the chosen picture or a king, with a `+`
+   badge until there is one and a `×` to take it off once there is. The badge
+   and the clear button are siblings rather than children of the button: the
+   button clips its contents to the circle so the photo fills it, and anything
+   inside would be clipped with it.
+   ========================================================================== */
+
+.avatar-picker {
+  position: relative;
+  display: block;
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+}
+
+.avatar-picker__btn {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px dashed var(--border-strong);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text-faint);
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.avatar-picker__btn:hover {
+  border-color: var(--accent);
+  color: var(--text-muted);
+}
+
+.avatar-picker__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A picture fills the circle, so the dashes have done their job and go. */
+.avatar-picker.has-photo .avatar-picker__btn {
+  border-style: solid;
+  border-color: var(--border-strong);
+}
+
+.avatar-picker__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-picker__badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  /* Decoration in front of the button — never the thing a tap lands on. */
+  pointer-events: none;
+}
+
+.avatar-picker.has-photo .avatar-picker__badge {
+  display: none;
+}
+
+/*
+  The remove button is small on purpose but keeps a full-size tap target: the
+  visible circle is 20px and the ::before below extends what a finger can hit
+  to 44px, so it is easy to press and hard to press by accident.
+*/
+.avatar-picker__clear {
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--panel-soft);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.avatar-picker__clear::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+}
+
+.avatar-picker__clear:hover {
+  border-color: var(--danger);
+  color: var(--text);
+}
+
+.avatar-picker__clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/*
+  Visually hidden rather than `hidden`: a display:none file input cannot
+  reliably be opened with .click() in every browser, and this one is opened
+  entirely from the button in front of it.
+*/
+.avatar-picker__file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Decoding and re-encoding a large photo is not instant. Say that it is working. */
+.avatar-picker.is-busy .avatar-picker__btn {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 .field--modes {
   gap: 0.6rem;
 }
@@ -648,6 +802,7 @@ body.is-modal-open {
   width: 38px;
   height: 38px;
   flex: none;
+  overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 50%;
   font-size: 1.3rem;
@@ -662,6 +817,30 @@ body.is-modal-open {
 .player-card__avatar[data-color="b"] {
   background: #23262f;
   color: #e9ecf2;
+}
+
+/*
+  A profile picture fills the circle completely, so the light/dark fill above
+  never shows through and the two cards stop differing by background. What
+  keeps them telling apart is the ring: the colour the player is playing.
+*/
+.player-card__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.player-card__avatar:has(.player-card__photo:not([hidden])) {
+  border-width: 2px;
+}
+
+.player-card__avatar[data-color="w"]:has(.player-card__photo:not([hidden])) {
+  border-color: #f2f2ee;
+}
+
+.player-card__avatar[data-color="b"]:has(.player-card__photo:not([hidden])) {
+  border-color: #565d72;
 }
 
 .player-card__info {

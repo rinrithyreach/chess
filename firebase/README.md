@@ -28,6 +28,8 @@ firebase deploy --only database
 | Only known fields exist | `$other: {".validate": false}` on every object |
 | Fields are well formed | per-field type, pattern and length checks |
 | Names cannot be abused as payloads | `name` capped at 20 characters |
+| Profile pictures cannot be abused as file hosting | `avatar` capped at 24KB and must be a `data:` URL of a raster image |
+| A profile picture cannot phone home | `avatar` must be `data:`, so it can never be a URL pointing at someone's server |
 | A draw can only be offered in your own name | `drawOffer/from` must match your seat |
 
 ### What the rules cannot enforce
