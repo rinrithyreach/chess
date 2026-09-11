@@ -20,7 +20,7 @@ firebase deploy --only database
 | Guarantee | How |
 | --- | --- |
 | Only signed-in users can read or write | `.read` / `.write` require `auth != null` |
-| Rooms live only at valid room codes | `$roomCode.matches(/^[A-HJ-NP-Z2-9]{6}$/)` |
+| Rooms live only at valid room codes | `$roomCode.matches(/^[A-HJ-NP-Z2-9]{4}$/)` |
 | Only the two seated players may write | `.write` checks `players/*/uid === auth.uid` |
 | A seat may be claimed only when empty | write allowed while a seat has no `uid` |
 | You cannot seat someone else | `uid` must equal `auth.uid`, or be a uid already in the room (so a rematch can swap seats) |

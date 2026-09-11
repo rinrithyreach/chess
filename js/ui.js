@@ -24,6 +24,10 @@ import {
   warn,
 } from './config.js';
 import { fileToAvatar, isAvatar } from './avatar.js';
+import { ROOM_CODE_LENGTH } from './firebase-config.js';
+
+/** What an empty room code looks like: one dash per character. */
+const ROOM_CODE_BLANK = '-'.repeat(ROOM_CODE_LENGTH);
 
 // See TEXT_PRESENTATION in board.js: without it these can render as colour
 // emoji, which ignore CSS `color` and make white pieces paint black.
@@ -200,6 +204,18 @@ export class UI {
       this.#showAvatar(node, null);
     });
 
+    // Room code length lives in one place, so the field and the placeholders
+    // follow it rather than being kept in step by hand. The markup carries a
+    // matching default so the form is still right before this runs.
+    const codeInput = this.#dom['input-room-code'];
+    if (codeInput) codeInput.maxLength = ROOM_CODE_LENGTH;
+    if (this.#dom['room-code-value']) {
+      this.#dom['room-code-value'].textContent = ROOM_CODE_BLANK;
+    }
+    if (this.#dom['room-bar-code']) {
+      this.#dom['room-bar-code'].textContent = ROOM_CODE_BLANK;
+    }
+
     // Theme picker
     const picker = this.#dom['theme-picker'];
     if (picker) {
@@ -363,7 +379,7 @@ export class UI {
 
     bar.hidden = false;
     if (this.#dom['room-bar-code']) {
-      this.#dom['room-bar-code'].textContent = online.roomCode ?? '------';
+      this.#dom['room-bar-code'].textContent = online.roomCode ?? ROOM_CODE_BLANK;
     }
 
     // Connection first, then opponent presence — the more urgent wins.

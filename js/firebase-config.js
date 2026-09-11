@@ -143,7 +143,29 @@ export function resolveFirebaseConfig() {
 
 /** Room codes avoid characters that are easy to misread aloud or by eye. */
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-export const ROOM_CODE_LENGTH = 6;
+
+/**
+ * How many characters a room code has.
+ *
+ * Four. Shorter is genuinely better at the job this code does — it gets read
+ * out loud across a room and typed with thumbs — and two fewer characters is
+ * two fewer chances to mishear a C for a G.
+ *
+ * What it costs is the size of the space: 32^4 is about a million codes,
+ * against a billion at six. That is still far more than enough for codes that
+ * live as long as one game, and a collision only costs a retry (createGame
+ * tries eight fresh codes before giving up). It does make the space small
+ * enough to sweep, though, so a determined stranger could hunt for rooms
+ * waiting for a player. There is no rate limiting to stop them — see the
+ * Trust model in README.md, which said as much at six characters too.
+ *
+ * ONE SOURCE OF TRUTH. Everything derives from this: generation, the join
+ * field's maxlength, the placeholder dashes, the error text. The one place it
+ * has to be repeated is the security rules, which cannot import anything —
+ * firebase/database.rules.json matches {4} and must be redeployed if this
+ * changes, or every room creation will be rejected.
+ */
+export const ROOM_CODE_LENGTH = 4;
 
 /**
  * Is online play available?

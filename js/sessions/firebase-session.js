@@ -315,7 +315,7 @@ export class FirebaseSession {
     const code = normalizeRoomCode(rawCode);
 
     if (code.length !== ROOM_CODE_LENGTH) {
-      return { ok: false, error: 'Room codes are 6 characters' };
+      return { ok: false, error: `Room codes are ${ROOM_CODE_LENGTH} characters` };
     }
 
     const roomRef = ref(this.#db, `rooms/${code}`);

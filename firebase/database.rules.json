@@ -7,7 +7,7 @@
       "$roomCode": {
         ".read": "auth != null",
 
-        ".write": "auth != null && ($roomCode.matches(/^[A-HJ-NP-Z2-9]{6}$/)) && (!data.exists() || data.child('players/w/uid').val() === auth.uid || data.child('players/b/uid').val() === auth.uid || !data.child('players/w/uid').exists() || !data.child('players/b/uid').exists())",
+        ".write": "auth != null && ($roomCode.matches(/^[A-HJ-NP-Z2-9]{4}$/)) && (!data.exists() || data.child('players/w/uid').val() === auth.uid || data.child('players/b/uid').val() === auth.uid || !data.child('players/w/uid').exists() || !data.child('players/b/uid').exists())",
 
         ".validate": "newData.hasChildren(['status', 'fen', 'turn', 'players'])",
 

@@ -87,7 +87,7 @@ it thinks. Roughly a novice: it punishes hanging pieces and short tactics, and
 will miss deeper combinations. Strength is one number — `BOT_TIME_BUDGET_MS`
 in `js/config.js` — which is where difficulty levels would go.
 
-**Online multiplayer** — create a room, share a six-character code, and play
+**Online multiplayer** — create a room, share a four-character code, and play
 across two devices. Live move sync, per-device board orientation, opponent
 presence, automatic reconnect, resignation, and rematches that require both
 players to agree (and swap colours). The network draw-offer path is still
@@ -387,7 +387,7 @@ what they enforce.
 ### 4. Play
 
 Serve the app, open it on two devices, choose **Online Multiplayer** on both.
-One taps **Create Room** and reads out the six-character code; the other types
+One taps **Create Room** and reads out the four-character code; the other types
 it in and taps **Join**.
 
 ---
@@ -457,7 +457,7 @@ saved to the source, so a deployed copy can never accidentally point at your
 laptop.
 
 **5. Play.** Phone A: **New Game → Online Multiplayer → Create Room**, and read
-out the six-character code. Phone B: **New Game → Online Multiplayer**, type the
+out the four-character code. Phone B: **New Game → Online Multiplayer**, type the
 code, **Join**. Both boards appear, each showing its own colour at the bottom.
 
 > Both phones must use `?emulator=1`, and the emulator must keep running.
@@ -622,10 +622,27 @@ One Realtime Database node per game, at `rooms/{CODE}`:
 
 ### Room codes
 
-Six characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — no `0/O` or `1/I`, so
+Four characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — no `0/O` or `1/I`, so
 a code can be read aloud without ambiguity. Generated with
 `crypto.getRandomValues` and claimed with a transaction that refuses to
 overwrite an existing room, so two devices can never take the same code.
+
+The length is `ROOM_CODE_LENGTH` in `js/firebase-config.js`, and everything
+follows it: generation, the join field's `maxlength`, the placeholder dashes
+and the error text. The **one** place it has to be repeated is the security
+rules, which cannot import anything — `firebase/database.rules.json` matches
+`{4}`, and changing the constant without redeploying the rules rejects every
+room creation.
+
+**What four costs.** The space is 32⁴ ≈ 1.05 million codes, against 32⁶ ≈ 1.07
+billion at six. For codes that live as long as one game that is still ample,
+and a collision only costs a retry — `createGame` tries eight fresh codes
+before giving up. What it does change is sweepability: a million codes is a
+space somebody could scan to find rooms sitting on the waiting screen, and
+there is no rate limiting to stop them. That was already true at six
+characters; four makes it a thousand times cheaper. If this were ever exposed
+to strangers rather than to friends you are handing a code to, that is the
+thing to fix first — see **Trust model**.
 
 ### Playing a move
 
@@ -776,7 +793,7 @@ Game* is only offered for a valid, unfinished game.
 The app ships with no test dependencies; verification is run from outside the
 project. Fifteen suites cover the game itself — **815 assertions, all passing,
 with zero console errors in every browser and viewport tested** — and
-five more cover profile pictures and the room code, a further **115 assertions**, run against the
+six more cover profile pictures and the room code, a further **128 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator. The
 two groups were run separately, so the totals are reported separately rather
 than as one number:
@@ -803,6 +820,7 @@ than as one number:
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
+| **Room code length (Chromium + emulator)** | **13** | **Four characters everywhere the length appears independently: the constant, the normaliser, the join field's maxlength and typing limit, both placeholders, and the security rules — which cannot import the constant, so they are checked to accept 4 and reject 3, 6 and look-alike characters** |
 
 The 3D suite's headline check is picking. Every one of the 64 squares is
 projected through the live camera to find where it is actually drawn, clicked
@@ -949,7 +967,7 @@ And two from building that WebGL board:
 | 23 | Return to the menu and start another game | The picture is offered back, already in place |
 | 24 | Tap the × on a picker | Picture gone, king glyph back, and it is not offered next time |
 | 25 | Pick a non-image file | Refused with a message naming the problem; nothing changes |
-| 26 | Create a room with the phone's text size at maximum | All six characters of the code still readable |
+| 26 | Create a room with the phone's text size at maximum | All four characters of the code still readable |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 
@@ -957,7 +975,7 @@ Positions for tests 9–14 are one tap away via the DEBUG presets below.
 
 | # | Test | Expected |
 | --- | --- | --- |
-| 19 | Create a room | 6-character code shown, waiting screen |
+| 19 | Create a room | 4-character code shown, waiting screen |
 | 20 | Join with that code | Both devices land on the board automatically |
 | 21 | Each device's own colour | Always at the bottom of its own board |
 | 22 | Tap an opponent piece | Nothing happens; no move is sent |
