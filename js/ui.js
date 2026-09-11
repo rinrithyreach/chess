@@ -84,6 +84,24 @@ export class UI {
    */
   #avatarPickers = new Map();
 
+  /**
+   * Draws one piece as a picture, when the mounted board can.
+   *
+   * Null on the flat fallback board, which has no geometry to photograph — the
+   * trays fall back to Unicode glyphs there. See setPieceSprites().
+   */
+  #pieceSprite = null;
+
+  /**
+   * Bumped whenever the sprite source changes.
+   *
+   * Part of the tray cache key. Without it, swapping renderers mid-game would
+   * leave the trays showing whichever form they were built with: the pieces
+   * have not changed, so the key would not either, and the early return would
+   * keep glyphs on a 3D board or portraits on a flat one.
+   */
+  #spriteEpoch = 0;
+
   constructor(controller) {
     this.#controller = controller;
     this.#cacheDom();
@@ -315,6 +333,17 @@ export class UI {
     if (button) button.hidden = !available;
   }
 
+  /**
+   * Hand the trays a way to draw a real piece, or take it away.
+   *
+   * Called once per board mount, because it is the mounted renderer that
+   * decides whether there is any geometry to photograph.
+   */
+  setPieceSprites(draw) {
+    this.#pieceSprite = typeof draw === 'function' ? draw : null;
+    this.#spriteEpoch += 1;
+  }
+
   /** Enable or disable the Online option on the setup screen. */
   setOnlineAvailable(available, reason) {
     const label = this.#dom['mode-online-label'];
@@ -516,15 +545,27 @@ export class UI {
     // an even trade, which is common — a key of pieces alone is unchanged
     // across the flip, the early return fires, and the tray keeps the previous
     // player's pile: the right shapes in the wrong colour.
-    const key = `${color}|${sorted.join('')}|${edge}`;
+    const key = `${color}|${sorted.join('')}|${edge}|${this.#spriteEpoch}`;
     if (strip.dataset.key === key) return;
     strip.dataset.key = key;
 
     // Captured pieces belong to the other side, so they are drawn in the other
-    // side's colour — a white card shows the black pieces it has taken.
+    // side's colour — a white player's tray holds the black pieces they took.
     const theirColor = color === WHITE ? BLACK : WHITE;
     strip.innerHTML = sorted
-      .map((p) => `<span class="capture" data-color="${theirColor}">${PIECE_GLYPHS[p]}</span>`)
+      .map((p) => {
+        // The real piece where the board can draw one, so a captured knight is
+        // the knight that was on the board rather than a flat glyph of a
+        // different chess set standing next to a solid one.
+        const sprite = this.#pieceSprite?.(p, theirColor);
+        // Both forms carry what they represent, so nothing downstream has to
+        // infer a captured piece's colour from the shape of its markup.
+        return sprite
+          ? `<img class="capture capture--piece" src="${sprite}" alt=""`
+            + ` data-color="${theirColor}" data-piece="${p}">`
+          : `<span class="capture" data-color="${theirColor}" data-piece="${p}">`
+            + `${PIECE_GLYPHS[p]}</span>`;
+      })
       .join('');
 
     // A count per kind, so a screen reader gets the pile as a sentence rather

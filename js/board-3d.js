@@ -303,6 +303,9 @@ export class Board3D {
   #boardRoughness = null;
   #environmentRT = null;
   #environment = null;
+
+  /** Piece portraits, drawn once each and kept. See pieceSprite(). */
+  #spriteCache = new Map();
   #richDetail = true;
   #pieceGroup = null;
   #markerGroup = null;
@@ -1091,6 +1094,141 @@ export class Board3D {
   /** Whether this renderer has a zoom worth offering. It does. */
   canZoom() {
     return true;
+  }
+
+  // -----------------------------------------------------------------------
+  // Piece portraits
+  // -----------------------------------------------------------------------
+
+  /**
+   * A small picture of one piece, drawn with the board's own parts.
+   *
+   * For the captured piles beside the board, which were Unicode glyphs and so
+   * were the one place in the app still showing a flat chess set next to a
+   * solid one. This builds the real piece — the same lathed body, the same
+   * detail solids, the same clearcoat material and the same key light — and
+   * reads it back as an image, so a captured knight is the knight that was on
+   * the board rather than a different artist's idea of one.
+   *
+   * Rendered once per piece and cached. Twelve portraits for a whole game.
+   *
+   * Drawn through a render target rather than the visible canvas, so the live
+   * frame is never disturbed and no second WebGL context is created — browsers
+   * cap those per page, and this board already has to be careful about it.
+   *
+   * @returns {string|null} a PNG data URL, or null if it could not be drawn.
+   */
+  pieceSprite(type, color, size = 96) {
+    if (this.#disposed || !this.#renderer || !THREE) return null;
+    const key = `${color}${type}@${size}`;
+    if (this.#spriteCache.has(key)) return this.#spriteCache.get(key);
+
+    let target = null;
+    let group = null;
+    try {
+      const scene = new THREE.Scene();
+      // The board's own environment map, so the clearcoat has the same room to
+      // reflect. Without it the portrait is lit but not polished.
+      if (this.#environment) scene.environment = this.#environment;
+      scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2620, 0.62));
+      const keyLight = new THREE.DirectionalLight(0xfff4e2, 2.2);
+      keyLight.position.set(-1.4, 2.4, 2.2);
+      scene.add(keyLight);
+      const fill = new THREE.DirectionalLight(0xcfe0ff, 0.45);
+      fill.position.set(2.2, 1.2, 1.6);
+      scene.add(fill);
+
+      /*
+        A rim light, and specifically for the black pieces.
+
+        On the board a black piece is legible because it stands on a pale
+        square: the contrast comes from behind it. In a tray there is no
+        square, so an unlit black piece on a dark panel is a piece-shaped hole.
+        Lighting it from behind and above draws a bright edge around the
+        silhouette, which is how the shape survives at this size — the same
+        reason a cinematographer puts a light behind a dark subject.
+
+        Stronger for black than white, because white already separates from
+        the panel and too much rim on it only blows the highlight out.
+      */
+      const rim = new THREE.DirectionalLight(0xdbe6ff, color === 'b' ? 3.4 : 1.1);
+      rim.position.set(0.6, 2.0, -2.4);
+      scene.add(rim);
+
+      group = this.#makePiece({ type, color });
+      // Shadows need a floor to land on, and there is none here.
+      group.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+      scene.add(group);
+
+      // Centre the piece on the origin so the camera can simply look at it.
+      const box = new THREE.Box3().setFromObject(group);
+      const centre = box.getCenter(new THREE.Vector3());
+      group.position.sub(centre);
+
+      const fov = 28;
+      const camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 100);
+      // A hair above eye level: enough to see the piece is a solid of
+      // revolution rather than a silhouette, not so much that it foreshortens
+      // into a lid seen from above.
+      //
+      /*
+        ONE frame for the whole set, sized to the tallest piece — not to each
+        piece's own box.
+
+        Framing every piece to fill its own square is the obvious thing and it
+        destroys the set: a pawn is barely half a king's height, so filling the
+        frame with it renders a pawn the same size as a king, and the pile
+        stops reading as chess pieces at all. Sizing to the king once means a
+        pawn occupies the fraction of the frame it actually occupies on the
+        board.
+
+        Comfortably wider than the widest piece too — the knight is the broad
+        one and is nowhere near a king's height — so nothing clips.
+      */
+      const radius = (PIECE_HEIGHT.k * 1.35) / 2;
+      const distance = (radius / Math.tan(THREE.MathUtils.degToRad(fov) / 2)) * 1.22;
+      camera.position.copy(new THREE.Vector3(0, 0.2, 1).normalize().multiplyScalar(distance));
+      camera.lookAt(0, 0, 0);
+
+      target = new THREE.WebGLRenderTarget(size, size, { depthBuffer: true });
+      target.texture.colorSpace = THREE.SRGBColorSpace;
+
+      const previousTarget = this.#renderer.getRenderTarget();
+      this.#renderer.setRenderTarget(target);
+      this.#renderer.setClearColor(0x000000, 0);
+      this.#renderer.clear();
+      this.#renderer.render(scene, camera);
+
+      const pixels = new Uint8Array(size * size * 4);
+      this.#renderer.readRenderTargetPixels(target, 0, 0, size, size, pixels);
+      this.#renderer.setRenderTarget(previousTarget);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const image = ctx.createImageData(size, size);
+      // WebGL reads bottom-up; a canvas is top-down. Copy row by row in
+      // reverse rather than flipping with a transform, which would resample.
+      for (let row = 0; row < size; row += 1) {
+        const from = (size - 1 - row) * size * 4;
+        image.data.set(pixels.subarray(from, from + size * 4), row * size * 4);
+      }
+      ctx.putImageData(image, 0, 0);
+      const url = canvas.toDataURL('image/png');
+
+      this.#spriteCache.set(key, url);
+      return url;
+    } catch (error) {
+      warn('Could not draw a piece portrait', error);
+      this.#spriteCache.set(key, null);
+      return null;
+    } finally {
+      // The geometries and materials are the board's and are shared — only the
+      // render target belongs to this call.
+      target?.dispose();
+      if (group) group.parent?.remove(group);
+    }
   }
 
   render(snapshot, options = {}) {

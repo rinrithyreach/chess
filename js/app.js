@@ -314,6 +314,15 @@ async function boot() {
     // changes. The flat board has no zoom to sell, so the control goes away
     // with it rather than sitting there doing nothing.
     ui.setZoomAvailable(board.canZoom?.() === true);
+    // The capture trays draw real pieces when the mounted board can produce
+    // them, and fall back to glyphs on the flat board. Set here, with the
+    // other per-mount capabilities, for the same reason: this is the moment
+    // what the board can do changes.
+    ui.setPieceSprites(
+      typeof board.pieceSprite === 'function'
+        ? (type, color) => board.pieceSprite(type, color)
+        : null,
+    );
   }
   wireBoard();
 

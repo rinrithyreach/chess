@@ -133,6 +133,26 @@ URLs of `png`, `jpeg` or `webp` are ever rendered: never a remote URL, which
 could otherwise report who looked at the board, and never SVG, which is a
 document rather than a picture.
 
+**Captured pieces, drawn in 3D** — the piles are the board's own pieces, not
+Unicode glyphs. `Board3D.pieceSprite()` builds the real piece — the same lathed
+body, the same detail solids, the same clearcoat material — and reads it back
+through a render target as an image, so a captured knight is the knight that
+was on the board rather than a flat glyph of somebody else's chess set standing
+next to a solid one. Twelve portraits, drawn once each and cached, through the
+existing WebGL context rather than a second one.
+
+Two things that had to be got right. The portraits are framed to the **tallest
+piece in the set**, not to each piece's own box: framing every piece to fill its
+own square is the obvious approach and it renders a pawn the same size as a
+king, at which point the pile stops reading as chess pieces. And the black
+pieces get a **rim light** — on the board they are legible because they stand on
+a pale square, and in a tray there is no square, so an unlit black piece on a
+dark panel is a piece-shaped hole. Lighting from behind draws the edge that
+carries the shape at this size.
+
+The flat fallback board has no geometry to photograph, so there the trays fall
+back to the Unicode glyphs.
+
 **Captured pieces, either side of the board** — the pieces each player has
 taken sit in a column beside the board: the left one belongs to the player at
 the top and fills downward, the right one to the player at the bottom and fills
@@ -891,7 +911,7 @@ than as one number:
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | **Live two-device game (Chromium ×2 + real project)** | **11** | **Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, no pictures online, room deleted afterwards** |
-| **Capture trays (Chromium)** | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at all three zooms — must vanish when empty, must follow a board flip, and a full pile of 15 must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
+| **Capture trays (Chromium)** | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at all three zooms — must vanish when empty, must follow a board flip, and a full pile of 15 3D portraits must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
 | **Mobile board + captures (Chromium)** | **24** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
 | **Room code length (Chromium + emulator)** | **14** | **Six characters everywhere the length appears independently: the constant, `ONLINE_AVATARS`, the normaliser, the join field's maxlength and typing limit, both placeholders, and the security rules — which cannot import the constant, so they are checked to accept 6 and reject 3, 4 and look-alike characters** |

@@ -86,6 +86,15 @@
   padding-right: 20px;
 }
 
+/*
+   The default level leaves 32px of margin either side, half as much again as
+   the middle one. A piece portrait is a picture rather than a letterform, so
+   it wants every pixel it can have — and here there are pixels going spare.
+*/
+.board-area[data-zoom="fit"] .capture-tray {
+  width: 30px;
+}
+
 .board-frame {
   width: min(94vw, 560px);
   max-width: 100%;

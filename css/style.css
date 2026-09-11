@@ -968,6 +968,10 @@ body.is-modal-open {
     20px, which is the margin the camera leaves at the MIDDLE zoom — the
     tightest level the tray still has to fit inside. Sizing to the widest
     level instead put 3px of captured pieces on top of the a-file.
+
+    The default level has half as much again to spare, and a piece portrait is
+    a picture rather than a letterform: it needs the pixels far more than a
+    glyph does. So that level gets the wider tray — see board.css.
   */
   width: 20px;
   padding: 6px 0;
@@ -1018,6 +1022,26 @@ body.is-modal-open {
 }
 
 .capture:last-child {
+  margin-bottom: 0;
+}
+
+/*
+   A drawn piece rather than a glyph.
+
+   Square, because the portrait is framed to the tallest piece in the set — so
+   a pawn genuinely occupies less of its tile than a king does, exactly as it
+   does on the board. The overlap is a percentage because these are images with
+   no font size to hang an em off; percentage margins resolve against the
+   column's width, which is the same number as the tile's height here.
+*/
+.capture--piece {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: -30%;
+}
+
+.capture--piece:last-child {
   margin-bottom: 0;
 }
 
