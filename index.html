@@ -240,7 +240,16 @@
         </span>
         <span class="player-card__info">
           <span class="player-card__name" id="top-name">Player 2</span>
-          <span class="player-card__color" id="top-color">Black</span>
+          <!--
+            Colour, the pieces this player has taken, and by how much they are
+            ahead — all on one line, so the captured pile costs the card no
+            extra height on a phone.
+          -->
+          <span class="player-card__meta">
+            <span class="player-card__color" id="top-color">Black</span>
+            <span class="player-card__captures" id="top-captures" role="img" aria-label=""></span>
+            <span class="player-card__edge" id="top-edge" hidden></span>
+          </span>
         </span>
         <span class="player-card__turn" id="top-turn" hidden>To move</span>
       </section>
@@ -260,7 +269,11 @@
         </span>
         <span class="player-card__info">
           <span class="player-card__name" id="bottom-name">Player 1</span>
-          <span class="player-card__color" id="bottom-color">White</span>
+          <span class="player-card__meta">
+            <span class="player-card__color" id="bottom-color">White</span>
+            <span class="player-card__captures" id="bottom-captures" role="img" aria-label=""></span>
+            <span class="player-card__edge" id="bottom-edge" hidden></span>
+          </span>
         </span>
         <span class="player-card__turn" id="bottom-turn" hidden>To move</span>
       </section>

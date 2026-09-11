@@ -898,11 +898,79 @@ body.is-modal-open {
   text-overflow: ellipsis;
 }
 
+/*
+  Colour, captured pile and lead share one line, so the pile costs the card no
+  height. It is allowed to shrink and clip rather than push the row wider,
+  because the name above it must never be squeezed out by a long pile.
+*/
+.player-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
 .player-card__color {
+  flex: none;
   color: var(--text-faint);
   font-size: 0.78rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.player-card__captures {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/*
+  The glyphs overlap slightly. A full set of captures is fifteen pieces and a
+  phone card has room for about eight at their natural width; tucking each one
+  a third behind the last fits the lot while leaving every piece identifiable,
+  which is the same trick a stack of poker chips uses.
+*/
+.capture {
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
+  flex: none;
+  margin-right: -0.28em;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.capture:last-child {
+  margin-right: 0;
+}
+
+/*
+  These are tinted to be READ, not to match the pieces exactly.
+
+  Both sides use the same solid glyphs, so colour is the only thing telling
+  them apart — and a captured black piece painted its true near-black sits on
+  a near-black card and disappears, which is what the first cut of this did.
+  A muted slate keeps it obviously the darker side while staying legible
+  against the panel, and the two tints are far enough apart to tell at a
+  glance which pile you are looking at.
+*/
+.capture[data-color="w"] {
+  color: #f4f4f0;
+}
+
+.capture[data-color="b"] {
+  color: #7e8ba6;
+}
+
+/* Only ever shown on the side that is actually ahead. */
+.player-card__edge {
+  flex: none;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .player-card__turn {

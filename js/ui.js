@@ -35,6 +35,21 @@ const VS = '\uFE0E';
 const PIECE_GLYPHS = {
   k: `♚${VS}`, q: `♛${VS}`, r: `♜${VS}`, b: `♝${VS}`, n: `♞${VS}`, p: `♟${VS}`,
 };
+/**
+ * What each piece is worth, for the running material score.
+ *
+ * The textbook values. The king is absent on purpose: it is never captured,
+ * so it can never appear in a pile.
+ */
+const PIECE_VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+
+/** Captured pieces read best strongest-first, not in the order they fell. */
+const CAPTURE_ORDER = ['q', 'r', 'b', 'n', 'p'];
+
+const PIECE_NAME = {
+  q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn',
+};
+
 const PROMOTION_PIECES = [
   { type: 'q', name: 'Queen' },
   { type: 'r', name: 'Rook' },
@@ -84,6 +99,7 @@ export class UI {
       'btn-game-menu', 'btn-game-settings',
       'card-top', 'card-bottom', 'top-name', 'top-color', 'top-turn',
       'bottom-name', 'bottom-color', 'bottom-turn',
+      'top-captures', 'bottom-captures', 'top-edge', 'bottom-edge',
       'board', 'status', 'status-text', 'status-badge',
       'btn-undo', 'btn-flip', 'btn-resign', 'btn-zoom', 'zoom-label',
       'history-panel', 'btn-history-toggle', 'history-list', 'history-count',
@@ -445,9 +461,75 @@ export class UI {
    * Player cards follow board orientation: the bottom card is always the side
    * shown at the bottom of the board.
    */
+  /**
+   * Who has taken what, and who is ahead.
+   *
+   * Derived from the move list rather than by comparing the position against a
+   * full starting set, because the position cannot tell you about a promotion:
+   * a side that queens a pawn shows one pawn short, which a material diff reads
+   * as the opponent having captured it. The history says plainly what was
+   * taken, so it stays right.
+   *
+   * Keyed by the CAPTURING colour, holding the pieces they took — which are the
+   * opponent's, and so are drawn in the opponent's colour.
+   */
+  #readCaptures(verboseMoves) {
+    const taken = { [WHITE]: [], [BLACK]: [] };
+    (verboseMoves ?? []).forEach((move) => {
+      if (move?.captured && taken[move.color]) taken[move.color].push(move.captured);
+    });
+    return taken;
+  }
+
+  /**
+   * Draw one player's captured pile, and their lead if they have one.
+   *
+   * The strip is rebuilt only when its contents actually change. render() runs
+   * on every move and this is the one part of the card that holds a dozen
+   * nodes, so a blind rebuild would churn the DOM twice a move for a strip
+   * that usually has not changed at all.
+   */
+  #renderCaptures(prefix, taken, color) {
+    const strip = this.#dom[`${prefix}-captures`];
+    const edgeEl = this.#dom[`${prefix}-edge`];
+    if (!strip || !edgeEl) return;
+
+    const mine = taken[color] ?? [];
+    const theirs = taken[color === WHITE ? BLACK : WHITE] ?? [];
+    const worth = (list) => list.reduce((sum, p) => sum + (PIECE_VALUE[p] ?? 0), 0);
+    const edge = worth(mine) - worth(theirs);
+
+    // Strongest first, which is also how a pile is read at a glance.
+    const sorted = [...mine].sort(
+      (a, b) => CAPTURE_ORDER.indexOf(a) - CAPTURE_ORDER.indexOf(b),
+    );
+    const key = `${sorted.join('')}|${edge}`;
+    if (strip.dataset.key === key) return;
+    strip.dataset.key = key;
+
+    // Captured pieces belong to the other side, so they are drawn in the other
+    // side's colour — a white card shows the black pieces it has taken.
+    const theirColor = color === WHITE ? BLACK : WHITE;
+    strip.innerHTML = sorted
+      .map((p) => `<span class="capture" data-color="${theirColor}">${PIECE_GLYPHS[p]}</span>`)
+      .join('');
+
+    // A count per kind, so a screen reader gets the pile as a sentence rather
+    // than as a dozen identical glyph names.
+    const counts = new Map();
+    sorted.forEach((p) => counts.set(p, (counts.get(p) ?? 0) + 1));
+    const spoken = [...counts].map(([p, n]) =>
+      `${n} ${PIECE_NAME[p]}${n === 1 ? '' : 's'}`).join(', ');
+    strip.setAttribute('aria-label', spoken ? `Captured ${spoken}` : '');
+
+    edgeEl.hidden = edge <= 0;
+    if (edge > 0) edgeEl.textContent = `+${edge}`;
+  }
+
   #renderPlayers({ state, orientation }) {
     const bottomColor = orientation === 'black' ? BLACK : WHITE;
     const topColor = bottomColor === WHITE ? BLACK : WHITE;
+    const taken = this.#readCaptures(state.verboseMoves);
 
     const apply = (prefix, color) => {
       const name = this.#dom[`${prefix}-name`];
@@ -461,6 +543,7 @@ export class UI {
       const avatar = card?.querySelector('.player-card__avatar');
       if (avatar) avatar.dataset.color = color;
       this.#renderCardPhoto(card, state.players[color]?.avatar);
+      this.#renderCaptures(prefix, taken, color);
 
       const isTurn = state.turn === color && !state.isGameOver;
       if (turnEl) turnEl.hidden = !isTurn;

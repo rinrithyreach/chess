@@ -133,6 +133,33 @@ URLs of `png`, `jpeg` or `webp` are ever rendered: never a remote URL, which
 could otherwise report who looked at the board, and never SVG, which is a
 document rather than a picture.
 
+**Captured pieces, on both sides** — each player card shows the pieces that
+player has taken, strongest first, with the running material lead (`+2`) on
+whoever is ahead. They share the line with the colour label, so the pile costs
+the card no extra height on a phone.
+
+The piles come from the **move history**, not from comparing the position
+against a full starting set. That distinction is the whole correctness story: a
+side that promotes a pawn shows one pawn short, and a material diff reads that
+as the opponent having captured it — inventing a capture that never happened
+and skewing the score. The history says plainly what was taken. A position
+restored from a bare FEN has no history and so shows no piles, which is honest:
+nothing knows what was captured to reach it.
+
+A full pile is fifteen pieces and a phone card fits about eight at their
+natural width, so the glyphs overlap by a third — the same trick a stack of
+poker chips uses. Past that the pile clips and the score does not: the number
+is the part you actually need.
+
+**A board that fills the phone** — on mobile the board goes edge to edge. It is
+the only square thing on the page and it is limited by WIDTH, not height (the
+camera fits the board to whichever axis is tighter, and on a phone that is
+always the width), so every pixel of gutter was a pixel off each side of every
+square. It breaks out of the page padding rather than removing it, so the cards
+and controls keep their margins. On a 390px phone the board went from 348px to
+384px: a tenth wider, a fifth more area. Tablets and desktop are untouched —
+there the board is capped long before the screen runs out.
+
 **Game management** — restart (local), resign, rematch, board flip, and copy
 PGN. The control row is **Undo, Flip, Resign**.
 
@@ -802,7 +829,7 @@ Game* is only offered for a valid, unfinished game.
 The app ships with no test dependencies; verification is run from outside the
 project. Fifteen suites cover the game itself — **815 assertions, all passing,
 with zero console errors in every browser and viewport tested** — and
-seven more cover profile pictures and the room code, a further **140 assertions**, run against the
+eight more cover profile pictures, the room code and the mobile board, a further **161 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator. The
 two groups were run separately, so the totals are reported separately rather
 than as one number:
@@ -829,6 +856,7 @@ than as one number:
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | **Live two-device game (Chromium ×2 + real project)** | **11** | **Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, no pictures online, room deleted afterwards** |
+| **Mobile board + captures (Chromium)** | **21** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
 | **Room code length (Chromium + emulator)** | **14** | **Six characters everywhere the length appears independently: the constant, `ONLINE_AVATARS`, the normaliser, the join field's maxlength and typing limit, both placeholders, and the security rules — which cannot import the constant, so they are checked to accept 6 and reject 3, 4 and look-alike characters** |
 
@@ -978,6 +1006,10 @@ And two from building that WebGL board:
 | 24 | Tap the × on a picker | Picture gone, king glyph back, and it is not offered next time |
 | 25 | Pick a non-image file | Refused with a message naming the problem; nothing changes |
 | 26 | Create a room with the phone's text size at maximum | All six characters of the code still readable |
+| 27 | Capture a piece | It appears on the capturing player's card, in the other side's colour |
+| 28 | Trade evenly, then win a piece | The lead badge appears only on the side that is ahead, and vanishes at level material |
+| 29 | Promote a pawn | Neither pile changes — a promotion is not a capture |
+| 30 | Play on a phone | The board reaches both edges of the screen; cards and controls keep their margins |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 

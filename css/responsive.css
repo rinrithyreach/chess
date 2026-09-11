@@ -61,10 +61,52 @@
   .game {
     padding-left: 0.4rem;
     padding-right: 0.4rem;
+    /* The cards sit closer to the board they belong to. */
+    gap: 0.5rem;
+  }
+
+  /*
+    The board goes edge to edge.
+
+    It is the only square thing on the page and it is limited by WIDTH, not
+    height — the camera fits the board to whichever axis is tighter, and on a
+    phone that is always the width. So every pixel of gutter is a pixel off
+    each side of every square. Breaking the board out of .game's padding with
+    a negative margin, rather than removing that padding, keeps the gutter for
+    the cards and controls, which do need it.
+
+    On a 390px phone this takes the board from 348px to 382px: about a tenth
+    wider, and a fifth more area.
+  */
+  .board-area {
+    margin-left: -0.4rem;
+    margin-right: -0.4rem;
   }
 
   .board-frame {
-    width: min(99vw, 560px);
+    width: 100%;
+    max-width: none;
+    /* The frame's own inset costs the board twice over, so it goes too. What
+       is left is the border, which is what makes the board read as an object
+       rather than as wallpaper. */
+    padding: 3px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  /* Chrome gives way before the board does. */
+  .app-header {
+    padding: 0.25rem 0.5rem;
+  }
+
+  .player-card {
+    padding: 0.45rem 0.7rem;
+  }
+
+  .status {
+    min-height: 32px;
+    padding: 0.2rem 0.5rem;
   }
 }
 
