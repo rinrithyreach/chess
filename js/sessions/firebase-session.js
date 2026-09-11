@@ -86,7 +86,14 @@ export function explainFirebaseError(error) {
   // The SDK reports this as "PERMISSION_DENIED" in some paths and
   // "Permission denied" in others, so match both spellings.
   if (/permission[\s_]denied/i.test(message) || code === 'PERMISSION_DENIED') {
-    return 'The database rejected that. Deploy the security rules: firebase deploy --only database';
+    // Names the console first. The CLI line was the only instruction here
+    // before, which is no help at all to the many people who have a Firebase
+    // project but have never installed firebase-tools — and installing it,
+    // then logging in, is a far longer road than pasting one file into a page
+    // you are already signed in to.
+    return 'The database rejected that. Your security rules are out of date — '
+      + 'paste firebase/database.rules.json into Realtime Database → Rules in '
+      + 'the Firebase console and publish (or run: npx firebase-tools deploy --only database)';
   }
   if (/Cannot parse Firebase url|FIREBASE FATAL ERROR|Can't determine Firebase Database URL/i.test(message)) {
     return 'databaseURL is missing or malformed. Copy it exactly from Realtime Database in the console — regional databases do not end in firebaseio.com.';
