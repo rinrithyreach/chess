@@ -776,7 +776,7 @@ Game* is only offered for a valid, unfinished game.
 The app ships with no test dependencies; verification is run from outside the
 project. Fifteen suites cover the game itself — **815 assertions, all passing,
 with zero console errors in every browser and viewport tested** — and
-four more cover profile pictures, a further **80 assertions**, run against the
+five more cover profile pictures and the room code, a further **115 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator. The
 two groups were run separately, so the totals are reported separately rather
 than as one number:
@@ -802,6 +802,7 @@ than as one number:
 | **Profile pictures — rules (emulator)** | **14** | **The shipped rules loaded into the database emulator and driven as an ordinary signed-in user: PNG, JPEG and WebP accepted; remote URLs, `javascript:`, SVG, HTML, a 40KB payload and a non-string all rejected; unknown player fields still rejected; the rematch seat swap still allowed, and a stranger's uid still not** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
+| **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
 
 The 3D suite's headline check is picking. Every one of the 64 squares is
 projected through the live camera to find where it is actually drawn, clicked
@@ -948,6 +949,7 @@ And two from building that WebGL board:
 | 23 | Return to the menu and start another game | The picture is offered back, already in place |
 | 24 | Tap the × on a picker | Picture gone, king glyph back, and it is not offered next time |
 | 25 | Pick a non-image file | Refused with a message naming the problem; nothing changes |
+| 26 | Create a room with the phone's text size at maximum | All six characters of the code still readable |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 

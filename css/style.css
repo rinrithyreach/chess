@@ -640,8 +640,21 @@ body.is-modal-open {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /*
+    Never wider than the screen. Without this the box just keeps growing with
+    the text size, and `body { overflow-x: hidden }` quietly clips whatever
+    sticks out — see .room-code__value for why that is the worst possible
+    failure here.
+  */
+  max-width: 100%;
+  /* Centred, and the copy button drops to its own row if the code needs the
+     whole width. */
+  flex-wrap: wrap;
+  justify-content: center;
   margin-bottom: 1.5rem;
-  padding: 0.6rem 0.6rem 0.6rem 1.1rem;
+  /* Padding gives way before the code does: at a large text size the fixed
+     1.1rem was costing 40px of the very space the code needed. */
+  padding: 0.6rem clamp(0.45rem, 3vw, 1.1rem);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   background: var(--accent-soft);
@@ -649,12 +662,40 @@ body.is-modal-open {
 
 .room-code__value {
   font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-  font-size: 1.85rem;
+  /*
+    Shrinks with the viewport, so a narrow phone gets a code that fits rather
+    than one that runs off the edge. The rem floor keeps it legible and keeps
+    it scaling with the reader's own text size, which a bare `vw` would not.
+  */
+  font-size: clamp(1.35rem, 9vw, 1.85rem);
   font-weight: 800;
-  letter-spacing: 0.3em;
-  /* The trailing letter-spacing would otherwise push the code off-centre. */
-  text-indent: 0.3em;
+  /* Tracking is the first thing to give: it is what makes the code readable in
+     chunks, not what makes it legible, so trading it for a code that stays on
+     one line is a good trade. */
+  letter-spacing: clamp(0.12em, 2.5vw, 0.3em);
+  /* Matches the tracking, because the trailing space on the last character
+     would otherwise push the code off-centre. */
+  text-indent: clamp(0.12em, 2.5vw, 0.3em);
   color: var(--accent);
+
+  /*
+    Wrap rather than vanish.
+
+    Horizontal overflow is hidden on the body, so a code wider than the screen
+    is not something you can scroll to — it is simply gone. And .waiting
+    centres its children, so it goes from BOTH ends and leaves the middle:
+    at a 2x accessibility text size on a 320px phone, ABC234 renders as BC23,
+    which reads as a complete four-character code rather than as a broken one.
+    That is the worst failure available to the one string this screen exists to
+    hand to another person.
+
+    min-width lets the flex item shrink below its content — without it the
+    `auto` minimum makes it refuse — and the break lets the code use two lines
+    when one will not do. A wrapped code is slightly ugly. An invisible one is
+    a dead end.
+  */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .waiting__note {
