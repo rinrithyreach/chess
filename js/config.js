@@ -177,6 +177,43 @@ export const BOARD_THEMES = [
 ];
 
 /**
+ * App backgrounds. Values map to `data-bg` on the root element.
+ *
+ * The background is not just the strip around the board. The 3D renderer is
+ * transparent — `alpha: true`, clear colour alpha 0 — so the page shows
+ * through the board's own scene as well as around it, which is why this is
+ * worth a setting at all and why every one of these is dark: a light ground
+ * behind a lit 3D board reads as a photograph on the wrong wall.
+ *
+ * Each id is a block in style.css that redefines the surface tokens only —
+ * base, glow, panels and borders, in one hue, holding the lightness ladder
+ * the default sets. Text and accent tokens are deliberately untouched: they
+ * are what carry contrast, and a background is no reason to renegotiate it.
+ */
+export const BACKGROUNDS = [
+  { id: 'midnight', label: 'Midnight', hint: 'Cool and dark' },
+  { id: 'charcoal', label: 'Charcoal', hint: 'Neutral graphite' },
+  { id: 'forest', label: 'Forest', hint: 'Club-room green' },
+  { id: 'mahogany', label: 'Mahogany', hint: 'Warm and wooden' },
+];
+
+/** The background a player gets with nothing stored, and the fallback. */
+export const DEFAULT_BACKGROUND = 'midnight';
+
+export const VALID_BACKGROUNDS = BACKGROUNDS.map((b) => b.id);
+
+/**
+ * Which background to actually use.
+ *
+ * An unknown id — one from a build that offered more of them — falls back to
+ * the default rather than being written to the DOM, where it would match no
+ * block and leave the page on whatever `:root` happens to say.
+ */
+export function resolveBackground(id) {
+  return VALID_BACKGROUNDS.includes(id) ? id : DEFAULT_BACKGROUND;
+}
+
+/**
  * Available looks.
  *
  * `board3d` is the WebGL board — real geometry, lighting and shadows — and is
@@ -268,6 +305,7 @@ export const DEFAULT_SETTINGS = {
   uiStyle: DEFAULT_UI_STYLE,
   boardZoom: DEFAULT_BOARD_ZOOM,
   boardTheme: 'classic',
+  background: DEFAULT_BACKGROUND,
   showCoordinates: true,
   animations: true,
   autoFlip: false,

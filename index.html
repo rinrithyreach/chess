@@ -12,32 +12,40 @@
   <link rel="stylesheet" href="./css/board-3d.css">
   <link rel="stylesheet" href="./css/responsive.css">
   <script>
-    // Apply the saved skin before first paint so switching never flashes the
-    // other style. Deliberately inline and tiny; the app re-applies it later.
-    // Mirrors resolveUiStyle() in js/config.js — keep the id list in sync.
-    // Duplicated here only because it must run before first paint, ahead of
-    // any module loading.
+    // Apply the saved skin and background before first paint so neither one
+    // ever flashes the other. Deliberately inline and tiny; the app re-applies
+    // both later. Mirrors resolveUiStyle() and resolveBackground() in
+    // js/config.js — keep the id lists in sync. Duplicated here only because
+    // it must run before first paint, ahead of any module loading.
     (function () {
       // Every style that is built, and the subset a player may be left on.
       // `?ui=` accepts the first list so the fallback board stays previewable;
       // a stored value is only trusted if it is on the second.
       var BUILT = ['classic', 'board3d'];
       var SELECTABLE = ['board3d'];
+      var BACKGROUNDS = ['midnight', 'charcoal', 'forest', 'mahogany'];
       var style = 'board3d';
+      var background = 'midnight';
       try {
+        var raw = localStorage.getItem('chess-arena:settings');
+        var stored = raw ? JSON.parse(raw).settings : null;
+
         var ui = new URLSearchParams(location.search).get('ui');
         if (BUILT.indexOf(ui) >= 0) {
           style = ui;
         } else {
-          var raw = localStorage.getItem('chess-arena:settings');
-          var saved = raw && JSON.parse(raw).settings.uiStyle;
           // Anything not selectable — `arcade` from an older build, or
           // `classic` from back when it was on offer — falls back to the
           // default rather than being trusted.
-          if (SELECTABLE.indexOf(saved) >= 0) style = saved;
+          if (stored && SELECTABLE.indexOf(stored.uiStyle) >= 0) style = stored.uiStyle;
         }
-      } catch (_) { /* fall through to the default */ }
+
+        if (stored && BACKGROUNDS.indexOf(stored.background) >= 0) {
+          background = stored.background;
+        }
+      } catch (_) { /* fall through to the defaults */ }
       document.documentElement.setAttribute('data-ui-style', style);
+      document.documentElement.setAttribute('data-bg', background);
     })();
   </script>
 </head>
@@ -445,6 +453,11 @@
       <div class="setting setting--stack">
         <span class="setting__label" id="theme-label">Board Theme</span>
         <div class="theme-picker" id="theme-picker" role="radiogroup" aria-labelledby="theme-label"></div>
+      </div>
+
+      <div class="setting setting--stack">
+        <span class="setting__label" id="bg-label">Background</span>
+        <div class="bg-picker" id="bg-picker" role="radiogroup" aria-labelledby="bg-label"></div>
       </div>
 
       <button type="button" class="btn btn--primary btn--block" data-close="settings">Done</button>

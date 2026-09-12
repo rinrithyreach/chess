@@ -355,8 +355,26 @@ skin, and a saved `classic` from back when it was on offer, both land on the
 3D board with no migration step and nobody left behind. (`js/board-3d.js`
 explains in its header why Arcade went; the history is in git.)
 
+**Background** — four grounds in Settings: *Midnight* (the default cool dark),
+*Charcoal*, *Forest* and *Mahogany*. Not only the strip around the board —
+the 3D renderer is transparent, so the page shows through its scene as well
+as around it, and changing this changes what the board is sitting in. Each one
+redefines the surface tokens only — ground, glow, panels and borders, in one
+hue, holding the lightness ladder the default sets — so cards, modals and
+toasts follow without being listed. Text and accent tokens are deliberately
+untouched: they carry the contrast, and every background is checked against
+them (body text clears **AAA** on the ground and on a panel in all four).
+Each swatch in the picker is the game screen in miniature — ground, a player
+card, the gold pip — rather than a square of the ground: these grounds are all
+within a few points of black, so a plain chip of one is a black box that tells
+you nothing. What separates them on a real screen is the ground seen against
+the cards and the accent on it, so that is what the swatch shows.
+
+Applied before first paint by the same inline script that applies the skin,
+so coming back to a saved choice never flashes the default first.
+
 **Interface** — start screen, new-game setup, waiting room with the shareable
-code, responsive game screen, settings (sound, board theme,
+code, responsive game screen, settings (sound, board theme, background,
 coordinates, animations, auto-flip), custom confirmation modals, toasts, and a
 collapsible move history.
 
@@ -660,7 +678,7 @@ The rules that keep this maintainable:
 
 ### Why orientation and settings are *not* session state
 
-Board orientation, sound, theme and animations are per-device display
+Board orientation, sound, theme, background and animations are per-device display
 preferences. In online play each phone orients the board for its own player,
 so these belong to the controller, not to the shared game state. Keeping them
 out of the session means the session snapshot is exactly what a future
@@ -852,7 +870,8 @@ Three independent `localStorage` keys are used so a corrupt game never costs
 you your preferences:
 
 - `chess-arena:game` — the current game
-- `chess-arena:settings` — sound, theme, coordinates, animations, auto-flip
+- `chess-arena:settings` — sound, board theme, background, coordinates,
+  animations, auto-flip
 - `chess-arena:avatars` — the remembered profile picture for each New Game seat
 
 Profile pictures get their own key rather than living inside settings. They
@@ -909,7 +928,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**. The groups were run separately, so
+Pictures on online seats add **36 more**, and the background setting **32**. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -932,6 +951,7 @@ the totals are reported separately rather than as one number:
 | **Profile pictures (Chromium)** | **39** | **A real file through the real picker: centre-cropped, scaled to 128px, under budget; shown on the card, saved, restored after a reload, offered back next game; a 6-megapixel photo still fits; a non-image is refused and says why; remote, `javascript:` and SVG values all rejected** |
 | Rules (emulator) | 14 | The rules of the time loaded into the database emulator and driven as an ordinary signed-in user: a room with no picture accepted, unknown player fields rejected, a stranger's uid refused a seat. Its avatar rows asserted that *every* picture was rejected, which was true of the rules then deployed and is no longer true of the rules in this repo — superseded by the suite below, not re-run |
 | **Pictures on online seats (Chromium ×2)** | **36** | **Two devices against a database that enforces the shipped rule text — the cap and the pattern are read out of `firebase/database.rules.json` itself, so client and rules are checked against each other rather than against anyone's memory. A photograph over the budget at 128px comes back 96px and inside it; one already inside is not re-encoded a second time; a remote URL, an SVG and nothing at all are all refused. Two players create, join, and see each other's face on both devices, and the room document carrying both faces is 9,475 bytes. Then the same run against rules that do NOT know the field: the write is refused, the room is created anyway without the picture, both players are told why, and the game is playable — the failure that this feature caused the first time it shipped. Zero console errors** |
+| **Background (Chromium)** | **32** | **All four grounds: each repaints the page, marks only itself checked, and previews itself in the picker rather than the one in force; the choice survives a reload and is proved to be on the root element BEFORE any module runs (app.js blocked, the attribute already set), so it cannot flash the default first; an unknown id out of storage lands on the default. The swatches are measured rather than admired: each must show a card that separates from its own ground (fill and outline both), and no two cards may be within 8 points of each other — the check that a paint-chip preview would fail even while every ground was technically a different colour. Contrast is computed from the token values in the stylesheet itself for every background — body text AAA on the ground and on a panel, muted text AA, the accent legible — rather than eyeballed** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
@@ -1091,6 +1111,8 @@ And two from building that WebGL board:
 | 28 | Trade evenly, then win a piece | The lead badge appears only on the side that is ahead, and vanishes at level material |
 | 29 | Promote a pawn | Neither pile changes — a promotion is not a capture |
 | 30 | Play on a phone | The board reaches both edges of the screen; cards and controls keep their margins |
+| 31 | Pick a background in Settings | The whole page repaints at once — ground, cards, modals and all |
+| 32 | Reload after picking one | It is still there, and was there from the first frame rather than snapping in |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 

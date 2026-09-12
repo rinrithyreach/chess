@@ -5,6 +5,7 @@
 :root {
   /* Surfaces */
   --bg: #0f1115;
+  --bg-glow: #1c2130;
   --bg-elevated: #161922;
   --panel: #1b1f2a;
   --panel-soft: #212636;
@@ -63,11 +64,78 @@ body {
   padding: 0;
 }
 
+/* --------------------------------------------------------------------------
+   Backgrounds.
+
+   One block per id in BACKGROUNDS (js/config.js), set on the root element as
+   `data-bg` — before first paint by the inline script in index.html, and again
+   by the app once settings load.
+
+   Each block redefines the SURFACE ladder only, and keeps the lightness steps
+   the default sets: base, glow, elevated, panel, panel-soft, then the two
+   borders. Text and accent tokens are deliberately not listed. They are what
+   carry contrast against every one of these, and a background is no reason to
+   renegotiate that — which is also what keeps adding a background to a block
+   of seven values rather than an audit of the whole stylesheet.
+
+   Midnight has a block like the others even though `:root` already says the
+   same thing, and the duplication is deliberate. `:root` is the fallback for a
+   page with no `data-bg` at all — script blocked, storage unreadable — while
+   this block is what the attribute selects, and what a SWATCH needs: a swatch
+   cannot inherit Midnight's values from `:root` while some other background is
+   the one in force, which is exactly when it would be showing the wrong
+   colours. The two must be changed together.
+   -------------------------------------------------------------------------- */
+
+:root[data-bg="midnight"],
+.bg-swatch__preview[data-bg="midnight"] {
+  --bg: #0f1115;
+  --bg-glow: #1c2130;
+  --bg-elevated: #161922;
+  --panel: #1b1f2a;
+  --panel-soft: #212636;
+  --border: #2a3040;
+  --border-strong: #3a4257;
+}
+
+:root[data-bg="charcoal"],
+.bg-swatch__preview[data-bg="charcoal"] {
+  --bg: #101012;
+  --bg-glow: #202024;
+  --bg-elevated: #17181b;
+  --panel: #1d1e22;
+  --panel-soft: #24262b;
+  --border: #2e3036;
+  --border-strong: #40434b;
+}
+
+:root[data-bg="forest"],
+.bg-swatch__preview[data-bg="forest"] {
+  --bg: #0b1410;
+  --bg-glow: #16281f;
+  --bg-elevated: #111d18;
+  --panel: #16241e;
+  --panel-soft: #1c2c25;
+  --border: #26382f;
+  --border-strong: #364d41;
+}
+
+:root[data-bg="mahogany"],
+.bg-swatch__preview[data-bg="mahogany"] {
+  --bg: #14100d;
+  --bg-glow: #2a1e16;
+  --bg-elevated: #1d1813;
+  --panel: #241d17;
+  --panel-soft: #2c241c;
+  --border: #382c22;
+  --border-strong: #4d3c2e;
+}
+
 body {
   min-height: 100vh;
   min-height: 100dvh;
   background:
-    radial-gradient(1100px 600px at 50% -10%, #1c2130 0%, transparent 60%),
+    radial-gradient(1100px 600px at 50% -10%, var(--bg-glow) 0%, transparent 60%),
     var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -1627,6 +1695,106 @@ body.is-modal-open {
   height: 26px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
+}
+
+/* --------------------------------------------------------------------------
+   Background picker
+
+   Two columns rather than the board picker's three: these labels are words
+   rather than one-word colours, and four of them in a row on a phone would
+   wrap "Mahogany" onto two lines.
+   -------------------------------------------------------------------------- */
+
+.bg-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.bg-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: var(--tap);
+  padding: 0.5rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text-muted);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.bg-swatch.is-active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/*
+  The swatch is the game screen in miniature — ground, a player card, the gold
+  pip — rather than a paint chip.
+
+  The paint chip was the obvious thing and it was wrong. Every one of these
+  grounds is within a few points of black, so a 30px rectangle of pure ground
+  is four black boxes: honest about the colour, useless at telling anyone what
+  they are choosing. What separates these backgrounds on a real screen is never
+  the ground alone, it is the ground SEEN AGAINST the cards and the accent
+  sitting on it — so the swatch shows that instead, and the hue arrives as
+  contrast rather than as a wash nobody can see.
+
+  The gradient is in percentages rather than the body's pixel radii, which is
+  what lets one rule serve a 44px preview and a phone screen alike.
+*/
+.bg-swatch__preview {
+  position: relative;
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 150% at 50% -20%, var(--bg-glow) 0%, transparent 70%),
+    var(--bg);
+}
+
+/* The player card: the surface that carries this background's hue at a size
+   the eye can actually read it at. */
+.bg-swatch__preview::before {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 20%;
+  height: 38%;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--panel-soft);
+}
+
+/* The "to move" pip, so the swatch also says what does NOT change: the accent
+   is the same gold on every ground, and seeing it here is how you know. */
+.bg-swatch__preview::after {
+  content: "";
+  position: absolute;
+  right: 18%;
+  bottom: 30%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.bg-swatch__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.bg-swatch__hint {
+  color: var(--text-faint);
+  font-size: 0.66rem;
+  text-align: center;
 }
 
 /* ==========================================================================

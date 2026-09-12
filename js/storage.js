@@ -15,6 +15,7 @@ import {
   AVATAR_SLOTS,
   BOARD_THEMES,
   resolveUiStyle,
+  resolveBackground,
   clampBoardZoom,
   STATUS,
   TERMINAL_STATUSES,
@@ -118,6 +119,9 @@ export function loadSettings() {
   if (typeof source.animations === 'boolean') merged.animations = source.animations;
   if (typeof source.autoFlip === 'boolean') merged.autoFlip = source.autoFlip;
   if (VALID_THEME_IDS.includes(source.boardTheme)) merged.boardTheme = source.boardTheme;
+  // Resolved rather than checked: an id from a build with more backgrounds
+  // than this one lands on the default instead of on no block at all.
+  merged.background = resolveBackground(source.background);
 
   return merged;
 }

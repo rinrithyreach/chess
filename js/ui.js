@@ -12,6 +12,9 @@ import {
   BLACK,
   STATUS,
   BOARD_THEMES,
+  BACKGROUNDS,
+  DEFAULT_BACKGROUND,
+  resolveBackground,
   BOARD_ZOOM_LEVELS,
   clampBoardZoom,
   GAME_MODE,
@@ -127,7 +130,7 @@ export class UI {
       'modal-gameover', 'gameover-icon', 'gameover-title', 'gameover-result',
       'gameover-detail', 'btn-rematch', 'btn-gameover-new',
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
-      'theme-picker',
+      'theme-picker', 'bg-picker',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
       // Phase 2 — online
@@ -278,6 +281,26 @@ export class UI {
       });
     }
 
+    // Background picker. Same shape as the board themes above, and for the
+    // same reason: one list in config.js decides what exists, so a background
+    // is a block of CSS and a row in that list, with no markup to add here.
+    const backgrounds = this.#dom['bg-picker'];
+    if (backgrounds) {
+      backgrounds.innerHTML = '';
+      BACKGROUNDS.forEach((background) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'bg-swatch';
+        button.dataset.bg = background.id;
+        button.setAttribute('role', 'radio');
+        button.setAttribute('aria-checked', 'false');
+        button.innerHTML =
+          `<span class="bg-swatch__preview" data-bg="${background.id}"></span>` +
+          `<span class="bg-swatch__label">${background.label}</span>` +
+          `<span class="bg-swatch__hint">${background.hint}</span>`;
+        backgrounds.append(button);
+      });
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -973,9 +996,20 @@ export class UI {
       option.setAttribute('aria-checked', String(active));
     });
 
+    // Resolved rather than written straight through: an unknown id would match
+    // no block and leave the page on whatever was there before, which reads as
+    // the setting having done nothing.
+    const background = resolveBackground(settings.background ?? DEFAULT_BACKGROUND);
+    this.#dom['bg-picker']?.querySelectorAll('.bg-swatch').forEach((swatch) => {
+      const active = swatch.dataset.bg === background;
+      swatch.classList.toggle('is-active', active);
+      swatch.setAttribute('aria-checked', String(active));
+    });
+
     this.#renderZoomControl(settings);
     this.#dom.board?.setAttribute('data-theme', settings.boardTheme);
     document.documentElement.setAttribute('data-ui-style', settings.uiStyle ?? DEFAULT_UI_STYLE);
+    document.documentElement.setAttribute('data-bg', background);
   }
 
   // -----------------------------------------------------------------------
@@ -1243,6 +1277,12 @@ export class UI {
       const swatch = event.target.closest('.theme-swatch');
       if (!swatch) return;
       this.#call('onSettingChange', { boardTheme: swatch.dataset.theme });
+    });
+
+    this.#dom['bg-picker']?.addEventListener('click', (event) => {
+      const swatch = event.target.closest('.bg-swatch');
+      if (!swatch) return;
+      this.#call('onSettingChange', { background: swatch.dataset.bg });
     });
 
     // --- Global: backdrop clicks and Escape ---
