@@ -12,6 +12,7 @@ import {
   BLACK,
   STATUS,
   BOARD_THEMES,
+  GAUNTLET_ROUNDS,
   BACKGROUNDS,
   DEFAULT_BACKGROUND,
   resolveBackground,
@@ -131,6 +132,7 @@ export class UI {
       'gameover-detail', 'btn-rematch', 'btn-gameover-new',
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
       'theme-picker', 'bg-picker',
+      'mode-tournament', 'tournament-fields', 'ladder', 'ladder-note', 'btn-ladder-next',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
       // Phase 2 — online
@@ -281,6 +283,24 @@ export class UI {
       });
     }
 
+    // The ladder. One row per rung, built once; which row is which state is
+    // decided on every render by syncGauntlet().
+    const ladder = this.#dom.ladder;
+    if (ladder) {
+      ladder.innerHTML = '';
+      GAUNTLET_ROUNDS.forEach((rung) => {
+        const item = document.createElement('li');
+        item.className = 'ladder__rung';
+        item.dataset.round = String(rung.round);
+        item.innerHTML =
+          '<span class="ladder__mark" aria-hidden="true"></span>' +
+          `<span class="ladder__name">${rung.label}</span>` +
+          `<span class="ladder__hint">${rung.hint}</span>` +
+          '<span class="ladder__state"></span>';
+        ladder.append(item);
+      });
+    }
+
     // Background picker. Same shape as the board themes above, and for the
     // same reason: one list in config.js decides what exists, so a background
     // is a block of CSS and a row in that list, with no markup to add here.
@@ -331,16 +351,29 @@ export class UI {
   #applyMode(mode) {
     const online = mode === GAME_MODE.ONLINE;
     const bot = mode === GAME_MODE.BOT;
+    const ladder = mode === GAME_MODE.TOURNAMENT;
 
     if (this.#dom['online-fields']) this.#dom['online-fields'].hidden = !online;
+    if (this.#dom['tournament-fields']) this.#dom['tournament-fields'].hidden = !ladder;
     if (this.#dom['btn-start-game']) this.#dom['btn-start-game'].hidden = online;
 
     const nameFields = this.#dom['form-new-game']
       ?.querySelectorAll('.field:not(.field--modes)');
     nameFields?.forEach((field, index) => {
-      if (index === 0) field.hidden = online;            // the player's own name
-      else if (index === 1) field.hidden = online || bot; // the opponent's
+      if (index === 0) field.hidden = online;                        // your own name
+      else if (index === 1) field.hidden = online || bot || ladder;  // the opponent's
     });
+
+    // The button says what it is about to do. On the ladder that is not a
+    // game in general but one particular opponent, and naming them is the
+    // difference between a form and a challenge.
+    const start = this.#dom['btn-start-game'];
+    if (start) {
+      const run = this.#controller.getGauntlet?.();
+      start.textContent = ladder && run?.opponent
+        ? `Play Round ${run.round}: ${run.opponent.label}`
+        : 'Start Game';
+    }
   }
 
   /**
@@ -907,7 +940,124 @@ export class UI {
       icon.dataset.color = result.winner ?? '';
     }
 
+    this.#renderLadderOutcome(state);
     this.openModal('gameover');
+  }
+
+  // -----------------------------------------------------------------------
+  // The tournament ladder
+  // -----------------------------------------------------------------------
+
+  /**
+   * Turn the end of a ladder game into the one thing to do next.
+   *
+   * Rematch is swapped out rather than left beside this. On a ladder the
+   * next game is never "the same again": it is the next rung, this rung
+   * once more, or the bottom — and a Rematch button sitting next to that is
+   * a second answer to a question that has one. (It would also swap
+   * colours, and the ladder is built on the human playing White.)
+   */
+  #renderLadderOutcome(state) {
+    const next = this.#dom['btn-ladder-next'];
+    const rematch = this.#dom['btn-rematch'];
+    const detail = this.#dom['gameover-detail'];
+    const ladder = state?.mode === GAME_MODE.TOURNAMENT;
+
+    if (next) next.hidden = !ladder;
+    if (rematch) rematch.hidden = ladder;
+    if (!ladder || !next) return;
+
+    // Read AFTER the controller has settled the result, so this is where the
+    // player now stands rather than where they stood before the last move.
+    const run = this.#controller.getGauntlet();
+    const played = GAUNTLET_ROUNDS.find((rung) => rung.round === state.gauntletRound);
+    const winner = state.result?.winner ?? null;
+    const beat = winner === WHITE;
+    const drew = winner === null;
+
+    const label = (round) => {
+      const rung = GAUNTLET_ROUNDS.find((r) => r.round === round);
+      return rung ? `Round ${round}: ${rung.label}` : `Round ${round}`;
+    };
+
+    let playRound = run.round;
+    let text = `Play ${label(run.round)}`;
+    let story = '';
+
+    if (beat && run.complete) {
+      playRound = 1;
+      text = 'Climb it again';
+      story = `${played?.label ?? 'The Champion'} beaten — that is the whole ladder.`;
+    } else if (beat) {
+      story = `${played?.label ?? 'Beaten'} beaten. ${label(run.round)} next.`;
+    } else if (drew) {
+      playRound = state.gauntletRound;
+      text = `Replay ${label(state.gauntletRound)}`;
+      story = `A draw holds ${played?.label ?? 'them'} but does not beat them.`;
+    } else {
+      text = `Start again: ${label(1)}`;
+      story = run.best > 0
+        ? `${played?.label ?? 'They'} won. Back to the bottom — your best is still round ${run.best}.`
+        : `${played?.label ?? 'They'} won. Back to the bottom.`;
+    }
+
+    next.textContent = text;
+    next.dataset.round = String(playRound);
+    if (detail) detail.textContent = story;
+  }
+
+  /**
+   * Show where the player stands.
+   *
+   * Three states per rung, and the wording matters more than it looks:
+   * "beaten" is a fact about the past that a lost run must not erase, while
+   * "locked" is about now. That is why a rung can read as beaten and locked
+   * at the same time after a defeat — the record stands, the road back does
+   * not.
+   */
+  syncGauntlet(run) {
+    if (!run) return;
+
+    this.#dom.ladder?.querySelectorAll('.ladder__rung').forEach((item) => {
+      const round = Number(item.dataset.round);
+      const beaten = round <= run.best;
+      const current = round === run.round;
+
+      item.classList.toggle('is-beaten', beaten);
+      item.classList.toggle('is-current', current);
+      item.classList.toggle('is-locked', !beaten && !current);
+
+      const state = item.querySelector('.ladder__state');
+      if (state) {
+        state.textContent = beaten ? 'beaten' : current ? 'next' : 'locked';
+      }
+      const mark = item.querySelector('.ladder__mark');
+      if (mark) mark.textContent = beaten ? '✓' : String(round);
+
+      // The row a screen reader lands on should say the same three things
+      // the sighted reader sees, in one go rather than as three fragments.
+      const name = item.querySelector('.ladder__name')?.textContent ?? '';
+      item.setAttribute('aria-label',
+        `Round ${round}, ${name}: ${beaten ? 'beaten' : current ? 'next to play' : 'locked'}`);
+    });
+
+    const note = this.#dom['ladder-note'];
+    if (note) {
+      if (run.complete) {
+        note.textContent = 'You have beaten the whole ladder. Play it again from the top.';
+      } else if (run.best > 0) {
+        note.textContent = `Best so far: round ${run.best} of ${run.length}.`
+          + ' Lose and you start again from the bottom.';
+      } else {
+        note.textContent = 'Win to move up. Lose and you start again from the bottom;'
+          + ' a draw means the round is replayed.';
+      }
+    }
+
+    // The start button names the next opponent, and the run just changed it.
+    if (this.#selectedMode() === GAME_MODE.TOURNAMENT) {
+      this.#applyMode(GAME_MODE.TOURNAMENT);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -1249,6 +1399,11 @@ export class UI {
       this.closeModal('gameover');
       this.#call('onRematch');
     });
+    this.#dom['btn-ladder-next']?.addEventListener('click', (event) => {
+      this.closeModal('gameover');
+      this.#call('onLadderNext', { round: Number(event.currentTarget.dataset.round) });
+    });
+
     this.#dom['btn-gameover-new']?.addEventListener('click', () => {
       this.closeModal('gameover');
       this.#call('onNewGameScreen');

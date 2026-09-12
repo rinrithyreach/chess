@@ -1846,6 +1846,114 @@ body.is-modal-open {
 }
 
 /* ==========================================================================
+   The tournament ladder
+
+   Five rows on the New Game form, one per rung. Read top to bottom as a
+   climb, so the row you are on is the loud one and the rest are quiet in two
+   different ways: what is behind you is dimmed but ticked, what is ahead is
+   dimmed and unmarked.
+   ========================================================================== */
+
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ladder__rung {
+  display: grid;
+  /* The mark column is fixed so the names line up whatever is in it — a tick
+     and a digit are not the same width, and a ladder whose rungs shift by a
+     pixel as you climb reads as broken. */
+  grid-template-columns: 1.6rem 1fr auto;
+  align-items: center;
+  gap: 0.1rem 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.ladder__mark {
+  grid-row: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-faint);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.ladder__name {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.ladder__hint {
+  grid-column: 2;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+}
+
+.ladder__state {
+  grid-row: span 2;
+  color: var(--text-faint);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Behind you: ticked, and stated plainly. Dimmed rather than hidden — the
+   rungs you have beaten are the best part of the run to look at. */
+.ladder__rung.is-beaten .ladder__mark {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.ladder__rung.is-beaten .ladder__name {
+  color: var(--text);
+}
+
+/* The one you are on. */
+.ladder__rung.is-current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ladder__rung.is-current .ladder__mark {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ladder__rung.is-current .ladder__name {
+  color: var(--text);
+}
+
+.ladder__rung.is-current .ladder__state {
+  color: var(--accent);
+}
+
+/* Ahead of you. */
+.ladder__rung.is-locked {
+  opacity: 0.55;
+}
+
+.ladder__note {
+  margin: 0.6rem 0 0;
+  color: var(--text-faint);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+/* ==========================================================================
    Hover motion
 
    How every control answers a pointer, in one place rather than each

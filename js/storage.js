@@ -16,6 +16,9 @@ import {
   BOARD_THEMES,
   resolveUiStyle,
   resolveBackground,
+  DEFAULT_GAUNTLET,
+  GAUNTLET_LENGTH,
+  clampGauntletRound,
   clampBoardZoom,
   STATUS,
   TERMINAL_STATUSES,
@@ -165,6 +168,37 @@ export function loadAvatars() {
     if (isAvatar(source[slot])) avatars[slot] = source[slot];
   });
   return avatars;
+}
+
+/**
+ * How far up the tournament ladder this device has got.
+ *
+ * Two numbers: the rung to play next, and the highest one ever beaten. The
+ * second is the only part that is really a record — the first is reset by a
+ * loss, and resetting it must not quietly erase what the player has done.
+ *
+ * Both are forced back into the ladder rather than trusted. A run stored by a
+ * build with more rungs than this one would otherwise leave a player standing
+ * on a round that does not exist, which is not a harder game but no game.
+ */
+export function loadGauntlet() {
+  const { value: raw } = readJson(STORAGE_KEYS.GAUNTLET);
+  const source = raw && typeof raw === 'object' ? (raw.run ?? raw) : null;
+  if (!source || typeof source !== 'object') return { ...DEFAULT_GAUNTLET };
+
+  const best = Math.trunc(Number(source.best));
+  return {
+    round: clampGauntletRound(source.round),
+    best: Number.isFinite(best) ? Math.min(Math.max(best, 0), GAUNTLET_LENGTH) : 0,
+  };
+}
+
+export function saveGauntlet(run) {
+  return writeJson(STORAGE_KEYS.GAUNTLET, {
+    version: STORAGE_VERSION,
+    savedAt: Date.now(),
+    run,
+  });
 }
 
 export function saveAvatars(avatars) {

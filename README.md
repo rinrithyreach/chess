@@ -75,9 +75,9 @@ ends says a move happened; it does not say which way, and which way is the
 thing you want when you look up and someone has moved. Both boards draw the
 same ring in the same gold at the same radius.
 
-**Three game modes** — *Local Two Player* (share one device), *Player vs Bot*,
-and *Online Multiplayer*. Each is a session provider and nothing else: the
-board, the UI and the controller are identical in all three.
+**Four game modes** — *Local Two Player* (share one device), *Player vs Bot*,
+*Tournament*, and *Online Multiplayer*. Each is a session provider and nothing
+else: the board, the UI and the controller are identical in all of them.
 
 **The bot** — negamax with alpha-beta, ordered moves, a quiescence search and
 piece-square tables, searching under a time budget rather than to a fixed
@@ -86,6 +86,37 @@ a stronger opponent. It runs in a Web Worker, so the board never freezes while
 it thinks. Roughly a novice: it punishes hanging pieces and short tactics, and
 will miss deeper combinations. Strength is one number — `BOT_TIME_BUDGET_MS`
 in `js/config.js` — which is where difficulty levels would go.
+
+**Tournament** — a ladder of five bots, climbed one at a time: *Novice*,
+*Club*, *Expert*, *Master*, *Champion*. Win and you move up; lose and you
+start again from the bottom; a draw replays the round, because holding the
+Champion is not beating them but is not losing to them either. How far you
+have ever got is kept separately from where you currently are — a run can be
+lost, a record cannot.
+
+There is one bot behind all five, at five settings of the two numbers it
+already took. `GAUNTLET_ROUNDS` in `js/config.js` is the whole ladder, so an
+opponent is a row in that list: a time budget, a depth ceiling, a name and a
+one-line description. The budget is what actually binds — the search deepens
+until it runs out — so Novice answers in the 450ms floor the bot has always
+had, while Champion thinks for about three seconds a move. Round 3 is
+deliberately today's bot, unchanged, with two rungs below it so the ladder
+opens with something a casual player beats and two above so finishing means
+something.
+
+The rung is part of the game, not a global: it rides in the state, is written
+into the save record, and is read back on resume. Without that, continuing a
+Champion game after a refresh would hand the board back with the Novice
+thinking for it — the position right, the opponent quietly swapped. The bot's
+seat is named after the rung, so the player card, the PGN headers and the
+game-over dialog all say who you actually played without any of them knowing
+a ladder exists.
+
+Rematch is swapped out for the next rung in tournament games. On a ladder the
+next game is never "the same again" — it is the next rung, this one once
+more, or the bottom — and a Rematch beside that would be a second answer to a
+question with one. (It also swaps colours, and the ladder is built on the
+human playing White.)
 
 **Online multiplayer** — create a room, share a six-character code, and play
 across two devices. Live move sync, per-device board orientation, opponent
@@ -893,6 +924,7 @@ you your preferences:
 - `chess-arena:settings` — sound, board theme, background, coordinates,
   animations, auto-flip
 - `chess-arena:avatars` — the remembered profile picture for each New Game seat
+- `chess-arena:gauntlet` — how far up the tournament ladder this device has got
 
 Profile pictures get their own key rather than living inside settings. They
 are the only thing here measured in kilobytes rather than bytes, and a quota
@@ -948,7 +980,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, the background setting **32**, and hover feedback **20**. The groups were run separately, so
+Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, and the tournament ladder **30**. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -973,6 +1005,7 @@ the totals are reported separately rather than as one number:
 | **Pictures on online seats (Chromium ×2)** | **36** | **Two devices against a database that enforces the shipped rule text — the cap and the pattern are read out of `firebase/database.rules.json` itself, so client and rules are checked against each other rather than against anyone's memory. A photograph over the budget at 128px comes back 96px and inside it; one already inside is not re-encoded a second time; a remote URL, an SVG and nothing at all are all refused. Two players create, join, and see each other's face on both devices, and the room document carrying both faces is 9,475 bytes. Then the same run against rules that do NOT know the field: the write is refused, the room is created anyway without the picture, both players are told why, and the game is playable — the failure that this feature caused the first time it shipped. Zero console errors** |
 | **Background (Chromium)** | **32** | **All four grounds: each repaints the page, marks only itself checked, and previews itself in the picker rather than the one in force; the choice survives a reload and is proved to be on the root element BEFORE any module runs (app.js blocked, the attribute already set), so it cannot flash the default first; an unknown id out of storage lands on the default. The swatches are measured rather than admired: each must show a card that separates from its own ground (fill and outline both), and no two cards may be within 8 points of each other — the check that a paint-chip preview would fail even while every ground was technically a different colour. Contrast is computed from the token values in the stylesheet itself for every background — body text AAA on the ground and on a panel, muted text AA, the accent legible — rather than eyeballed** |
 | **Hover feedback (Chromium)** | **20** | **Measured as a pointer, as a finger, and as someone who asked for less motion. With a pointer: buttons, icon buttons, the picture pickers and the swatches all lift exactly 2px and settle back when it leaves, the gold buttons glow gold rather than grey, the sheen is a real gradient behind the label, and hovering the chosen swatch does not strip the outline that marks it chosen. Locked Undo stays flat and shadowless while Flip beside it lifts, and a press beats the lift. On a touch screen the media query does not match, so a tapped button is not left floating. Under reduced motion the lift does not happen at all and the sheen is gone rather than parked mid-sweep. Caught two real specificity bugs: the gold glow was losing to the generic hover rule, and the reduced-motion override was losing to both** |
+| **Tournament ladder (Chromium)** | **30** | **The form (five rungs named, round 1 next, the rest locked, the button naming the opponent), then a real climb driven through the app: a mate wins round 1, the run advances and is written to storage, the dialog offers round 2 by name and Rematch is gone, the next game is the next rung with the same player, and a resignation drops the run to the bottom while leaving the record standing. A saved round-4 game resumes against the Master rather than the Novice. A stored round of 99, of -3, and of "Champion" all land on a rung that exists. Player vs Bot is checked to be untouched — still `bot`, still named Bot, no rung attached. And the rungs are proved to be different OPPONENTS rather than different labels by timing their replies: Novice 465ms against Champion 3078ms, either side of the bot's 450ms think floor** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
@@ -1134,6 +1167,10 @@ And two from building that WebGL board:
 | 30 | Play on a phone | The board reaches both edges of the screen; cards and controls keep their margins |
 | 31 | Pick a background in Settings | The whole page repaints at once — ground, cards, modals and all |
 | 32 | Reload after picking one | It is still there, and was there from the first frame rather than snapping in |
+| 33 | Choose Tournament | The ladder appears, round 1 is marked next, and the button names the opponent |
+| 34 | Beat round 1 | The dialog offers round 2 by name; the ladder shows round 1 beaten |
+| 35 | Lose a round | Back to round 1, but the best-so-far line still shows how far you got |
+| 36 | Resume a saved round-4 game | The opponent is still the Master, not the Novice |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 

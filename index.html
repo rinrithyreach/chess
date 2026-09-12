@@ -140,6 +140,13 @@
               <span class="mode__desc">Play against the computer</span>
             </span>
           </label>
+          <label class="mode mode--available">
+            <input type="radio" name="mode" value="tournament" id="mode-tournament">
+            <span class="mode__body">
+              <span class="mode__name">Tournament</span>
+              <span class="mode__desc">Climb a ladder of five bots</span>
+            </span>
+          </label>
           <label class="mode" id="mode-online-label">
             <input type="radio" name="mode" value="online" id="mode-online">
             <span class="mode__body">
@@ -148,6 +155,18 @@
             </span>
           </label>
         </fieldset>
+
+        <!--
+          The ladder. Rungs are built from GAUNTLET_ROUNDS in js/config.js, so
+          adding an opponent is a row in that list and nothing here.
+        -->
+        <div class="ladder-fields" id="tournament-fields" hidden>
+          <div class="setting setting--stack">
+            <span class="setting__label" id="ladder-label">The ladder</span>
+            <ol class="ladder" id="ladder" aria-labelledby="ladder-label"></ol>
+          </div>
+          <p class="ladder__note" id="ladder-note"></p>
+        </div>
 
         <!-- Only the local player's name is needed for an online game. -->
         <div class="online-fields" id="online-fields" hidden>
@@ -411,6 +430,9 @@
       <p class="gameover__result" id="gameover-result">White Wins</p>
       <p class="modal__text" id="gameover-detail"></p>
       <div class="modal__actions modal__actions--stack">
+        <!-- Tournament games swap this in for Rematch: on a ladder the next
+             game is a specific one, and its label says which. -->
+        <button type="button" class="btn btn--primary btn--block" id="btn-ladder-next" hidden></button>
         <button type="button" class="btn btn--primary btn--block" id="btn-rematch">Rematch</button>
         <button type="button" class="btn btn--ghost btn--block" id="btn-gameover-new">New Game</button>
         <button type="button" class="btn btn--ghost btn--block" data-close="gameover">Review Board</button>

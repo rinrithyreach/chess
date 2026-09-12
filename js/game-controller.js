@@ -17,6 +17,13 @@ import {
   GAME_MODE,
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
+  DEFAULT_GAUNTLET,
+  GAUNTLET_LENGTH,
+  clampGauntletRound,
+  // Aliased: `gauntletRound` is also the name of the field a game carries
+  // and of newGame's parameter, and a parameter that shadows a function it
+  // sits beside is a trap for whoever edits this next.
+  gauntletRound as gauntletRung,
   log,
   warn,
 } from './config.js';
@@ -60,6 +67,15 @@ export class GameController {
    * the second.
    */
   #avatars = Object.fromEntries(AVATAR_SLOTS.map((slot) => [slot, null]));
+
+  /**
+   * The tournament run: the rung to play next, and the best ever beaten.
+   *
+   * Here for the same reason the pictures are — the controller is the only
+   * layer allowed to touch storage — and it is the controller that knows a
+   * game has ended, which is the only moment a run ever changes.
+   */
+  #gauntlet = { ...DEFAULT_GAUNTLET };
 
   /** Input lock — blocks duplicate submissions from rapid tapping. */
   #processing = false;
@@ -133,6 +149,7 @@ export class GameController {
   async init() {
     this.#settings = storage.loadSettings();
     this.#avatars = storage.loadAvatars();
+    this.#gauntlet = storage.loadGauntlet();
     sound.setEnabled(this.#settings.sound);
     await this.#session.initialize();
     this.#attachSession();
@@ -237,6 +254,10 @@ export class GameController {
       // Resignations and agreed draws end the game without a move, so they
       // still need their own sound.
       if (!moveAdded) sound.playForMove(null, { isGameOver: true });
+      // Settled BEFORE the event goes out, so the dialog that reads the run
+      // is reading where the player now stands rather than where they stood
+      // a moment ago.
+      this.#settleGauntlet(state);
       this.#emit(EVENT.GAME_OVER, this.getSnapshot());
     }
   }
@@ -278,6 +299,7 @@ export class GameController {
     blackAvatar = null,
     mode = GAME_MODE.LOCAL,
     startFen,
+    gauntletRound = null,
   } = {}) {
     storage.clearGame();
     this.#resetView();
@@ -291,6 +313,7 @@ export class GameController {
       black: { name: blackName, avatar: blackAvatar },
       mode,
       startFen,
+      gauntletRound,
     });
 
     this.#started = true;
@@ -749,6 +772,85 @@ export class GameController {
   }
 
   // -----------------------------------------------------------------------
+  // The tournament ladder
+  // -----------------------------------------------------------------------
+
+  /**
+   * Where the player stands: the rung to play next, the best ever beaten,
+   * and whether the whole ladder has been cleared.
+   */
+  getGauntlet() {
+    const round = clampGauntletRound(this.#gauntlet.round);
+    return {
+      round,
+      best: this.#gauntlet.best,
+      opponent: gauntletRung(round),
+      complete: this.#gauntlet.best >= GAUNTLET_LENGTH,
+      length: GAUNTLET_LENGTH,
+    };
+  }
+
+  /**
+   * Start one rung. Defaults to wherever the run currently stands.
+   *
+   * The rung is written to the run before the game begins rather than after
+   * it ends, so a player who walks away mid-game comes back to the round they
+   * were actually playing instead of the one below it.
+   */
+  async startGauntletRound(round = this.#gauntlet.round, { name } = {}) {
+    const rung = clampGauntletRound(round);
+    this.#gauntlet = { ...this.#gauntlet, round: rung };
+    this.#persistGauntlet();
+
+    return this.newGame({
+      whiteName: name,
+      mode: GAME_MODE.TOURNAMENT,
+      gauntletRound: rung,
+    });
+  }
+
+  /**
+   * Work out what a finished game did to the run.
+   *
+   * Win: up a rung, and a new best if this is further than the player has
+   *   ever been.
+   * Draw: nothing moves. Holding the Champion to a draw is not beating them,
+   *   but it is not the end of a run either — the rung is simply replayed.
+   * Loss: back to the bottom. `best` is untouched, which is the whole reason
+   *   it is a separate number: a run can be lost, a record cannot.
+   *
+   * A resignation arrives here as an ordinary loss, which is right — the
+   * player chose it, and a ladder you can quit without cost is not a ladder.
+   */
+  #settleGauntlet(state) {
+    if (state?.mode !== GAME_MODE.TOURNAMENT) return;
+    const round = clampGauntletRound(state.gauntletRound ?? this.#gauntlet.round);
+    const winner = state.result?.winner ?? null;
+
+    if (winner === null) return;
+
+    // The human is always White on the ladder — see BotSession.createGame.
+    if (winner === WHITE) {
+      this.#gauntlet = {
+        round: Math.min(round + 1, GAUNTLET_LENGTH),
+        best: Math.max(this.#gauntlet.best, round),
+      };
+    } else {
+      this.#gauntlet = { ...this.#gauntlet, round: 1 };
+    }
+    this.#persistGauntlet();
+  }
+
+  #persistGauntlet() {
+    const saved = storage.saveGauntlet(this.#gauntlet);
+    // Worth saying out loud. The run is the only thing here a player builds
+    // up across several games, and silently forgetting it is worse than
+    // admitting it cannot be kept.
+    if (!saved) this.#toast('Could not save your tournament progress', 'warn');
+    return saved;
+  }
+
+  // -----------------------------------------------------------------------
   // Profile pictures
   // -----------------------------------------------------------------------
 
@@ -808,6 +910,9 @@ export class GameController {
       orientation: this.#view.orientation,
       roomCode: this.#state.online?.roomCode ?? null,
       myColor: this.#state.online?.myColor ?? null,
+      // Which rung this game is, so resuming it restores the opponent and
+      // not merely the position.
+      gauntletRound: this.#state.gauntletRound ?? null,
       savedAt: Date.now(),
     });
   }
@@ -832,6 +937,7 @@ export class GameController {
       settings: this.getSettings(),
       orientation: this.#view.orientation,
       isProcessing: this.#processing,
+      gauntlet: this.getGauntlet(),
     };
   }
 

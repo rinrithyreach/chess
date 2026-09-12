@@ -26,6 +26,8 @@ import {
   BOT_MAX_DEPTH,
   BOT_MIN_THINK_MS,
   BOT_NAME,
+  gauntletRound,
+  clampGauntletRound,
   log,
   warn,
 } from '../config.js';
@@ -33,6 +35,18 @@ import {
 export class BotSession extends LocalSession {
   /** The colour the human plays. The bot takes the other one. */
   #humanColor = WHITE;
+
+  /**
+   * How hard this particular bot thinks, and which rung it is.
+   *
+   * Held per GAME rather than read from the constants at every search,
+   * because the tournament needs five different opponents out of one bot.
+   * Null round means an ordinary Player-vs-Bot game, which is the default
+   * strength and no rung at all.
+   */
+  #strength = { timeBudgetMs: BOT_TIME_BUDGET_MS, maxDepth: BOT_MAX_DEPTH };
+  #round = null;
+
   #worker = null;
   #workerFailed = false;
   #pending = 0;
@@ -47,26 +61,68 @@ export class BotSession extends LocalSession {
 
   async createGame(config = {}) {
     this.#humanColor = config.humanColor === BLACK ? BLACK : WHITE;
+    this.#setRound(config.gauntletRound ?? null);
+
+    const botName = this.#opponentName();
     const state = await super.createGame({
       ...config,
-      mode: GAME_MODE.BOT,
+      mode: config.mode === GAME_MODE.TOURNAMENT ? GAME_MODE.TOURNAMENT : GAME_MODE.BOT,
       // Whichever seat the bot is in gets its name, so every place that shows
       // a player name — cards, PGN headers, the game-over dialog — says who
-      // actually played without any of them knowing a bot exists.
-      white: this.#humanColor === WHITE ? config.white : { name: BOT_NAME },
-      black: this.#humanColor === WHITE ? { name: BOT_NAME } : config.black,
+      // actually played without any of them knowing a bot exists. On the
+      // ladder that name is the rung, so the board itself says who you are up
+      // against without a single extra label anywhere.
+      white: this.#humanColor === WHITE ? config.white : { name: botName },
+      black: this.#humanColor === WHITE ? { name: botName } : config.black,
     });
     this.#maybeMove();
     return state;
   }
 
+  /**
+   * Point this session at one rung of the ladder, or at the ordinary bot.
+   *
+   * The strength is copied out rather than held by reference so that a later
+   * edit to the ladder cannot change the opponent in a game already under way.
+   */
+  #setRound(round) {
+    const rung = round === null ? null : gauntletRound(clampGauntletRound(round));
+    this.#round = rung?.round ?? null;
+    this.#strength = rung
+      ? { timeBudgetMs: rung.timeBudgetMs, maxDepth: rung.maxDepth }
+      : { timeBudgetMs: BOT_TIME_BUDGET_MS, maxDepth: BOT_MAX_DEPTH };
+  }
+
+  /** What the bot's seat is called: the rung's name, or just Bot. */
+  #opponentName() {
+    return this.#round === null ? BOT_NAME : gauntletRound(this.#round).label;
+  }
+
+  /**
+   * The rung rides along in the state, so it survives a save.
+   *
+   * Without it, resuming a Champion game after a refresh would hand the board
+   * back with the Novice thinking for it: the position would be right and the
+   * opponent would quietly have been swapped.
+   */
+  getState() {
+    const state = super.getState();
+    if (!state) return state;
+    return { ...state, gauntletRound: this.#round };
+  }
+
   async restoreGame(saved) {
+    // The rung first, because it decides what the bot's seat is called and so
+    // has to be known before the names below are read.
+    this.#setRound(saved?.gauntletRound ?? null);
+    const botName = this.#opponentName();
+
     // Which seat the human had is recoverable from the saved names, because
     // createGame put the bot's name in the bot's seat. Falling back to White
     // keeps a hand-edited or older record playable rather than stuck.
-    this.#humanColor = saved?.players?.[BLACK]?.name === BOT_NAME ? WHITE : BLACK;
-    if (saved?.players?.[WHITE]?.name !== BOT_NAME
-        && saved?.players?.[BLACK]?.name !== BOT_NAME) {
+    this.#humanColor = saved?.players?.[BLACK]?.name === botName ? WHITE : BLACK;
+    if (saved?.players?.[WHITE]?.name !== botName
+        && saved?.players?.[BLACK]?.name !== botName) {
       this.#humanColor = WHITE;
     }
     const result = await super.restoreGame(saved);
@@ -97,8 +153,9 @@ export class BotSession extends LocalSession {
     // turn it is has to be re-derived rather than assumed.
     if (result.ok) {
       const state = this.getState();
-      if (state.players?.[WHITE]?.name === BOT_NAME) this.#humanColor = BLACK;
-      else if (state.players?.[BLACK]?.name === BOT_NAME) this.#humanColor = WHITE;
+      const botName = this.#opponentName();
+      if (state.players?.[WHITE]?.name === botName) this.#humanColor = BLACK;
+      else if (state.players?.[BLACK]?.name === botName) this.#humanColor = WHITE;
       this.#maybeMove();
     }
     return result;
@@ -195,10 +252,7 @@ export class BotSession extends LocalSession {
       }
     }
     const { chooseMove } = await import('../bot.js');
-    return chooseMove(fen, {
-      timeBudgetMs: BOT_TIME_BUDGET_MS,
-      maxDepth: BOT_MAX_DEPTH,
-    });
+    return chooseMove(fen, { ...this.#strength });
   }
 
   #getWorker() {
@@ -234,12 +288,7 @@ export class BotSession extends LocalSession {
       };
       worker.addEventListener('message', onMessage);
       worker.addEventListener('error', onError);
-      worker.postMessage({
-        id,
-        fen,
-        timeBudgetMs: BOT_TIME_BUDGET_MS,
-        maxDepth: BOT_MAX_DEPTH,
-      });
+      worker.postMessage({ id, fen, ...this.#strength });
     });
   }
 }

@@ -21,6 +21,10 @@ export const STORAGE_KEYS = {
   GAME: 'chess-arena:game',
   SETTINGS: 'chess-arena:settings',
   AVATARS: 'chess-arena:avatars',
+  // How far up the ladder you have got. Its own key rather than a corner of
+  // the game record, because it outlives every individual game in the run —
+  // and because losing a game must not be able to lose the run with it.
+  GAUNTLET: 'chess-arena:gauntlet',
 };
 
 /**
@@ -75,6 +79,7 @@ export const GAME_MODE = {
   LOCAL: 'local',
   BOT: 'bot',
   ONLINE: 'online',
+  TOURNAMENT: 'tournament',
 };
 
 /**
@@ -106,6 +111,58 @@ export const BOT_MIN_THINK_MS = 450;
 
 /** Shown wherever the bot's seat needs a player name. */
 export const BOT_NAME = 'Bot';
+
+/**
+ * The tournament ladder: five bots, each harder than the last.
+ *
+ * Strength is the same two numbers the bot already takes, because there is
+ * only one bot here — a ladder of separate engines would be five times the
+ * code for a difference nobody asked for. `timeBudgetMs` is what actually
+ * binds: the search deepens iteratively until the budget runs out, so more
+ * time is more plies wherever the position allows them. `maxDepth` is the
+ * ceiling that stops a quiet position being searched past the point of
+ * usefulness, and raising it with the budget is what keeps the two in step.
+ *
+ * Round 3 is deliberately today's bot, unchanged — the opponent anyone who has
+ * played this app already knows. Two rounds sit below it so the ladder opens
+ * with something a casual player beats, and two above so finishing it means
+ * something.
+ *
+ * The budget is also a promise about waiting. Champion thinks for around three
+ * seconds a move, which is a long time on a phone and is meant to be: it is
+ * the last round, and BOT_MIN_THINK_MS shows the same pause is deliberate at
+ * the other end of the ladder too.
+ */
+export const GAUNTLET_ROUNDS = [
+  { round: 1, label: 'Novice', hint: 'Barely looks ahead', timeBudgetMs: 200, maxDepth: 2 },
+  { round: 2, label: 'Club', hint: 'Takes what you leave', timeBudgetMs: 500, maxDepth: 3 },
+  { round: 3, label: 'Expert', hint: 'Sees short tactics', timeBudgetMs: 1200, maxDepth: 4 },
+  { round: 4, label: 'Master', hint: 'Thinks before answering', timeBudgetMs: 2200, maxDepth: 5 },
+  { round: 5, label: 'Champion', hint: 'Takes its time', timeBudgetMs: 3000, maxDepth: 6 },
+];
+
+export const GAUNTLET_LENGTH = GAUNTLET_ROUNDS.length;
+
+/** A run nobody has started: standing at round one, nothing beaten. */
+export const DEFAULT_GAUNTLET = { round: 1, best: 0 };
+
+/** One rung, or null. Rounds are 1-based because that is how they are read. */
+export function gauntletRound(round) {
+  return GAUNTLET_ROUNDS.find((rung) => rung.round === round) ?? null;
+}
+
+/**
+ * Force a stored round back into the ladder.
+ *
+ * A record from a build with more rungs than this one, or a hand-edited
+ * number, must not leave the player standing on a round that does not exist —
+ * which would be a game with no opponent rather than a wrong difficulty.
+ */
+export function clampGauntletRound(round) {
+  const n = Math.trunc(Number(round));
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(Math.max(n, 1), GAUNTLET_LENGTH);
+}
 
 /**
  * Board zoom — how big the squares are, and how even.
