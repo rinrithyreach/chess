@@ -33,6 +33,24 @@ export const AVATAR_SIZE = 128;
 export const AVATAR_MAX_CHARS = 24 * 1024;
 
 /**
+ * Edge length and budget for the copy that goes online.
+ *
+ * Smaller than the stored one, because of where it ends up. Every move is
+ * written as a transaction over the whole room document, and the seats are
+ * part of that document — so a picture in a seat is not sent once, it is sent
+ * again on every move, by both players, for the length of the game. At the
+ * stored budget that is a photograph's worth of upload per move on a phone.
+ *
+ * 96px costs nothing visually: the only place an avatar is ever drawn is a
+ * player card, which is 38px at its largest, so even a 3x screen has more
+ * pixels than it can use. The 6KB budget is what actually binds, and it is the
+ * number the security rules carry too — rules and client have to agree, and
+ * the rules are the half that a modified client cannot talk its way past.
+ */
+export const ONLINE_AVATAR_SIZE = 96;
+export const ONLINE_AVATAR_MAX_CHARS = 6 * 1024;
+
+/**
  * Largest file we will even try to decode.
  *
  * Not about storage — nothing this big is ever stored — but about memory. A
@@ -82,7 +100,7 @@ const ENCODINGS = [
 ];
 
 /** First encoding that both worked and fits the budget, or null. */
-function encode(canvas) {
+function encode(canvas, budget = AVATAR_MAX_CHARS) {
   for (const [type, quality] of ENCODINGS) {
     let url;
     try {
@@ -95,7 +113,7 @@ function encode(canvas) {
     // PNG, which for a photograph is several times over budget. So the prefix
     // is checked rather than assumed, and the JPEG rows below catch it.
     if (!url.startsWith(`data:${type};base64,`)) continue;
-    if (url.length <= AVATAR_MAX_CHARS) return url;
+    if (url.length <= budget) return url;
   }
   return null;
 }
@@ -128,18 +146,17 @@ async function decode(file) {
 }
 
 function decodeViaElement(file) {
+  const url = URL.createObjectURL(file);
+  return loadImage(url).finally(() => URL.revokeObjectURL(url));
+}
+
+/** An `img` that has finished decoding `src`, or a rejection. */
+function loadImage(src) {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
     const image = new Image();
-    image.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(image);
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Image could not be decoded'));
-    };
-    image.src = url;
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Image could not be decoded'));
+    image.src = src;
   });
 }
 
@@ -153,11 +170,11 @@ function decodeViaElement(file) {
  * Each halving averages four pixels into one, so nothing is skipped, and three
  * or four extra draws at ever-smaller sizes cost nothing anyone can perceive.
  */
-function drawSquare(source, sx, sy, side) {
+function drawSquare(source, sx, sy, side, size = AVATAR_SIZE) {
   let step = { image: source, x: sx, y: sy, size: side };
 
-  while (step.size > AVATAR_SIZE * 2) {
-    const next = Math.max(AVATAR_SIZE, Math.round(step.size / 2));
+  while (step.size > size * 2) {
+    const next = Math.max(size, Math.round(step.size / 2));
     const half = document.createElement('canvas');
     half.width = next;
     half.height = next;
@@ -168,8 +185,8 @@ function drawSquare(source, sx, sy, side) {
   }
 
   const canvas = document.createElement('canvas');
-  canvas.width = AVATAR_SIZE;
-  canvas.height = AVATAR_SIZE;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingQuality = 'high';
   // Flattened onto white before the picture is drawn. JPEG has no alpha, so a
@@ -177,8 +194,8 @@ function drawSquare(source, sx, sy, side) {
   // every encoding rather than only that one, so what a player sees does not
   // depend on which encoder their browser happens to have.
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
-  ctx.drawImage(step.image, step.x, step.y, step.size, step.size, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
+  ctx.fillRect(0, 0, size, size);
+  ctx.drawImage(step.image, step.x, step.y, step.size, step.size, 0, 0, size, size);
   return canvas;
 }
 
@@ -236,5 +253,42 @@ export async function fileToAvatar(file) {
   } finally {
     // An ImageBitmap holds its pixels until told otherwise; an img does not.
     source.close?.();
+  }
+}
+
+/**
+ * The copy of a stored avatar that goes into a room document.
+ *
+ * Takes an avatar this module already made — so there is no untrusted file
+ * here, no EXIF, nothing to crop — and redraws it at ONLINE_AVATAR_SIZE until
+ * it fits ONLINE_AVATAR_MAX_CHARS, which is the same number the security rules
+ * carry. A picture over that budget is refused by the rules, and a refused
+ * field takes the whole room write with it, so a seat must never be offered
+ * one this has not been through.
+ *
+ * An avatar already inside the budget is returned untouched. The rules measure
+ * characters, not pixels, and a 128px picture that already fits is a better
+ * picture than the same one put through a second generation of lossy encoding
+ * for nothing.
+ *
+ * Returns null rather than throwing for anything that goes wrong, because
+ * every caller wants the same thing when it does: seat the player without a
+ * picture rather than fail to seat them.
+ *
+ * @param {string|null} avatar
+ * @returns {Promise<string|null>}
+ */
+export async function toOnlineAvatar(avatar) {
+  if (!isAvatar(avatar)) return null;
+  if (avatar.length <= ONLINE_AVATAR_MAX_CHARS) return avatar;
+
+  try {
+    const image = await loadImage(avatar);
+    const side = Math.min(image.naturalWidth || 0, image.naturalHeight || 0);
+    if (!side) return null;
+    return encode(drawSquare(image, 0, 0, side, ONLINE_AVATAR_SIZE), ONLINE_AVATAR_MAX_CHARS);
+  } catch (error) {
+    warn('Could not shrink picture for online play', error);
+    return null;
   }
 }

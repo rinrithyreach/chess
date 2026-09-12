@@ -232,10 +232,10 @@ export class UI {
       const slot = node.dataset.avatarSlot;
       if (!slot) return;
 
-      // A picture cannot reach the other device while the deployed rules
-      // reject the field, so the online seat does not offer one. Better no
-      // control than a control that quietly does nothing — and hiding it is
-      // driven by the same flag the session reads, so the two cannot disagree.
+      // The online seat offers a picker only while pictures actually travel.
+      // Better no control than a control that quietly does nothing — and the
+      // decision is read from the same flag the session writes seats by, so
+      // the form and the room cannot disagree about it.
       if (slot === 'online' && !ONLINE_AVATARS) {
         node.hidden = true;
         return;

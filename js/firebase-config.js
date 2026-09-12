@@ -168,22 +168,26 @@ export const ROOM_CODE_LENGTH = 6;
 /**
  * Do profile pictures travel to the other device?
  *
- * No, because the deployed rules end `players/$color` with
- * `"$other": { ".validate": false }` and know nothing about an `avatar` field,
- * so a seat carrying one is rejected outright — taking the whole room write
- * with it, which is the difference between "no picture" and "cannot create a
- * room at all".
+ * Yes — a seat carries the picture of the player sitting in it, so the two
+ * cards show the same faces on both devices. The copy that travels is a
+ * smaller one than the copy kept on this device: see ONLINE_AVATAR_SIZE in
+ * js/avatar.js for why a seat is measured in kilobytes rather than pixels.
  *
- * Pictures still work everywhere the database is not involved: local two-player
- * and bot games are unaffected, and the New Game form still remembers them.
- * Only the online seats go without.
+ * THIS NEEDS THE RULES DEPLOYED. `players/$color` ends with
+ * `"$other": { ".validate": false }`, so rules without the `avatar` field
+ * refuse a seat that carries one — and a refused field takes the whole room
+ * write with it, which is the difference between "no picture" and "cannot
+ * create a room at all". That is exactly what happened the last time this
+ * shipped ahead of a deploy, so the client no longer depends on the deploy
+ * having happened: a refused room is retried once without the picture, and
+ * the players get their game with a note instead of an error. Deploy
+ * firebase/database.rules.json to get the pictures themselves.
  *
- * TO TURN THIS ON: add the `avatar` rule to firebase/database.rules.json, and
- * deploy it, then set this to true. In that order — the rules first, because a
- * client that sends a field the rules do not know about cannot create rooms.
- * The rule that does it is in git history at commit 2dc721e.
+ * TO TURN THIS OFF: set this to false. The seat then omits the field and the
+ * online form hides its picker, rather than offering a control that quietly
+ * does nothing. Local two-player and bot games are unaffected either way.
  */
-export const ONLINE_AVATARS = false;
+export const ONLINE_AVATARS = true;
 
 /**
  * Is online play available?

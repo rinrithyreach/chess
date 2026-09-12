@@ -38,7 +38,7 @@ import {
   log,
   warn,
 } from '../config.js';
-import { isAvatar } from '../avatar.js';
+import { isAvatar, toOnlineAvatar } from '../avatar.js';
 import {
   FIREBASE_MODULES,
   EMULATOR,
@@ -65,6 +65,19 @@ const colorName = (color) => (color === WHITE ? 'White' : 'Black');
 const other = (color) => (color === WHITE ? BLACK : WHITE);
 
 /**
+ * Did the rules refuse this write?
+ *
+ * The SDK reports it as "PERMISSION_DENIED" in some paths and "Permission
+ * denied" in others, so both spellings are matched. Worth its own function
+ * because it is asked twice: once to explain the failure, and once to decide
+ * whether a seat is worth retrying without its picture.
+ */
+export function isPermissionDenied(error) {
+  const message = String(error?.message ?? error ?? '');
+  return /permission[\s_]denied/i.test(message) || error?.code === 'PERMISSION_DENIED';
+}
+
+/**
  * Turn Firebase's error codes into something a person can act on.
  *
  * A freshly created project fails in the same handful of ways, and the raw
@@ -84,9 +97,7 @@ export function explainFirebaseError(error) {
   if (code === 'auth/configuration-not-found') {
     return 'Authentication is not set up for this project yet. Enable Anonymous sign-in in the Firebase console.';
   }
-  // The SDK reports this as "PERMISSION_DENIED" in some paths and
-  // "Permission denied" in others, so match both spellings.
-  if (/permission[\s_]denied/i.test(message) || code === 'PERMISSION_DENIED') {
+  if (isPermissionDenied(error)) {
     // Names the console first. The CLI line was the only instruction here
     // before, which is no help at all to the many people who have a Firebase
     // project but have never installed firebase-tools — and installing it,
@@ -126,6 +137,21 @@ export function normalizeRoomCode(input) {
     .slice(0, ROOM_CODE_LENGTH);
 }
 
+/** Said once, by both room paths, when the rules turned the picture down. */
+const AVATAR_REFUSED = 'Your picture could not be sent — the room rules are out of date';
+
+/**
+ * The picture as it may be written to a seat, or null.
+ *
+ * Every path into a seat goes through here, so the size the rules accept is
+ * enforced once rather than at each call site. ONLINE_AVATARS is the switch
+ * that turns the whole thing off without touching either room path.
+ */
+function onlineAvatar(avatar) {
+  if (!ONLINE_AVATARS) return Promise.resolve(null);
+  return toOnlineAvatar(avatar);
+}
+
 /**
  * One player's entry in a room.
  *
@@ -135,13 +161,13 @@ export function normalizeRoomCode(input) {
  * building a record from scratch — and the rules validate `avatar` only when
  * it is present, so an absent key is the shape they are written for.
  *
- * ONLINE_AVATARS gates it entirely: while the deployed rules do not know the
- * field, sending one does not merely lose the picture, it makes the room write
- * illegal and the game unstartable. See js/firebase-config.js.
+ * The avatar handed in must already have been through onlineAvatar(): this is
+ * called from inside a transaction callback, which is synchronous and can run
+ * more than once, so it is no place to be re-encoding a picture.
  */
 function seatRecord(uid, name, avatar) {
   const seat = { uid, name, connected: true };
-  if (ONLINE_AVATARS && isAvatar(avatar)) seat.avatar = avatar;
+  if (isAvatar(avatar)) seat.avatar = avatar;
   return seat;
 }
 
@@ -261,14 +287,14 @@ export class FirebaseSession {
    * The creator takes White by default.
    */
   async createGame(config = {}) {
-    const { ref, runTransaction, serverTimestamp } = this.#sdk;
+    const { ref, serverTimestamp } = this.#sdk;
     const name = config.white?.name?.trim() || config.name?.trim() || DEFAULT_PLAYER_NAMES.white;
-    const avatar = config.white?.avatar ?? config.avatar;
+    const avatar = await onlineAvatar(config.white?.avatar ?? config.avatar);
     const hostColor = config.hostColor === BLACK ? BLACK : WHITE;
 
     this.#engine = new ChessEngine();
 
-    const initialRoom = {
+    const roomWith = (seatAvatar) => ({
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       hostUid: this.#uid,
@@ -283,30 +309,27 @@ export class FirebaseSession {
       drawOffer: null,
       rematch: null,
       players: {
-        [hostColor]: seatRecord(this.#uid, name, avatar),
+        [hostColor]: seatRecord(this.#uid, name, seatAvatar),
       },
-    };
+    });
 
-    // Retry on the (vanishingly unlikely) chance of a code collision.
-    let code = null;
-    for (let attempt = 0; attempt < 8 && !code; attempt += 1) {
-      const candidate = generateRoomCode();
-      const candidateRef = ref(this.#db, `rooms/${candidate}`);
-      try {
-        // Returning undefined from the callback aborts the transaction, so an
-        // already-taken code is never overwritten.
-        const outcome = await runTransaction(candidateRef, (current) =>
-          current === null ? initialRoom : undefined,
-        );
-        if (outcome.committed) code = candidate;
-      } catch (error) {
-        // A rules or connectivity problem will fail every attempt, so report
-        // it immediately instead of retrying eight times.
-        warn('Room creation failed', error);
-        return { ok: false, error: explainFirebaseError(error) };
-      }
+    let notice = null;
+    let attempt = await this.#allocateRoom(roomWith(avatar));
+
+    // Rules older than this client know no `avatar` field, and a field they do
+    // not know takes the whole write with it. That is the difference between
+    // "no picture" and "cannot create a room at all", and it is what actually
+    // happened the last time this shipped ahead of a deploy. So the picture is
+    // dropped and the room made without it, rather than the game being lost to
+    // a thumbnail. Only on a refusal: any other failure is reported as it is.
+    if (!attempt.code && attempt.denied && avatar) {
+      warn('Room refused with a picture — retrying without it');
+      attempt = await this.#allocateRoom(roomWith(null));
+      if (attempt.code) notice = AVATAR_REFUSED;
     }
 
+    if (attempt.error) return { ok: false, error: attempt.error };
+    const code = attempt.code;
     if (!code) return { ok: false, error: 'Could not allocate a room code' };
 
     this.#roomCode = code;
@@ -318,7 +341,37 @@ export class FirebaseSession {
     this.#startWaitingWatchdog();
 
     log('Room created', code);
-    return { ok: true, roomCode: code, color: hostColor };
+    return { ok: true, roomCode: code, color: hostColor, notice };
+  }
+
+  /**
+   * Write a new room under a free code. Resolves {code} or {error, denied}.
+   *
+   * Codes are tried until one is unclaimed — a collision is vanishingly
+   * unlikely, but "unlikely" is not "never" with a shared 32-character
+   * alphabet. A thrown error is a different matter: a rules or connectivity
+   * problem fails every code in the same way, so it stops at the first rather
+   * than working through eight of them.
+   */
+  async #allocateRoom(room) {
+    const { ref, runTransaction } = this.#sdk;
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const candidate = generateRoomCode();
+      const candidateRef = ref(this.#db, `rooms/${candidate}`);
+      try {
+        // Returning undefined from the callback aborts the transaction, so an
+        // already-taken code is never overwritten.
+        const outcome = await runTransaction(candidateRef, (current) =>
+          current === null ? room : undefined,
+        );
+        if (outcome.committed) return { code: candidate };
+      } catch (error) {
+        warn('Room creation failed', error);
+        return { error: explainFirebaseError(error), denied: isPermissionDenied(error) };
+      }
+    }
+    return {};
   }
 
   /** Join an existing room as the free colour. */
@@ -332,6 +385,7 @@ export class FirebaseSession {
 
     const roomRef = ref(this.#db, `rooms/${code}`);
     const playerName = name?.trim() || DEFAULT_PLAYER_NAMES.black;
+    const seatAvatar = await onlineAvatar(avatar);
 
     /*
       Two things have to happen before the join transaction can work.
@@ -370,44 +424,73 @@ export class FirebaseSession {
     let failure = null;
     let joinedColor = null;
 
-    const outcome = await runTransaction(roomRef, (room) => {
-      if (room === null) {
-        failure = 'No room with that code';
-        return undefined;
+    /**
+     * One attempt at taking a seat. Resolves {committed} or {error, denied}.
+     *
+     * A rules refusal comes back as a thrown error rather than an uncommitted
+     * transaction, which is why this is wrapped: unwrapped, a room the rules
+     * turn down rejects this whole promise and surfaces as an unhandled error
+     * instead of a message on the form.
+     */
+    const attemptSeat = async (picture) => {
+      failure = null;
+      joinedColor = null;
+      try {
+        const outcome = await runTransaction(roomRef, (room) => {
+          if (room === null) {
+            failure = 'No room with that code';
+            return undefined;
+          }
+
+          const players = room.players ?? {};
+
+          // Rejoining a room we are already part of is always allowed.
+          const existing = [WHITE, BLACK].find((c) => players[c]?.uid === this.#uid);
+          if (existing) {
+            joinedColor = existing;
+            players[existing].connected = true;
+            return { ...room, players, updatedAt: serverTimestamp() };
+          }
+
+          const free = [WHITE, BLACK].find((c) => !players[c]?.uid);
+          if (!free) {
+            failure = 'That room is already full';
+            return undefined;
+          }
+
+          joinedColor = free;
+          return {
+            ...room,
+            players: {
+              ...players,
+              [free]: seatRecord(this.#uid, playerName, picture),
+            },
+            status: STATUS.PLAYING,
+            updatedAt: serverTimestamp(),
+          };
+        });
+        return { committed: outcome.committed };
+      } catch (error) {
+        warn('Could not take a seat', error);
+        return { error: explainFirebaseError(error), denied: isPermissionDenied(error) };
       }
+    };
 
-      const players = room.players ?? {};
+    let notice = null;
+    let seated = await attemptSeat(seatAvatar);
 
-      // Rejoining a room we are already part of is always allowed.
-      const existing = [WHITE, BLACK].find((c) => players[c]?.uid === this.#uid);
-      if (existing) {
-        joinedColor = existing;
-        players[existing].connected = true;
-        return { ...room, players, updatedAt: serverTimestamp() };
-      }
+    // Same bargain the host makes: rules that do not know the field refuse the
+    // whole seat, so the picture goes rather than the game. See createGame.
+    if (!seated.committed && seated.denied && seatAvatar) {
+      warn('Seat refused with a picture — retrying without it');
+      seated = await attemptSeat(null);
+      if (seated.committed) notice = AVATAR_REFUSED;
+    }
 
-      const free = [WHITE, BLACK].find((c) => !players[c]?.uid);
-      if (!free) {
-        failure = 'That room is already full';
-        return undefined;
-      }
-
-      joinedColor = free;
-      return {
-        ...room,
-        players: {
-          ...players,
-          [free]: seatRecord(this.#uid, playerName, avatar),
-        },
-        status: STATUS.PLAYING,
-        updatedAt: serverTimestamp(),
-      };
-    });
-
-    if (!outcome.committed) {
+    if (!seated.committed) {
       this.#detachAll();
       this.#roomRef = null;
-      return { ok: false, error: failure ?? 'Could not join that room' };
+      return { ok: false, error: seated.error ?? failure ?? 'Could not join that room' };
     }
 
     this.#roomCode = code;
@@ -417,7 +500,7 @@ export class FirebaseSession {
     this.#publish();
 
     log('Joined room', code, 'as', joinedColor);
-    return { ok: true, roomCode: code, color: joinedColor };
+    return { ok: true, roomCode: code, color: joinedColor, notice };
   }
 
   /**
@@ -967,15 +1050,12 @@ export class FirebaseSession {
       moves: room?.moves ?? engine.getHistory(),
       verboseMoves: engine.getVerboseHistory(),
       lastMove: engine.getLastMove(),
-      // The opponent's picture arrives over the network, so it is validated
-      // here rather than anywhere downstream. The security rules cap its size
-      // and shape too, but rules protect the ROOM; this is what protects this
-      // device from whatever a modified client felt like writing.
-      //
-      // Left reading the field even while ONLINE_AVATARS is off. Nothing this
-      // build writes will be there, but a peer on a build that does write one
-      // costs nothing to display, and this is the check that makes doing so
-      // safe either way.
+      // The opponent's picture arrives over the network — written by their
+      // client, and the one value in the room that becomes an `img` src — so
+      // it is validated here rather than anywhere downstream. The rules cap
+      // its size and shape too, but rules protect the ROOM from a value
+      // nobody should be able to write; this is what protects THIS DEVICE
+      // from one that somehow was.
       players: {
         [WHITE]: {
           name: players[WHITE]?.name ?? 'Waiting…',

@@ -354,6 +354,11 @@ export class GameController {
       return { ok: false, error };
     }
 
+    // The room exists, but something about it did not go as asked — a picture
+    // the rules would not take. Said out loud rather than swallowed: a player
+    // who chose a photo and sees the king glyph instead deserves to know why.
+    if (result.notice) this.#toast(result.notice, 'warn');
+
     this.#started = true;
     this.#view.orientation = result.color === BLACK ? 'black' : 'white';
     this.#save();
@@ -373,6 +378,8 @@ export class GameController {
       this.#toast(error, 'error');
       return { ok: false, error };
     }
+
+    if (result.notice) this.#toast(result.notice, 'warn');
 
     this.#started = true;
     // Each device sees its own colour at the bottom of the board.

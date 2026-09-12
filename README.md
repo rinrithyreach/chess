@@ -114,20 +114,33 @@ again. The name is not remembered — a name is eight characters and takes a
 moment to retype. A rematch swaps colours, and each player's picture goes with
 them.
 
-**Pictures do not travel online, and that is deliberate.** The deployed
-security rules end `players/$color` with `"$other": { ".validate": false }` and
-know nothing about an `avatar` field, so a seat carrying one is rejected —
-taking the whole room write with it, which is the difference between "no
-picture" and "cannot create a room at all". `ONLINE_AVATARS` in
-`js/firebase-config.js` is the one switch, and the online seat hides its picker
-while it is off rather than offering a control that does nothing. Local
-two-player and bot games are unaffected. To turn it on: add the `avatar` rule
-(it is in git history at commit `2dc721e`), deploy the rules, then flip the
-flag — in that order, because a client that sends a field the rules do not know
-about cannot create rooms at all.
+**Pictures travel online too** — a seat carries the picture of the player in
+it, so both devices show the same two faces. What travels is a *smaller* copy
+than the one kept on this device: **96px inside a 6KB budget**, not 128px
+inside 24KB. That is not tidiness. Every move is written as a transaction over
+the whole room document, and the seats are part of that document, so a picture
+in a seat is not sent once — it is sent again on every move, by both players,
+for the length of the game. At the stored budget that is a photograph's worth
+of upload per move on a phone; at this one a move carrying two faces is about
+9KB. The 96px costs nothing visible: a player card is 38px at its largest, so
+even a 3× screen has more pixels than it can use.
 
-Wherever a picture *is* read — including one written by a peer on a build that
-sends them — it is validated at the point of use, because the rules protect the
+**This needs the security rules deployed.** `players/$color` ends with
+`"$other": { ".validate": false }`, so rules without the `avatar` field refuse
+a seat that carries one — and a refused field takes the whole room write with
+it, which is the difference between "no picture" and "cannot create a room at
+all". That is exactly what happened here once, which is why
+[deploying the rules](#3-deploy-the-security-rules--do-not-skip-this) has the
+heading it has — and why the client no longer depends on it: **a room the
+rules turn down is retried once without the picture**, and the players get
+their game with a note instead of an error. Deploy
+`firebase/database.rules.json` to get the pictures themselves.
+`ONLINE_AVATARS` in `js/firebase-config.js` turns the whole thing off again if
+you ever want it off — the seat then omits the field and the online form hides
+its picker rather than offering a control that does nothing.
+
+Wherever a picture is read — and online it was written by the other player's
+client — it is validated at the point of use, because the rules protect the
 *room* and the check on arrival is what protects *this device*. Only `data:`
 URLs of `png`, `jpeg` or `webp` are ever rendered: never a remote URL, which
 could otherwise report who looked at the board, and never SVG, which is a
@@ -707,11 +720,19 @@ One Realtime Database node per game, at `rooms/{CODE}`:
   "drawOffer": null,
   "rematch": null,
   "players": {
-    "w": { "uid": "abc123…", "name": "Alex", "connected": true },
+    "w": { "uid": "abc123…", "name": "Alex", "connected": true,
+           "avatar": "data:image/webp;base64,UklGR…" },
     "b": { "uid": "def456…", "name": "Sam",  "connected": true }
   }
 }
 ```
+
+`avatar` is optional and absent rather than null when there is no picture:
+Realtime Database reads a null child as a deletion instruction, and the rules
+validate the field only when it is present. It is capped at **6144
+characters** and must be a `data:` URL of a raster image — the rules are what
+stop a room being used as free file hosting, and they are the half of that a
+modified client cannot talk its way past.
 
 ### Room codes
 
@@ -774,8 +795,10 @@ write. Only the two seated players can write to a room. A seat can only be
 claimed when empty and only for your own uid. The host never changes. Every
 field is type-, pattern- and length-checked, and unknown fields are rejected.
 A draw can only be offered in your own name. A profile picture must be a
-`data:` URL of a raster image and at most 24KB, so a room cannot be used as
-file hosting and a picture cannot be a URL pointing at somebody's server.
+`data:` URL of a raster image and at most **6KB**, so a room cannot be used as
+file hosting and a picture cannot be a URL pointing at somebody's server. The
+client holds itself to that same 6KB before it ever writes a seat, but it is
+the rules that make it true of everyone.
 
 **What they cannot enforce.** Database rules cannot run a chess engine, so
 they cannot verify that a submitted FEN is a legal continuation. A player
@@ -885,9 +908,9 @@ project. Fifteen suites cover the game itself — **815 assertions, all passing,
 with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
-real app in Chromium and the shipped security rules in the database emulator. The
-two groups were run separately, so the totals are reported separately rather
-than as one number:
+real app in Chromium and the shipped security rules in the database emulator.
+Pictures on online seats add **36 more**. The groups were run separately, so
+the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
 | --- | --- | --- |
@@ -907,10 +930,11 @@ than as one number:
 | **Control row (Chromium)** | **39** | **Undo never reaches the controller by any route; Draw is absent; the row still holds 44px targets** |
 | **Board size (Chromium)** | **33** | **Every square measured through the live camera at each level: each step bigger, near and far converge, nothing ever cropped, picking still exact** |
 | **Profile pictures (Chromium)** | **39** | **A real file through the real picker: centre-cropped, scaled to 128px, under budget; shown on the card, saved, restored after a reload, offered back next game; a 6-megapixel photo still fits; a non-image is refused and says why; remote, `javascript:` and SVG values all rejected** |
-| **Rules (emulator)** | **14** | **The shipped rules loaded into the database emulator and driven as an ordinary signed-in user: a room with no picture is accepted, every avatar shape is rejected (the field is not in the deployed rules), unknown player fields rejected, and a stranger's uid still refused a seat** |
+| Rules (emulator) | 14 | The rules of the time loaded into the database emulator and driven as an ordinary signed-in user: a room with no picture accepted, unknown player fields rejected, a stranger's uid refused a seat. Its avatar rows asserted that *every* picture was rejected, which was true of the rules then deployed and is no longer true of the rules in this repo — superseded by the suite below, not re-run |
+| **Pictures on online seats (Chromium ×2)** | **36** | **Two devices against a database that enforces the shipped rule text — the cap and the pattern are read out of `firebase/database.rules.json` itself, so client and rules are checked against each other rather than against anyone's memory. A photograph over the budget at 128px comes back 96px and inside it; one already inside is not re-encoded a second time; a remote URL, an SVG and nothing at all are all refused. Two players create, join, and see each other's face on both devices, and the room document carrying both faces is 9,475 bytes. Then the same run against rules that do NOT know the field: the write is refused, the room is created anyway without the picture, both players are told why, and the game is playable — the failure that this feature caused the first time it shipped. Zero console errors** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
-| **Live two-device game (Chromium ×2 + real project)** | **11** | **Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, no pictures online, room deleted afterwards** |
+| Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
 | **Capture trays (Chromium)** | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at all three zooms — must vanish when empty, must follow a board flip, and a full pile of 15 3D portraits must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
 | **Mobile board + captures (Chromium)** | **24** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
@@ -1086,6 +1110,8 @@ Positions for tests 9–14 are one tap away via the DEBUG presets below.
 | 28 | Reopen and Continue Game | Rejoins the same seat, game intact |
 | 29 | Third person enters the code | "That room is already full" |
 | 30 | Enter a nonsense code | "No room with that code" |
+| 31 | Choose a picture on each device before joining | Both faces show on both devices, on the right seats |
+| 32 | Play with the rules not yet deployed | Room still opens, no pictures, both players told the rules are out of date |
 
 ---
 
