@@ -1845,6 +1845,159 @@ body.is-modal-open {
   color: #f0cd85;
 }
 
+/* ==========================================================================
+   Hover motion
+
+   How every control answers a pointer, in one place rather than each
+   component inventing its own. Three things happen together: the control
+   lifts, a shadow opens under it, and on the two solid buttons a sheen
+   crosses the face — the button's own gradient seen through a moving
+   highlight, rather than another colour change.
+
+   LAST in the file on purpose. These selectors are no more specific than the
+   component rules they extend — `.theme-swatch:hover` against
+   `.theme-swatch:hover` — so source order is what makes them win, and it is
+   also what keeps this readable as one behaviour instead of a transform
+   scattered through nine components.
+   ========================================================================== */
+
+.btn,
+.icon-btn,
+.avatar-picker__btn,
+.promotion__choice,
+.style-option,
+.theme-swatch,
+.bg-swatch {
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.24s ease,
+    /* A little overshoot on the way up. Not much: a control that springs past
+       its own resting place reads as loose rather than responsive. */
+    transform 0.2s cubic-bezier(0.34, 1.26, 0.64, 1);
+}
+
+/* The two solid buttons carry the sheen, so they have to contain it. Outside
+   the hover query below, because a rule that applied only on pointer devices
+   would leave a phone with differently-shaped buttons. */
+.btn--primary,
+.btn[data-tone="danger"] {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/*
+   The lift is behind `hover: hover` because a touch screen reports a tap as a
+   hover and then KEEPS reporting it until you tap something else. Unguarded, a
+   phone would leave the last button you pressed floating and lit. The press
+   and focus states further down are deliberately outside the guard: both are
+   intentional, and neither sticks to a control the way a tap's phantom hover
+   does.
+*/
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled):not(.btn--locked),
+  .icon-btn:hover,
+  .avatar-picker__btn:hover,
+  .promotion__choice:hover,
+  .style-option:hover,
+  .theme-swatch:hover,
+  .bg-swatch:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+  }
+
+  /*
+     The accent buttons glow in their own colour. A gold button casting a grey
+     shadow looks stuck to the page rather than lifted off it.
+
+     `.btn` is repeated only to win: the generic rule above carries two :not()
+     clauses and so outranks a plain `.btn--primary:hover`, which left the gold
+     buttons wearing the grey shadow. Matching its weight and coming later is
+     what settles it.
+  */
+  .btn.btn--primary:hover:not(:disabled) {
+    box-shadow: 0 10px 24px rgba(232, 180, 76, 0.3);
+  }
+
+  .btn.btn[data-tone="danger"]:hover:not(:disabled) {
+    box-shadow: 0 10px 24px rgba(229, 89, 77, 0.32);
+  }
+
+  /* A picker that is the chosen one wears a gold outline. Hovering it must not
+     take away the mark that says so, hence the :not. */
+  .style-option:hover:not(.is-active),
+  .theme-swatch:hover:not(.is-active),
+  .bg-swatch:hover:not(.is-active) {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
+  /*
+     The sheen: one pass across the face, on the solid buttons only — on a
+     panel button there is nothing for a highlight to catch.
+
+     z-index: -1 puts it behind the label and in front of the fill. That is
+     not a trick: within a stacking context a negative-z child paints after
+     the element's own background and before its inline content, which is
+     exactly the layer a highlight belongs in. `isolation` above is what keeps
+     it from slipping behind an ancestor instead.
+  */
+  .btn--primary::after,
+  .btn[data-tone="danger"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+      105deg,
+      transparent 38%,
+      rgba(255, 255, 255, 0.42) 50%,
+      transparent 62%
+    );
+    transform: translateX(-130%);
+  }
+
+  .btn--primary:hover:not(:disabled)::after,
+  .btn[data-tone="danger"]:hover:not(:disabled)::after {
+    transform: translateX(130%);
+    /* Only on the way in. Returning, it snaps back off-screen unseen rather
+       than sweeping backwards, which would read as the button undoing itself. */
+    transition: transform 0.62s ease;
+  }
+}
+
+/*
+   The press has to beat the lift, so it comes after it and goes the other way.
+   A hovered control that merely returned to its resting place under the finger
+   would read as not having been pressed at all.
+*/
+.btn:active:not(:disabled):not(.btn--locked),
+.icon-btn:active,
+.avatar-picker__btn:active,
+.promotion__choice:active,
+.style-option:active,
+.theme-swatch:active,
+.bg-swatch:active {
+  transform: translateY(1px);
+  box-shadow: none;
+  transition-duration: 0.07s;
+}
+
+/* Keyboard parity: the same answer to the same intent. A control that lights
+   up for a mouse and does nothing for Tab is telling half the room it is not
+   for them. */
+.btn:focus-visible:not(:disabled):not(.btn--locked),
+.icon-btn:focus-visible,
+.avatar-picker__btn:focus-visible,
+.promotion__choice:focus-visible,
+.style-option:focus-visible,
+.theme-swatch:focus-visible,
+.bg-swatch:focus-visible {
+  transform: translateY(-2px);
+}
+
 /* Respect users who prefer less motion */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -1853,5 +2006,48 @@ body.is-modal-open {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /*
+     Movement is the whole of the hover lift and the sheen, so they go
+     altogether rather than snapping to their finished position with the
+     transition removed — which is what the rule above would otherwise leave:
+     the jump without the motion, the worst of both.
+
+     The colour and shadow changes stay. A control still has to answer the
+     pointer; it just does it by lighting up rather than by moving.
+
+     `!important` for the same reason the durations above carry it: these are
+     one-class selectors deliberately overruling the hover rules, which are
+     four deep. An accessibility preference should not have to win a
+     specificity argument it can only lose.
+  */
+  .btn:hover,
+  .btn:active,
+  .btn:focus-visible,
+  .icon-btn:hover,
+  .icon-btn:active,
+  .icon-btn:focus-visible,
+  .avatar-picker__btn:hover,
+  .avatar-picker__btn:active,
+  .avatar-picker__btn:focus-visible,
+  .promotion__choice:hover,
+  .promotion__choice:active,
+  .promotion__choice:focus-visible,
+  .style-option:hover,
+  .style-option:active,
+  .style-option:focus-visible,
+  .theme-swatch:hover,
+  .theme-swatch:active,
+  .theme-swatch:focus-visible,
+  .bg-swatch:hover,
+  .bg-swatch:active,
+  .bg-swatch:focus-visible {
+    transform: none !important;
+  }
+
+  .btn--primary::after,
+  .btn[data-tone="danger"]::after {
+    display: none;
   }
 }

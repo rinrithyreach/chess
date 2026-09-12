@@ -378,6 +378,26 @@ code, responsive game screen, settings (sound, board theme, background,
 coordinates, animations, auto-flip), custom confirmation modals, toasts, and a
 collapsible move history.
 
+**Every control answers the pointer** — hovering any button lifts it 2px,
+opens a shadow under it, and on the gold and red solid buttons sends a sheen
+across the face. One block at the end of `style.css` rather than a transform
+scattered through nine components, and it is deliberately last in the file:
+these selectors are no more specific than the component rules they extend, so
+source order is what makes them win.
+
+Three things are excluded on purpose. The **lift sits behind `hover: hover`**,
+because a touch screen reports a tap as a hover and then keeps reporting it —
+unguarded, a phone leaves the last button you pressed floating and lit. A
+**locked control** (the Undo) does not move or glow, which is the whole point
+of it being locked. And **`prefers-reduced-motion` removes the movement
+entirely** rather than letting it snap to its finished position with the
+transition stripped off: the jump without the motion is the worst of both.
+The colour changes stay there — the control still answers, it just does it by
+lighting up rather than by moving.
+
+Keyboard focus gets the same lift as hover. A control that lights up for a
+mouse and does nothing for Tab is telling half the room it is not for them.
+
 **Accessibility** — real `<button>` elements, ARIA labels on every square,
 arrow-key board navigation with a roving tabindex, visible focus rings, and
 `prefers-reduced-motion` support.
@@ -928,7 +948,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, and the background setting **32**. The groups were run separately, so
+Pictures on online seats add **36 more**, the background setting **32**, and hover feedback **20**. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -952,6 +972,7 @@ the totals are reported separately rather than as one number:
 | Rules (emulator) | 14 | The rules of the time loaded into the database emulator and driven as an ordinary signed-in user: a room with no picture accepted, unknown player fields rejected, a stranger's uid refused a seat. Its avatar rows asserted that *every* picture was rejected, which was true of the rules then deployed and is no longer true of the rules in this repo — superseded by the suite below, not re-run |
 | **Pictures on online seats (Chromium ×2)** | **36** | **Two devices against a database that enforces the shipped rule text — the cap and the pattern are read out of `firebase/database.rules.json` itself, so client and rules are checked against each other rather than against anyone's memory. A photograph over the budget at 128px comes back 96px and inside it; one already inside is not re-encoded a second time; a remote URL, an SVG and nothing at all are all refused. Two players create, join, and see each other's face on both devices, and the room document carrying both faces is 9,475 bytes. Then the same run against rules that do NOT know the field: the write is refused, the room is created anyway without the picture, both players are told why, and the game is playable — the failure that this feature caused the first time it shipped. Zero console errors** |
 | **Background (Chromium)** | **32** | **All four grounds: each repaints the page, marks only itself checked, and previews itself in the picker rather than the one in force; the choice survives a reload and is proved to be on the root element BEFORE any module runs (app.js blocked, the attribute already set), so it cannot flash the default first; an unknown id out of storage lands on the default. The swatches are measured rather than admired: each must show a card that separates from its own ground (fill and outline both), and no two cards may be within 8 points of each other — the check that a paint-chip preview would fail even while every ground was technically a different colour. Contrast is computed from the token values in the stylesheet itself for every background — body text AAA on the ground and on a panel, muted text AA, the accent legible — rather than eyeballed** |
+| **Hover feedback (Chromium)** | **20** | **Measured as a pointer, as a finger, and as someone who asked for less motion. With a pointer: buttons, icon buttons, the picture pickers and the swatches all lift exactly 2px and settle back when it leaves, the gold buttons glow gold rather than grey, the sheen is a real gradient behind the label, and hovering the chosen swatch does not strip the outline that marks it chosen. Locked Undo stays flat and shadowless while Flip beside it lifts, and a press beats the lift. On a touch screen the media query does not match, so a tapped button is not left floating. Under reduced motion the lift does not happen at all and the sheen is gone rather than parked mid-sweep. Caught two real specificity bugs: the gold glow was losing to the generic hover rule, and the reduced-motion override was losing to both** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
