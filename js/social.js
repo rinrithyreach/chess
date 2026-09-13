@@ -66,6 +66,9 @@ const NAME_MAX = 20;
 /** Said whenever the rules are the thing standing in the way. */
 const RULES_OUT_OF_DATE = 'Friends need the database rules deployed — see firebase/database.rules.json';
 
+/** The same problem, said where friends already work and invites do not. */
+const INVITES_OUT_OF_DATE = 'Invites need the database rules deployed — see firebase/database.rules.json';
+
 /**
  * A friend code, from the alphabet room codes use.
  *
@@ -925,7 +928,7 @@ export class SocialHub {
       warn('Could not send an invite', error);
       return {
         ok: false,
-        error: isPermissionDenied(error) ? RULES_OUT_OF_DATE : explainFirebaseError(error),
+        error: isPermissionDenied(error) ? INVITES_OUT_OF_DATE : explainFirebaseError(error),
       };
     }
   }
