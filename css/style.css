@@ -1846,6 +1846,98 @@ body.is-modal-open {
 }
 
 /* ==========================================================================
+   The clock
+
+   One readout on each player card, shown only in Speed Chess.
+   ========================================================================== */
+
+.player-card__clock {
+  flex: none;
+  min-width: 4.2rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 1.02rem;
+  font-weight: 700;
+  /* Tabular figures, or the whole box twitches every tenth of a second as a 1
+     is replaced by a 4. A clock that jitters is a clock you stop reading. */
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-align: center;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+/* Whose time is actually being spent. Not the same as whose turn it is:
+   before White's first move neither clock runs, and neither should look like
+   it is bleeding. */
+.player-card__clock.is-running {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.player-card__clock.is-urgent {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: #ff9d94;
+}
+
+/* Down, not out — the flag has fallen and the number has stopped moving. */
+.player-card__clock.is-flagged {
+  opacity: 0.7;
+}
+
+/* --------------------------------------------------------------------------
+   Time-control picker
+   -------------------------------------------------------------------------- */
+
+.time-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.time-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-height: var(--tap);
+  padding: 0.55rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text-muted);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.time-option.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.time-option__label {
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-option__name {
+  color: var(--text-faint);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.time-option.is-active .time-option__name {
+  color: var(--accent);
+}
+
+/* ==========================================================================
    The tournament ladder
 
    Five rows on the New Game form, one per rung. Read top to bottom as a
@@ -2011,7 +2103,8 @@ body.is-modal-open {
   .promotion__choice:hover,
   .style-option:hover,
   .theme-swatch:hover,
-  .bg-swatch:hover {
+  .bg-swatch:hover,
+  .time-option:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow);
   }
@@ -2037,7 +2130,8 @@ body.is-modal-open {
      take away the mark that says so, hence the :not. */
   .style-option:hover:not(.is-active),
   .theme-swatch:hover:not(.is-active),
-  .bg-swatch:hover:not(.is-active) {
+  .bg-swatch:hover:not(.is-active),
+  .time-option:hover:not(.is-active) {
     border-color: var(--border-strong);
     color: var(--text);
   }
@@ -2087,7 +2181,8 @@ body.is-modal-open {
 .promotion__choice:active,
 .style-option:active,
 .theme-swatch:active,
-.bg-swatch:active {
+.bg-swatch:active,
+.time-option:active {
   transform: translateY(1px);
   box-shadow: none;
   transition-duration: 0.07s;
@@ -2102,7 +2197,8 @@ body.is-modal-open {
 .promotion__choice:focus-visible,
 .style-option:focus-visible,
 .theme-swatch:focus-visible,
-.bg-swatch:focus-visible {
+.bg-swatch:focus-visible,
+.time-option:focus-visible {
   transform: translateY(-2px);
 }
 
@@ -2150,7 +2246,8 @@ body.is-modal-open {
   .theme-swatch:focus-visible,
   .bg-swatch:hover,
   .bg-swatch:active,
-  .bg-swatch:focus-visible {
+  .bg-swatch:focus-visible,
+.time-option:focus-visible {
     transform: none !important;
   }
 

@@ -183,7 +183,8 @@ async function boot() {
     // the same way — and BotSession reads the rung back out of the record,
     // which is what stops a resumed Champion game being finished off by the
     // Novice.
-    if (info?.mode === GAME_MODE.BOT || info?.mode === GAME_MODE.TOURNAMENT) {
+    if (info?.mode === GAME_MODE.BOT || info?.mode === GAME_MODE.TOURNAMENT
+        || info?.vsBot) {
       const { BotSession } = await import('./sessions/bot-session.js');
       await controller.useSession(new BotSession());
     } else {
@@ -268,6 +269,11 @@ async function boot() {
       ui.toast('Game saved — continue it any time');
     }
   }
+
+  // Ten times a second while a clock runs, and nothing else in the app
+  // moves — so this repaints the two readouts rather than re-rendering the
+  // screen around them.
+  controller.on(EVENT.CLOCK, ({ clock }) => ui.renderClocks({ clock }));
 
   controller.on(EVENT.MOVE, ({ move }) => {
     // Captured here and consumed by the CHANGE render that follows, so the
@@ -419,7 +425,9 @@ async function boot() {
       document.getElementById('input-white')?.focus();
     },
 
-    onStartGame: async ({ mode, whiteName, blackName, whiteAvatar, blackAvatar }) => {
+    onStartGame: async ({
+      mode, whiteName, blackName, whiteAvatar, blackAvatar, timeControl, opponent,
+    }) => {
       sound.unlock();
 
       // The mode picks the session provider, and that is the whole of the
@@ -449,8 +457,28 @@ async function boot() {
         // bot-session.js builds that seat itself so it cannot inherit one.
         await controller.newGame({ whiteName, whiteAvatar, mode: GAME_MODE.BOT });
       } else {
-        await controller.useSession(new LocalSession());
-        await controller.newGame({ whiteName, blackName, whiteAvatar, blackAvatar });
+        // Speed Chess is one of the other two games with a clock on it, so
+        // it picks a session the same way they do and then hands over the
+        // one thing that differs. Against the bot the second name box was
+        // hidden, so there is no second name to pass.
+        const speed = mode === GAME_MODE.SPEED;
+        const speedBot = speed && opponent !== 'human';
+
+        if (speedBot) {
+          const { BotSession } = await import('./sessions/bot-session.js');
+          await controller.useSession(new BotSession());
+        } else {
+          await controller.useSession(new LocalSession());
+        }
+
+        await controller.newGame({
+          whiteName,
+          blackName: speedBot ? undefined : blackName,
+          whiteAvatar,
+          blackAvatar: speedBot ? null : blackAvatar,
+          mode: speed ? GAME_MODE.SPEED : GAME_MODE.LOCAL,
+          timeControl: speed ? timeControl : null,
+        });
       }
       ui.showScreen('game');
     },

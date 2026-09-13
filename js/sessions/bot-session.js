@@ -25,12 +25,23 @@ import {
   BOT_TIME_BUDGET_MS,
   BOT_MAX_DEPTH,
   BOT_MIN_THINK_MS,
+  BOT_CLOCK_MARGIN_MS,
   BOT_NAME,
   gauntletRound,
   clampGauntletRound,
   log,
   warn,
 } from '../config.js';
+
+/**
+ * Modes the bot can play that are not "Player vs Bot".
+ *
+ * A game the bot is in keeps its own mode rather than being flattened to
+ * `bot`, because the mode is what the rest of the app reads to know what kind
+ * of game it is: a Speed Chess game against the bot is still Speed Chess, and
+ * has a clock to prove it.
+ */
+const BOT_MODES = [GAME_MODE.TOURNAMENT, GAME_MODE.SPEED];
 
 export class BotSession extends LocalSession {
   /** The colour the human plays. The bot takes the other one. */
@@ -66,7 +77,7 @@ export class BotSession extends LocalSession {
     const botName = this.#opponentName();
     const state = await super.createGame({
       ...config,
-      mode: config.mode === GAME_MODE.TOURNAMENT ? GAME_MODE.TOURNAMENT : GAME_MODE.BOT,
+      mode: BOT_MODES.includes(config.mode) ? config.mode : GAME_MODE.BOT,
       // Whichever seat the bot is in gets its name, so every place that shows
       // a player name — cards, PGN headers, the game-over dialog — says who
       // actually played without any of them knowing a bot exists. On the
@@ -108,7 +119,10 @@ export class BotSession extends LocalSession {
   getState() {
     const state = super.getState();
     if (!state) return state;
-    return { ...state, gauntletRound: this.#round };
+    // `vsBot` is what tells a RESUMED game to mount a bot again. The mode
+    // cannot carry it on its own any more: a Speed Chess game is mode
+    // `speed` whether the other seat holds a person or this.
+    return { ...state, gauntletRound: this.#round, vsBot: true };
   }
 
   async restoreGame(saved) {
@@ -198,7 +212,7 @@ export class BotSession extends LocalSession {
       const fen = state.fen;
       const started = Date.now();
 
-      const move = await this.#think(fen);
+      const move = await this.#think(fen, this.#budget());
 
       // The game can end, restart or be left while the search runs.
       if (this.#stopped) return;
@@ -212,8 +226,12 @@ export class BotSession extends LocalSession {
       // A reply that lands the instant the player's finger lifts reads as a
       // canned response rather than a decision, and steps on the animation of
       // the move that provoked it. Wait out the remainder of a short beat.
+      // The pause is a courtesy, and courtesy is not worth losing on time
+      // for: on a clock it is trimmed to whatever the bot can spare, and in
+      // a scramble it disappears entirely.
       const elapsed = Date.now() - started;
-      if (elapsed < BOT_MIN_THINK_MS) await pause(BOT_MIN_THINK_MS - elapsed);
+      const beat = Math.min(BOT_MIN_THINK_MS - elapsed, this.#spare());
+      if (beat > 0) await pause(beat);
       if (this.#stopped || this.getState().fen !== fen) return;
 
       await super.submitMove({
@@ -239,11 +257,40 @@ export class BotSession extends LocalSession {
    * There the search runs on the main thread instead, which briefly costs
    * smoothness but never costs a move.
    */
-  async #think(fen) {
+  /**
+   * What the bot may spend on this move.
+   *
+   * Its own strength, or everything it has left bar a margin — whichever is
+   * less. Without this a Champion in a bullet game would sit and think for
+   * three seconds with two seconds on its clock, and flag in the middle of
+   * a search it never got to use.
+   */
+  #budget() {
+    const want = this.#strength.timeBudgetMs;
+    const left = this.#clockLeft();
+    if (left === null) return want;
+    return Math.max(60, Math.min(want, left - BOT_CLOCK_MARGIN_MS));
+  }
+
+  /** How much of the courtesy pause the clock can afford. */
+  #spare() {
+    const left = this.#clockLeft();
+    if (left === null) return BOT_MIN_THINK_MS;
+    return Math.max(0, left - BOT_CLOCK_MARGIN_MS);
+  }
+
+  /** The bot's own remaining time, or null in a game with no clock. */
+  #clockLeft() {
+    const clock = this.getClock?.();
+    if (!clock) return null;
+    return clock.remaining[this.#humanColor === WHITE ? BLACK : WHITE] ?? null;
+  }
+
+  async #think(fen, timeBudgetMs = this.#strength.timeBudgetMs) {
     const worker = this.#getWorker();
     if (worker) {
       try {
-        return await this.#askWorker(worker, fen);
+        return await this.#askWorker(worker, fen, timeBudgetMs);
       } catch (error) {
         warn('Bot worker failed, falling back to the main thread', error);
         this.#workerFailed = true;
@@ -252,7 +299,7 @@ export class BotSession extends LocalSession {
       }
     }
     const { chooseMove } = await import('../bot.js');
-    return chooseMove(fen, { ...this.#strength });
+    return chooseMove(fen, { ...this.#strength, timeBudgetMs });
   }
 
   #getWorker() {
@@ -269,7 +316,7 @@ export class BotSession extends LocalSession {
     return this.#worker;
   }
 
-  #askWorker(worker, fen) {
+  #askWorker(worker, fen, timeBudgetMs = this.#strength.timeBudgetMs) {
     const id = (this.#pending += 1);
     return new Promise((resolve, reject) => {
       const onMessage = (event) => {
@@ -288,7 +335,7 @@ export class BotSession extends LocalSession {
       };
       worker.addEventListener('message', onMessage);
       worker.addEventListener('error', onError);
-      worker.postMessage({ id, fen, ...this.#strength });
+      worker.postMessage({ id, fen, ...this.#strength, timeBudgetMs });
     });
   }
 }

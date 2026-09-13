@@ -141,6 +141,13 @@
             </span>
           </label>
           <label class="mode mode--available">
+            <input type="radio" name="mode" value="speed" id="mode-speed">
+            <span class="mode__body">
+              <span class="mode__name">Speed Chess</span>
+              <span class="mode__desc">On the clock, against the bot or a friend</span>
+            </span>
+          </label>
+          <label class="mode mode--available">
             <input type="radio" name="mode" value="tournament" id="mode-tournament">
             <span class="mode__body">
               <span class="mode__name">Tournament</span>
@@ -160,6 +167,39 @@
           The ladder. Rungs are built from GAUNTLET_ROUNDS in js/config.js, so
           adding an opponent is a row in that list and nothing here.
         -->
+        <!-- Time controls come from TIME_CONTROLS in js/config.js. -->
+        <div class="speed-fields" id="speed-fields" hidden>
+          <!--
+            Opponent first, because it decides whether the second name box
+            above is any use. Only two, and neither is a list that grows, so
+            these are written out rather than built from config — but they
+            wear the time picker's classes, which are about the shape of the
+            control (a label over a name, in a box) rather than about time.
+          -->
+          <div class="setting setting--stack">
+            <span class="setting__label" id="opponent-label">Opponent</span>
+            <div class="time-picker" id="opponent-picker" role="radiogroup"
+                 aria-labelledby="opponent-label">
+              <button type="button" class="time-option is-active" data-opponent="bot"
+                      role="radio" aria-checked="true" aria-label="Play the bot, on the clock">
+                <span class="time-option__label">Bot</span>
+                <span class="time-option__name">On the clock too</span>
+              </button>
+              <button type="button" class="time-option" data-opponent="human"
+                      role="radio" aria-checked="false"
+                      aria-label="Play another person on this device">
+                <span class="time-option__label">A friend</span>
+                <span class="time-option__name">Same device</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting setting--stack">
+            <span class="setting__label" id="time-label">Time control</span>
+            <div class="time-picker" id="time-picker" role="radiogroup" aria-labelledby="time-label"></div>
+          </div>
+        </div>
+
         <div class="ladder-fields" id="tournament-fields" hidden>
           <div class="setting setting--stack">
             <span class="setting__label" id="ladder-label">The ladder</span>
@@ -295,6 +335,10 @@
             <span class="player-card__edge" id="top-edge" hidden></span>
           </span>
         </span>
+        <!-- Speed Chess only. A clock is the one thing on this card that
+             changes without anybody doing anything, so it is announced
+             politely rather than on every tenth of a second. -->
+        <span class="player-card__clock" id="top-clock" hidden aria-hidden="true"></span>
         <span class="player-card__turn" id="top-turn" hidden>To move</span>
       </section>
 
@@ -329,6 +373,10 @@
             <span class="player-card__edge" id="bottom-edge" hidden></span>
           </span>
         </span>
+        <!-- Speed Chess only. A clock is the one thing on this card that
+             changes without anybody doing anything, so it is announced
+             politely rather than on every tenth of a second. -->
+        <span class="player-card__clock" id="bottom-clock" hidden aria-hidden="true"></span>
         <span class="player-card__turn" id="bottom-turn" hidden>To move</span>
       </section>
 

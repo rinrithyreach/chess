@@ -13,6 +13,9 @@ import {
   STATUS,
   BOARD_THEMES,
   GAUNTLET_ROUNDS,
+  TIME_CONTROLS,
+  DEFAULT_TIME_CONTROL,
+  CLOCK_URGENT_MS,
   BACKGROUNDS,
   DEFAULT_BACKGROUND,
   resolveBackground,
@@ -60,6 +63,26 @@ const PROMOTION_PIECES = [
   { type: 'b', name: 'Bishop' },
   { type: 'n', name: 'Knight' },
 ];
+
+/**
+ * A clock reading: m:ss normally, and seconds with a tenth under ten.
+ *
+ * The switch is not decoration. Above ten seconds the tenths digit changes
+ * too fast to read and only flickers; below it, it is the difference between
+ * knowing you have time for one more move and guessing.
+ *
+ * Rounded UP to the tenth, so a clock never shows 0.0 while there is still
+ * time on it — the zero is reserved for the flag.
+ */
+function formatClock(ms) {
+  const left = Math.max(0, ms);
+  if (left <= 0) return '0.0';
+  if (left < CLOCK_URGENT_MS) return (Math.ceil(left / 100) / 10).toFixed(1);
+
+  const seconds = Math.ceil(left / 1000);
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+}
 
 /** Query helper that reports missing elements once instead of throwing later. */
 function el(id) {
@@ -133,6 +156,8 @@ export class UI {
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
       'theme-picker', 'bg-picker',
       'mode-tournament', 'tournament-fields', 'ladder', 'ladder-note', 'btn-ladder-next',
+      'mode-speed', 'speed-fields', 'time-picker', 'opponent-picker',
+      'top-clock', 'bottom-clock',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
       // Phase 2 — online
@@ -283,6 +308,33 @@ export class UI {
       });
     }
 
+    // Time controls. Same shape as every other picker here: one list in
+    // config.js decides what exists, and the markup holds none of it.
+    const times = this.#dom['time-picker'];
+    if (times) {
+      times.innerHTML = '';
+      TIME_CONTROLS.forEach((control) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'time-option';
+        button.dataset.time = control.id;
+        button.setAttribute('role', 'radio');
+        button.setAttribute('aria-checked', String(control.id === DEFAULT_TIME_CONTROL));
+        if (control.id === DEFAULT_TIME_CONTROL) button.classList.add('is-active');
+        button.innerHTML =
+          `<span class="time-option__label">${control.label}</span>` +
+          `<span class="time-option__name">${control.name}</span>`;
+        // Minutes and seconds spelled out, because "3 + 2" is a notation
+        // rather than a phrase and a screen reader should not have to guess.
+        const minutes = control.initialMs / 60000;
+        const increment = control.incrementMs / 1000;
+        button.setAttribute('aria-label',
+          `${control.name}, ${minutes} minute${minutes === 1 ? '' : 's'}`
+          + (increment ? ` plus ${increment} seconds a move` : ', no increment'));
+        times.append(button);
+      });
+    }
+
     // The ladder. One row per rung, built once; which row is which state is
     // decided on every render by syncGauntlet().
     const ladder = this.#dom.ladder;
@@ -352,16 +404,23 @@ export class UI {
     const online = mode === GAME_MODE.ONLINE;
     const bot = mode === GAME_MODE.BOT;
     const ladder = mode === GAME_MODE.TOURNAMENT;
+    const speed = mode === GAME_MODE.SPEED;
 
     if (this.#dom['online-fields']) this.#dom['online-fields'].hidden = !online;
     if (this.#dom['tournament-fields']) this.#dom['tournament-fields'].hidden = !ladder;
+    if (this.#dom['speed-fields']) this.#dom['speed-fields'].hidden = !speed;
     if (this.#dom['btn-start-game']) this.#dom['btn-start-game'].hidden = online;
 
     const nameFields = this.#dom['form-new-game']
       ?.querySelectorAll('.field:not(.field--modes)');
+    // Speed Chess asks for a second name only when a second person is
+    // going to type one in.
+    const soloSpeed = speed && this.#selectedOpponent() === 'bot';
     nameFields?.forEach((field, index) => {
-      if (index === 0) field.hidden = online;                        // your own name
-      else if (index === 1) field.hidden = online || bot || ladder;  // the opponent's
+      if (index === 0) field.hidden = online;  // your own name
+      else if (index === 1) {                  // the opponent's
+        field.hidden = online || bot || ladder || soloSpeed;
+      }
     });
 
     // The button says what it is about to do. On the ladder that is not a
@@ -478,6 +537,9 @@ export class UI {
     this.#renderHistory(state);
     this.#renderControls(snapshot);
     this.#renderOnline(state);
+    // Painted here as well as on every tick, so the readouts are right the
+    // instant a game appears rather than up to a tenth of a second later.
+    this.renderClocks(state);
   }
 
   /**
@@ -945,6 +1007,55 @@ export class UI {
   }
 
   // -----------------------------------------------------------------------
+  // The clock
+  // -----------------------------------------------------------------------
+
+  /** Which time control the form is offering. */
+  #selectedTimeControl() {
+    const active = this.#dom['time-picker']?.querySelector('.time-option.is-active');
+    return active?.dataset.time ?? DEFAULT_TIME_CONTROL;
+  }
+
+  /** Who the Speed Chess game is against: 'bot' or 'human'. */
+  #selectedOpponent() {
+    const active = this.#dom['opponent-picker']?.querySelector('.time-option.is-active');
+    return active?.dataset.opponent ?? 'bot';
+  }
+
+  /**
+   * Paint both clocks, and nothing else.
+   *
+   * Separate from render() because it is called ten times a second: a full
+   * render rebuilds the history list, both capture trays and every card, all
+   * to change four characters. This touches the two readouts and stops.
+   */
+  renderClocks(state) {
+    const clock = state?.clock ?? null;
+    const orientation = this.#controller.getOrientation();
+    const topColor = orientation === 'white' ? BLACK : WHITE;
+
+    [['top-clock', topColor], ['bottom-clock', topColor === WHITE ? BLACK : WHITE]]
+      .forEach(([id, color]) => {
+        const node = this.#dom[id];
+        if (!node) return;
+        if (!clock) {
+          node.hidden = true;
+          return;
+        }
+
+        const left = clock.remaining[color] ?? 0;
+        node.hidden = false;
+        node.textContent = formatClock(left);
+        // Running is not the same as "your turn": between the game starting
+        // and White's first move neither clock runs, and neither should look
+        // like it is bleeding.
+        node.classList.toggle('is-running', clock.running === color);
+        node.classList.toggle('is-urgent', left <= CLOCK_URGENT_MS);
+        node.classList.toggle('is-flagged', left <= 0);
+      });
+  }
+
+  // -----------------------------------------------------------------------
   // The tournament ladder
   // -----------------------------------------------------------------------
 
@@ -1271,6 +1382,8 @@ export class UI {
         blackName: this.#dom['input-black']?.value ?? '',
         whiteAvatar: this.#avatarFor('p1'),
         blackAvatar: this.#avatarFor('p2'),
+        timeControl: this.#selectedTimeControl(),
+        opponent: this.#selectedOpponent(),
       });
     });
 
@@ -1432,6 +1545,23 @@ export class UI {
       const swatch = event.target.closest('.theme-swatch');
       if (!swatch) return;
       this.#call('onSettingChange', { boardTheme: swatch.dataset.theme });
+    });
+
+    // Both pickers behave the same way and neither belongs to the
+    // controller: what is chosen here is not a setting and not game state
+    // until a game actually starts with it.
+    ['time-picker', 'opponent-picker'].forEach((id) => {
+      this.#dom[id]?.addEventListener('click', (event) => {
+        const option = event.target.closest('.time-option');
+        if (!option) return;
+        this.#dom[id].querySelectorAll('.time-option').forEach((node) => {
+          const active = node === option;
+          node.classList.toggle('is-active', active);
+          node.setAttribute('aria-checked', String(active));
+        });
+        // The opponent decides whether the second name box is any use.
+        if (id === 'opponent-picker') this.#applyMode(this.#selectedMode());
+      });
     });
 
     this.#dom['bg-picker']?.addEventListener('click', (event) => {

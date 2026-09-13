@@ -18,6 +18,7 @@ import {
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
   DEFAULT_GAUNTLET,
+  CLOCK_TICK_MS,
   GAUNTLET_LENGTH,
   clampGauntletRound,
   // Aliased: `gauntletRound` is also the name of the field a game carries
@@ -40,6 +41,7 @@ export const EVENT = {
   TOAST: 'toast', // transient user-facing message
   DRAW_OFFER: 'draw-offer', // a draw has been offered to the opponent
   MOVE: 'move', // a move was just committed (for animation/sound)
+  CLOCK: 'clock', // the clock ticked — repaint the readouts, nothing else
 };
 
 export class GameController {
@@ -76,6 +78,17 @@ export class GameController {
    * game has ended, which is the only moment a run ever changes.
    */
   #gauntlet = { ...DEFAULT_GAUNTLET };
+
+  /**
+   * The interval that watches a running clock, or null.
+   *
+   * It does not KEEP the time — the session does that from timestamps, and
+   * would still read correctly if this never fired. What it does is ask
+   * whether the running side has flagged, because a game that has been lost
+   * on time must end when the time runs out rather than when somebody next
+   * tries to move, and repaint the readout in between.
+   */
+  #clockTimer = null;
 
   /** Input lock — blocks duplicate submissions from rapid tapping. */
   #processing = false;
@@ -174,6 +187,7 @@ export class GameController {
   async useSession(session) {
     this.#unsubscribeSession?.();
     this.#unsubscribeSession = null;
+    this.#stopClockTimer();
 
     if (this.#session && this.#session !== session) {
       try {
@@ -219,6 +233,10 @@ export class GameController {
     // A deliberate reset (new game, restore, rematch) is adopted silently.
     if (previous.baseline) {
       this.#emitChange();
+      // Still has to reach the clock. A RESTORED speed game arrives on this
+      // path with a clock already running, and returning without starting the
+      // watcher would leave the readout frozen until the next move.
+      this.#syncClockTimer();
       return;
     }
 
@@ -249,6 +267,7 @@ export class GameController {
 
     this.#save();
     this.#emitChange();
+    this.#syncClockTimer();
 
     if (gameOver && !previous.gameOver) {
       // Resignations and agreed draws end the game without a move, so they
@@ -284,6 +303,7 @@ export class GameController {
       black: saved.players?.[BLACK]?.name ?? 'Player 2',
       moveCount: Array.isArray(saved.moves) ? saved.moves.length : 0,
       mode: saved.mode ?? GAME_MODE.LOCAL,
+      vsBot: saved.vsBot === true,
       roomCode: saved.roomCode ?? null,
     };
   }
@@ -300,6 +320,7 @@ export class GameController {
     mode = GAME_MODE.LOCAL,
     startFen,
     gauntletRound = null,
+    timeControl = null,
   } = {}) {
     storage.clearGame();
     this.#resetView();
@@ -314,6 +335,7 @@ export class GameController {
       mode,
       startFen,
       gauntletRound,
+      timeControl,
     });
 
     this.#started = true;
@@ -772,6 +794,45 @@ export class GameController {
   }
 
   // -----------------------------------------------------------------------
+  // The clock
+  // -----------------------------------------------------------------------
+
+  /**
+   * Watch the clock exactly while there is a running one to watch.
+   *
+   * Driven from the state rather than from the call sites that change it, so
+   * a move, a restore, a restart and a flag fall all arrive here by the same
+   * road and none of them can leave an interval running over a finished game.
+   */
+  #syncClockTimer() {
+    const shouldWatch = Boolean(this.#state?.clock?.running) && !this.#state.isGameOver;
+    if (shouldWatch === (this.#clockTimer !== null)) return;
+
+    if (shouldWatch) {
+      this.#clockTimer = setInterval(() => {
+        // A flag fall publishes new state, which comes back through
+        // #syncFromSession and stops this timer. Anything else is just the
+        // number on screen needing to catch up.
+        if (this.#session.tickClock?.()) return;
+        // Asked for fresh rather than taken from the snapshot: #state is
+        // only replaced when the session publishes, and between two moves it
+        // never does — so the snapshot holds the time as it was at the last
+        // move and would leave the readout standing still.
+        const clock = this.#session.getClock?.();
+        if (clock) this.#emit(EVENT.CLOCK, { clock });
+      }, CLOCK_TICK_MS);
+    } else {
+      this.#stopClockTimer();
+    }
+  }
+
+  #stopClockTimer() {
+    if (this.#clockTimer === null) return;
+    clearInterval(this.#clockTimer);
+    this.#clockTimer = null;
+  }
+
+  // -----------------------------------------------------------------------
   // The tournament ladder
   // -----------------------------------------------------------------------
 
@@ -913,6 +974,14 @@ export class GameController {
       // Which rung this game is, so resuming it restores the opponent and
       // not merely the position.
       gauntletRound: this.#state.gauntletRound ?? null,
+      // Whether a bot was in this game, so resuming it puts one back. The
+      // mode cannot answer that on its own: Speed Chess is `speed` whether
+      // the other seat held a person or the bot.
+      vsBot: this.#state.vsBot === true,
+      // Live balances, as of this instant. Saved after every move, which is
+      // the moment they are least ambiguous: one clock has just stopped and
+      // the other has just started.
+      clock: this.#state.clock ?? null,
       savedAt: Date.now(),
     });
   }

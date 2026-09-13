@@ -44,6 +44,7 @@ import {
   STATUS,
   TERMINAL_STATUSES,
   GAME_MODE,
+  resolveTimeControl,
   DEFAULT_PLAYER_NAMES,
   log,
   warn,
@@ -54,6 +55,7 @@ import { isAvatar } from '../avatar.js';
 export const END_REASON = {
   CHECKMATE: 'checkmate',
   RESIGNATION: 'resignation',
+  TIMEOUT: 'timeout',
   DRAW_AGREEMENT: 'draw-agreement',
   ...DRAW_REASON,
 };
@@ -67,6 +69,51 @@ export const SESSION_ACTION = {
 };
 
 const colorName = (color) => (color === WHITE ? 'White' : 'Black');
+const otherColor = (color) => (color === WHITE ? BLACK : WHITE);
+
+/** A full clock for one time control, not yet running. */
+function newClock(id) {
+  const control = resolveTimeControl(id);
+  return {
+    control: control.id,
+    incrementMs: control.incrementMs,
+    initialMs: control.initialMs,
+    remaining: { [WHITE]: control.initialMs, [BLACK]: control.initialMs },
+    running: null,
+    since: null,
+  };
+}
+
+/**
+ * Rebuild a clock from a saved game, or null if that game had none.
+ *
+ * The balances are taken as stored and the stopwatch is restarted from now,
+ * so the time a player spent thinking before the tab was closed is given back
+ * to them. That is the deliberate side of the trade: the alternative is
+ * counting the hours a closed tab was closed, and losing a blitz game
+ * overnight while nobody was playing it.
+ */
+function restoreClock(saved) {
+  if (!saved || typeof saved !== 'object') return null;
+  const control = resolveTimeControl(saved.control);
+  const ms = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : fallback;
+  };
+  const running = saved.running === WHITE || saved.running === BLACK ? saved.running : null;
+
+  return {
+    control: control.id,
+    incrementMs: control.incrementMs,
+    initialMs: control.initialMs,
+    remaining: {
+      [WHITE]: ms(saved.remaining?.[WHITE], control.initialMs),
+      [BLACK]: ms(saved.remaining?.[BLACK], control.initialMs),
+    },
+    running,
+    since: running ? Date.now() : null,
+  };
+}
 
 /**
  * Build a player record from whatever a caller supplied.
@@ -96,6 +143,24 @@ export class LocalSession {
   #mode = GAME_MODE.LOCAL;
   #startFen = null;
   #destroyed = false;
+
+  /**
+   * The chess clock, or null in a game that has none.
+   *
+   * Time is held as a pair of remaining balances plus ONE timestamp: the
+   * moment the running side's turn began. Everything else is arithmetic
+   * against `Date.now()`, which is what makes this correct without being
+   * driven — no interval has to fire on time, or fire at all, for the
+   * reading to be right. A tab that sleeps for a minute wakes up having
+   * lost a minute, which is exactly what a chess clock does.
+   *
+   * `running` is null before the first move. The clocks are idle until
+   * White actually plays, because on a shared device nobody is ready at the
+   * instant the board appears, and a bullet game that has eaten four
+   * seconds before either player has looked at it is worse than a free
+   * first move.
+   */
+  #clock = null;
 
   // -----------------------------------------------------------------------
   // Lifecycle
@@ -133,6 +198,7 @@ export class LocalSession {
     this.#mode = config.mode ?? GAME_MODE.LOCAL;
     this.#result = null;
     this.#status = STATUS.PLAYING;
+    this.#clock = config.timeControl ? newClock(config.timeControl) : null;
 
     this.#syncHeaders();
     this.#refreshStatus();
@@ -177,6 +243,7 @@ export class LocalSession {
     this.#startFen = saved.startFen ?? null;
     this.#result = saved.result ?? null;
     this.#status = saved.status ?? STATUS.PLAYING;
+    this.#clock = restoreClock(saved.clock);
 
     this.#syncHeaders();
     // Re-derive rule-driven status so a tampered record cannot leave the game
@@ -242,6 +309,10 @@ export class LocalSession {
     const result = this.#engine.makeMove(from, to, promotion);
     if (!result.ok) return { ok: false, error: result.error };
 
+    // Before the status refresh, so a move that both mates and would have
+    // flagged is scored as the mate it is: the clock stops the instant the
+    // move lands, and a player who moved in time has moved in time.
+    this.#handOverClock();
     this.#refreshStatus();
     this.#publish();
     return { ok: true, move: result.move, state: this.getState() };
@@ -319,6 +390,8 @@ export class LocalSession {
     if (this.#startFen) this.#engine.loadFen(this.#startFen);
     this.#result = null;
     this.#status = STATUS.PLAYING;
+    // A new game on the same terms: full clocks, idle until the first move.
+    if (this.#clock) this.#clock = newClock(this.#clock.control);
     this.#syncHeaders();
     this.#refreshStatus();
     this.#publish();
@@ -362,6 +435,97 @@ export class LocalSession {
    * outcomes (resignation, draw agreement) are set by their own handlers and
    * left alone.
    */
+  // -----------------------------------------------------------------------
+  // The clock
+  // -----------------------------------------------------------------------
+
+  /** What one side has left right now, counting the turn in progress. */
+  #remaining(color) {
+    const clock = this.#clock;
+    if (!clock) return null;
+    const banked = clock.remaining[color];
+    if (clock.running !== color) return banked;
+    return Math.max(0, banked - (Date.now() - clock.since));
+  }
+
+  /**
+   * Stop the mover's clock, pay their increment, start the opponent's.
+   *
+   * The increment is paid only to a clock that was actually running. On the
+   * very first move nothing has been spent, and paying two seconds for a move
+   * made before the clocks started would hand White a head start.
+   */
+  #handOverClock() {
+    const clock = this.#clock;
+    if (!clock) return;
+
+    const mover = clock.running;
+    if (mover) {
+      clock.remaining[mover] = Math.max(0, this.#remaining(mover)) + clock.incrementMs;
+    }
+    clock.running = this.#engine.getTurn();
+    clock.since = Date.now();
+  }
+
+  /**
+   * Has the running side run out? Ends the game if so.
+   *
+   * Called from outside on a timer, because a balance that is only ever
+   * computed when someone asks would let a flagged game sit there looking
+   * playable until the next move was attempted. Returns whether anything
+   * changed, so the caller can stop asking.
+   */
+  tickClock() {
+    const clock = this.#clock;
+    if (!clock?.running || this.#isTerminal()) return false;
+    if (this.#remaining(clock.running) > 0) return false;
+
+    const loser = clock.running;
+    const winner = otherColor(loser);
+    clock.remaining[loser] = 0;
+    clock.running = null;
+    clock.since = null;
+
+    this.#status = STATUS.FINISHED;
+    this.#result = {
+      winner,
+      reason: END_REASON.TIMEOUT,
+      label: `${colorName(winner)} Wins`,
+      detail: `${colorName(loser)} ran out of time`,
+    };
+    this.#engine.setHeader('Result', winner === WHITE ? '1-0' : '0-1');
+    this.#publish();
+    return true;
+  }
+
+  /**
+   * The clock, read live, without going through a state snapshot.
+   *
+   * The whole state is only rebuilt when something happens, and between two
+   * moves nothing does — so a caller watching the time has to ask for the
+   * time rather than re-read a snapshot that was accurate when it was taken
+   * and has been standing still ever since.
+   */
+  getClock() {
+    return this.#clockState();
+  }
+
+  /** The clock as the rest of the app sees it: live balances, no stopwatch. */
+  #clockState() {
+    const clock = this.#clock;
+    if (!clock) return null;
+    return {
+      control: clock.control,
+      incrementMs: clock.incrementMs,
+      initialMs: clock.initialMs,
+      remaining: {
+        [WHITE]: this.#remaining(WHITE),
+        [BLACK]: this.#remaining(BLACK),
+      },
+      running: clock.running,
+    };
+  }
+
   #refreshStatus() {
     const engine = this.#engine;
 
@@ -424,6 +588,7 @@ export class LocalSession {
       moveNumber: engine.moveNumber(),
       startFen: this.#startFen,
       isGameOver: this.#isTerminal(),
+      clock: this.#clockState(),
     };
   }
 
