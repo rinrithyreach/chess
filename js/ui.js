@@ -789,9 +789,23 @@ export class UI {
   onChatMessages(messages = []) {
     if (!this.#chatOn) return;
 
-    messages.forEach((message) => {
-      if (message.kind === 'emote') this.showEmote(message.color, message.body);
-    });
+    // The bubble goes on a player card, and while the sheet is open the
+    // cards are behind it — so it popped UNDER the panel with about six
+    // pixels of itself showing past the bottom edge. Which it did every
+    // single time anybody sent one, because the emote row lives in the
+    // sheet: there is no way to send an emote with the sheet shut, so the
+    // sender has never once seen their own bubble land, only a sliver of
+    // it poking out from behind the panel.
+    //
+    // An emote already has a place to appear while the sheet is up: the
+    // log row this same message just drew, attributed and permanent. The
+    // bubble is for the other case, when somebody is looking at the board
+    // instead. One or the other, never a glimpse of both.
+    if (!this.isChatOpen()) {
+      messages.forEach((message) => {
+        if (message.kind === 'emote') this.showEmote(message.color, message.body);
+      });
+    }
 
     if (this.#openModal === 'chat') return;
     const incoming = messages.filter((message) => !message.mine).length;
