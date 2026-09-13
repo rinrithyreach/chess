@@ -25,6 +25,12 @@ export const STORAGE_KEYS = {
   // the game record, because it outlives every individual game in the run —
   // and because losing a game must not be able to lose the run with it.
   GAUNTLET: 'chess-arena:gauntlet',
+  // Who this device is to other people: the name it plays online under,
+  // and the friend code others type to find it. Separate from the game
+  // record because it outlives every game, and separate from settings
+  // because it is an identity rather than a preference — losing it costs
+  // you your friends list, which is not true of any setting here.
+  PROFILE: 'chess-arena:profile',
 };
 
 /**
@@ -234,6 +240,151 @@ export const CLOCK_TICK_MS = 100;
  */
 export const CLOCK_URGENT_MS = 10_000;
 
+// -------------------------------------------------------------------------
+// Talking to the other player
+// -------------------------------------------------------------------------
+
+/**
+ * The emotes, in the order they are offered.
+ *
+ * A fixed list rather than a free choice of emoji, and the reason is not
+ * taste: what travels between the two devices is an ID, never a glyph. The
+ * receiving device draws the emote from ITS OWN copy of this list, so the
+ * only thing an opponent can put on your screen through this path is one of
+ * the eight pictures chosen here. A message body that says `fire` cannot be
+ * made to render as anything but the one below.
+ *
+ * Eight, covering what actually gets said across a board — a greeting, a
+ * compliment, an apology, and giving a good move its due. Deliberately
+ * nothing that can be aimed at somebody: an emote set with no insult in it
+ * is the cheapest moderation there is, and close to the only kind a client
+ * with no server behind it can do.
+ */
+export const EMOTES = [
+  { id: 'hi', glyph: '👋', label: 'Hello' },
+  { id: 'gg', glyph: '🤝', label: 'Good game' },
+  { id: 'nice', glyph: '👏', label: 'Nice move' },
+  { id: 'think', glyph: '🤔', label: 'Thinking' },
+  { id: 'wow', glyph: '😮', label: 'Wow' },
+  { id: 'fire', glyph: '🔥', label: 'Brilliant' },
+  { id: 'oops', glyph: '😅', label: 'Oops' },
+  { id: 'sorry', glyph: '🙏', label: 'Sorry' },
+];
+
+/** Just the ids — the part that travels, and so the part validated. */
+export const VALID_EMOTES = EMOTES.map((entry) => entry.id);
+
+/** One emote by id, or null for anything not on the list above. */
+export function emote(id) {
+  return EMOTES.find((entry) => entry.id === id) ?? null;
+}
+
+/**
+ * The longest chat message, in characters.
+ *
+ * This number lives in two places and they have to agree: here, where it
+ * sets the input's maxlength, and in firebase/database.rules.json, where it
+ * is enforced. Matching them means a message can never be typed that the
+ * room then refuses — a refusal arrives after the send, with the text
+ * already gone from the box, which is the worst moment to learn about it.
+ *
+ * Long enough for a sentence; short enough that nobody can push a wall of
+ * text at an opponent who cannot leave without forfeiting.
+ */
+export const CHAT_MAX_LENGTH = 160;
+
+/**
+ * How many messages a room keeps.
+ *
+ * Small on purpose. There is no server here to prune anything, so the log is
+ * trimmed by whichever client writes to it — and, more to the point, every
+ * move rewrites the whole room record, chat included. An unbounded log would
+ * be a cost paid again on every move, by both devices, growing all game.
+ * Forty is a long conversation for one game of chess.
+ */
+export const CHAT_HISTORY = 40;
+
+/**
+ * The shortest gap between two things this device sends, in ms.
+ *
+ * Not a rate limit in any serious sense — it lives on the sender, so it
+ * stops a leaning finger rather than a determined person. What actually
+ * protects the other player is the mute switch. What this buys is a log that
+ * stays readable while somebody is enjoying the emote row.
+ */
+export const CHAT_COOLDOWN_MS = 700;
+
+/** How long an emote sits on its sender's player card, in ms. */
+export const EMOTE_BUBBLE_MS = 2600;
+
+// -------------------------------------------------------------------------
+// Friends, and who is about
+// -------------------------------------------------------------------------
+
+/**
+ * How many characters a friend code has.
+ *
+ * Six, from the same alphabet as a room code and read out loud the same way.
+ * The two are not the same thing and should not be confused: a room code
+ * names a game and dies with it; a friend code names a person and does not.
+ * They share a length because they share a keypad — the same thumbs type
+ * both, and a code that is awkward in one place is awkward in the other.
+ *
+ * Like ROOM_CODE_LENGTH, this number also lives in the security rules, which
+ * import nothing. Changing it means changing both, and deploying.
+ */
+export const FRIEND_CODE_LENGTH = 6;
+
+/**
+ * What a person is doing, as opposed to what their seat is doing.
+ *
+ * Worth keeping straight, because the app now has both. A seat carries
+ * `connected`, which answers "is the player I am facing still on the other
+ * end of THIS game". A person carries one of these, which answers "is my
+ * friend about at all". The first is about a room and dies with it; the
+ * second outlives every room.
+ */
+export const PRESENCE = {
+  ONLINE: 'online',   // app open, not in a game
+  PLAYING: 'playing', // in a game right now
+  OFFLINE: 'offline', // gone, or the connection dropped
+};
+
+export const VALID_PRESENCE = Object.values(PRESENCE);
+
+/**
+ * How long a presence record is believed, in ms.
+ *
+ * Firebase clears presence itself when a connection drops, and it does that
+ * server-side, so it works even for a tab closed mid-thought. This is for
+ * the case that does not cover: a record left behind by a client that died
+ * in a way the server never noticed. Past this age an `online` is read as
+ * offline rather than shown to a friend who would then wait for somebody
+ * who is not there.
+ */
+export const PRESENCE_STALE_MS = 150_000;
+
+/** How often a device re-stamps its own presence while the app is open. */
+export const PRESENCE_HEARTBEAT_MS = 60_000;
+
+/**
+ * The most friends one account keeps, and the most requests it will deal
+ * with at once.
+ *
+ * Caps rather than paging, because both lists are read whole and rendered
+ * whole.
+ *
+ * Be clear about what the request number is and is not. It is NOT a limit on
+ * what can arrive: an inbox is written by the sender, and database rules
+ * cannot count children, so nothing here can refuse the write. What it does
+ * is bound the two things this device controls — how many requests it will
+ * render, so a flood cannot produce a list nobody can scroll, and how many
+ * it will have outstanding of its own. A real cap on arrivals needs a
+ * server; see "Trust model" in README.md.
+ */
+export const MAX_FRIENDS = 60;
+export const MAX_REQUESTS = 30;
+
 /**
  * Board zoom — how big the squares are, and how even.
  *
@@ -436,6 +587,10 @@ export const DEFAULT_SETTINGS = {
   showCoordinates: true,
   animations: true,
   autoFlip: false,
+  // Chat and emotes together, because they are one pipe and somebody who
+  // wants quiet wants quiet. Off means nothing arrives and nothing can be
+  // sent — and the panel says so, rather than swallowing what you type.
+  chat: true,
 };
 
 export const DEFAULT_PLAYER_NAMES = {

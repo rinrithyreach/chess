@@ -18,6 +18,8 @@ import {
   GAME_MODE,
   DEBUG,
   ANIMATION_MS,
+  PRESENCE,
+  emote,
   uiStyleNeedsWebgl,
   log,
   warn,
@@ -57,6 +59,48 @@ async function boot() {
   let wasWaiting = false;
   let opponentWasConnected = true;
 
+  /**
+   * Friends, requests and presence — built the first time anything needs
+   * them, which is either opening the panel or going online.
+   *
+   * Lazily, and for the same reason the Firebase session is: somebody who
+   * only plays the bot should never fetch a line of it. Going online counts
+   * as needing it even when the panel is never opened, because otherwise a
+   * player with friends would appear offline to all of them for the whole
+   * game they are visibly in the middle of.
+   */
+  let social = null;
+
+  async function ensureSocial() {
+    if (!isFirebaseConfigured()) return null;
+    if (!social) {
+      const { SocialHub } = await import('./social.js');
+      social = new SocialHub();
+      // Subscribing before starting so the panel has a first paint —
+      // "Connecting…" — rather than sitting empty through the round trip.
+      social.subscribe((state) => ui.renderSocial(state));
+    }
+
+    // Before start(), so the very first presence write already says whether
+    // there is a game on. The CHANGE that would otherwise carry it can fire
+    // while this function is still awaiting its import — and then nothing
+    // says it again until the next move.
+    reportActivity(controller.getSnapshot());
+
+    try {
+      await social.start();
+    } catch (error) {
+      // Already on screen: the hub reports it through its own state, which
+      // the panel renders. Nothing to say twice.
+      warn('Friends unavailable', error);
+    }
+
+    // And again on the way out, for the room that was created while the
+    // sign-in was in flight.
+    reportActivity(controller.getSnapshot());
+    return social;
+  }
+
   // -----------------------------------------------------------------------
   // Controller -> views
   // -----------------------------------------------------------------------
@@ -82,6 +126,7 @@ async function boot() {
     // walk back to the form.
     ui.syncGauntlet(snapshot.gauntlet);
     handleOnlineTransitions(snapshot);
+    reportActivity(snapshot);
   });
 
   /**
@@ -124,6 +169,21 @@ async function boot() {
   }
 
   /**
+   * Tell friends whether this device is in a game.
+   *
+   * Driven from the room rather than from the button that created it, so
+   * every way into and out of a game — created, joined, rejoined after a
+   * refresh, left, finished — reports itself without each one having to
+   * remember to. setActivity ignores a value it already holds, so calling
+   * this on every render costs nothing.
+   */
+  function reportActivity(snapshot) {
+    if (!social) return;
+    const inRoom = Boolean(snapshot.state?.online?.roomCode);
+    social.setActivity(inRoom ? PRESENCE.PLAYING : PRESENCE.ONLINE);
+  }
+
+  /**
    * Swap in the Firebase session provider.
    * This is the whole of the Phase 2 integration as far as the app is
    * concerned — the board, UI and controller are untouched.
@@ -137,11 +197,29 @@ async function boot() {
       // Imported lazily so local play never fetches the Firebase SDK.
       const { FirebaseSession } = await import('./sessions/firebase-session.js');
       await controller.useSession(new FirebaseSession());
+      // Not awaited: a friends list is not worth delaying a game for, and
+      // the hub reports its own failures into its own panel.
+      ensureSocial().catch((error) => warn('Friends unavailable', error));
       return { ok: true };
     } catch (error) {
       warn('Could not start online session', error);
       return { ok: false, error: error.message ?? 'Could not connect' };
     }
+  }
+
+  /**
+   * Keep the name and picture used for a room as the name and picture this
+   * device is known by.
+   *
+   * Written straight to storage rather than waiting on the hub, because the
+   * hub may not exist yet — and this is the value it reads when it starts.
+   */
+  function rememberOnlineIdentity(name, avatar) {
+    const trimmed = String(name ?? '').trim();
+    if (trimmed) storage.saveProfile({ name: trimmed });
+    if (!social) return;
+    if (trimmed) social.setName(trimmed);
+    social.setAvatar(avatar);
   }
 
   /** Return to local play after an online game. */
@@ -291,6 +369,34 @@ async function boot() {
     // slide instead of drifting out of step with it. The old fixed 420ms left
     // a fifth of a second of dead air after the piece had already settled.
     window.setTimeout(() => ui.showGameOver(snapshot), ANIMATION_MS + 120);
+  });
+
+  /**
+   * Something was said in the room.
+   *
+   * The log itself is painted by the render that follows this — see
+   * ui.onChatMessages. What is added here is the part that only makes sense
+   * away from the panel: a sound, and a toast carrying what was said, for a
+   * player who is looking at the board rather than at the sheet.
+   */
+  controller.on(EVENT.CHAT, ({ messages }) => {
+    ui.onChatMessages(messages);
+    if (!controller.getSettings().chat) return;
+
+    const incoming = messages.filter((message) => !message.mine);
+    if (!incoming.length || ui.isChatOpen()) return;
+
+    sound.play('move');
+
+    // One toast, for the last thing said: a burst that arrived together is
+    // one interruption, not four. Emotes are named rather than drawn, so
+    // the notice reads the same whether or not the font has the glyph.
+    const last = incoming[incoming.length - 1];
+    const who = controller.getSnapshot().state?.online?.opponentName ?? 'Opponent';
+    const said = last.kind === 'emote'
+      ? (emote(last.body)?.label ?? 'sent an emote')
+      : last.body;
+    ui.toast(`${who}: ${said}`);
   });
 
   controller.on(EVENT.TOAST, ({ message, tone }) => ui.toast(message, tone));
@@ -489,6 +595,7 @@ async function boot() {
 
     onCreateRoom: async ({ name, avatar }) => {
       sound.unlock();
+      rememberOnlineIdentity(name, avatar);
       const started = await goOnline();
       if (!started.ok) {
         ui.toast(started.error ?? 'Online play unavailable', 'error');
@@ -504,6 +611,7 @@ async function boot() {
         ui.toast('Enter a room code', 'warn');
         return;
       }
+      rememberOnlineIdentity(name, avatar);
       const started = await goOnline();
       if (!started.ok) {
         ui.toast(started.error ?? 'Online play unavailable', 'error');
@@ -523,6 +631,89 @@ async function boot() {
     onCopyRoomCode: async (code) => {
       const copied = await copyText(code);
       ui.toast(copied ? 'Room code copied' : 'Could not copy code',
+        copied ? 'info' : 'error');
+    },
+
+    // --- Chat and emotes ---
+    //
+    // Both refuse the same way and say so in the same place: a toast over
+    // the sheet the message was typed into, which is where the person who
+    // typed it is looking.
+    onSendChat: async ({ body }) => {
+      const result = await controller.sendChat(body);
+      if (!result?.ok) ui.toast(result?.error ?? 'Could not send that', 'warn');
+    },
+
+    onSendEmote: async ({ id }) => {
+      const result = await controller.sendEmote(id);
+      if (!result?.ok) ui.toast(result?.error ?? 'Could not send that', 'warn');
+    },
+
+    // --- Friends ---
+
+    onOpenFriends: () => ensureSocial(),
+
+    onAddFriend: async ({ code }) => {
+      const hub = await ensureSocial();
+      if (!hub) return;
+      const result = await hub.addFriend(code);
+      if (!result.ok) {
+        ui.toast(result.error, 'warn');
+        return;
+      }
+      ui.clearFriendCodeInput();
+      ui.toast('Request sent');
+    },
+
+    onAcceptRequest: async ({ uid }) => {
+      const result = await social?.acceptRequest(uid);
+      if (result?.ok) ui.toast(`${result.name} is now a friend`);
+      else if (result) ui.toast(result.error, 'warn');
+    },
+
+    onDeclineRequest: async ({ uid }) => {
+      const result = await social?.declineRequest(uid);
+      if (result && !result.ok) ui.toast(result.error, 'warn');
+    },
+
+    onRemoveFriend: async ({ uid }) => {
+      const confirmed = await ui.confirm({
+        title: 'Remove this friend?',
+        text: 'You will both drop off each other\'s lists. You can add them again with their code.',
+        confirmLabel: 'Remove',
+        tone: 'danger',
+      });
+      if (!confirmed) return;
+      const result = await social?.removeFriend(uid);
+      if (result && !result.ok) ui.toast(result.error, 'warn');
+    },
+
+    /**
+     * Rename this device, everywhere it is named.
+     *
+     * The online form and the friends panel are two boxes holding one name,
+     * and the one that is not being typed into has to follow — otherwise the
+     * next room is created under whichever name the player last happened to
+     * type into the other box.
+     */
+    onRenameMe: async ({ name }) => {
+      const hub = await ensureSocial();
+      if (!hub) return;
+      const result = await hub.setName(name);
+      if (!result.ok) {
+        ui.toast(result.error, 'warn');
+        return;
+      }
+      ui.setOnlineName(result.name);
+    },
+
+    onCopyFriendCode: async (code) => {
+      if (!code) {
+        ui.toast('No code yet — still connecting', 'warn');
+        return;
+      }
+      const copied = await copyText(code);
+      ui.toast(copied ? 'Friend code copied' : 'Could not copy code',
         copied ? 'info' : 'error');
     },
 
@@ -601,7 +792,13 @@ async function boot() {
     // Remembering a picture is not a setting and touches no game state, so it
     // does not go through onSettingChange: nothing needs re-rendering, and a
     // game already under way keeps the picture its players sat down with.
-    onAvatarChange: ({ slot, avatar }) => controller.setAvatar(slot, avatar),
+    onAvatarChange: ({ slot, avatar }) => {
+      controller.setAvatar(slot, avatar);
+      // The online seat and the friends-list face are the same picture, so
+      // changing one changes the other. Only when the hub is already up: a
+      // picture chosen for a local game must not be what starts a sign-in.
+      if (slot === 'online') social?.setAvatar(avatar);
+    },
 
     onSettingChange: (patch) => {
       const settings = controller.updateSettings(patch);
@@ -623,6 +820,13 @@ async function boot() {
   ui.syncGauntlet(controller.getGauntlet());
   ui.refreshContinueButton();
   ui.setOnlineAvailable(isFirebaseConfigured(), firebaseConfigError());
+  // Friends need a project behind them in a way local play does not, so the
+  // button is simply absent without one rather than disabled.
+  ui.setFriendsAvailable(isFirebaseConfigured());
+  // The name this device plays under, offered back rather than retyped. Not
+  // a network read: it is the copy this device saved the last time it used
+  // one, so it is there before anything connects.
+  ui.setOnlineName(storage.loadProfile().name);
   ui.showScreen('menu');
 
   // Restore the board the player last chose. Deliberately not awaited: the
@@ -655,6 +859,8 @@ async function boot() {
       ui,
       get board() { return board; },
       get boardStyle() { return boardStyle; },
+      get social() { return social; },
+      ensureSocial,
     };
     log('DEBUG mode on — window.chessArena available');
   }

@@ -223,6 +223,93 @@ URLs of `png`, `jpeg` or `webp` are ever rendered: never a remote URL, which
 could otherwise report who looked at the board, and never SVG, which is a
 document rather than a picture.
 
+**Chat** — a sheet behind one button in the room bar, with the count of what
+has arrived while it was shut riding on the button. It is a sheet rather than
+a panel beside the board because on a phone that panel *is* the space under
+the board, and a chat log there would push the controls off the screen — you
+are either reading the position or reading the message, never both.
+
+A message is at most **160 characters**, and the box will not take a
+character more: the cap is `CHAT_MAX_LENGTH` and the same number is enforced
+by the security rules, so nothing can be typed that the room then refuses —
+a refusal arrives after the send, with the text already gone from the box,
+which is the worst possible moment to learn about it. Runs of whitespace are
+collapsed, so a message that is forty newlines is inside every cap and still
+cannot take the panel over.
+
+Every message is drawn with `textContent` into nodes built one at a time.
+It has to be: the body of a message is the one string in this app that
+*another person* chose, and `innerHTML` anywhere on that path is a way to put
+markup on somebody else's screen. The suite sends
+`<img src=x onerror=alert(1)>` and asserts it arrives as those characters and
+that no element was created.
+
+**The log is capped at 40 messages and trimmed by whoever writes to it.**
+There is no server here to prune anything — and, more to the point, every
+move rewrites the whole room document, chat included. An unbounded log would
+be a cost paid again on every move, by both devices, growing all game.
+
+**Emotes** — eight of them, on a row above the message box: a wave, a
+handshake, applause, thinking, surprise, fire, an *oops* and a *sorry*. One
+lands as a bubble on the card of whoever sent it and fades after a couple of
+seconds, as well as appearing in the log.
+
+What travels is an **id, never a glyph**. The receiving device draws the
+emote from its own copy of `EMOTES`, so the only thing an opponent can put on
+your screen through this path is one of the eight pictures chosen in
+`js/config.js`, and a message body reading `fire` cannot be made to render as
+anything else. An id that is not on the list draws nothing at all rather than
+leaving a gap. The set is also deliberately chosen: there is no emote here
+that can be aimed at somebody, which is the cheapest moderation there is and
+close to the only kind a client with no server behind it can do.
+
+**Chat and emotes are one switch in Settings, and off means off.** Nothing is
+sent, nothing arrives, no bubble pops and no count appears — and the chat
+button goes away rather than sitting there refusing, because a button that is
+there is a promise that pressing it does something.
+
+**Friends** — a six-character **friend code**, claimed once and yours, on the
+Friends panel reachable from the main menu. Give somebody your code, they
+type it in, a request appears on your screen with the name they play under,
+and you accept or decline. Both lists are written in a single update, so a
+friendship can never end up half-made — a list where they have you and you do
+not have them is worse than no friendship at all, because neither person can
+see why. Removing works the same way, in both directions.
+
+The code is the same alphabet as a room code, and for the same reason: it
+gets read aloud or typed off a screenshot. They are still different things —
+a room code names a game and dies with it, a friend code names a person and
+does not — which is why the two lengths are separate constants that happen to
+agree.
+
+Be clear about what an account is here: sign-in is **anonymous**, so "you"
+are a uid Firebase gave this browser. Clearing site data is the same as
+deleting the account, a second browser is a different person, and there is no
+password — so there is nothing to steal and nothing to recover. The code is a
+label on that uid, kept in local storage *and* on the profile row, and
+reclaimed from either on the next visit rather than a new one being claimed,
+which would strand every friend holding the old one.
+
+**Online status** — a friend shows as **Online**, **In a game**, or offline
+with a rough "last seen", each with a coloured dot so a list can be scanned
+rather than read. Presence is written when the app opens and cleared by an
+`onDisconnect` handler that lives on Firebase's servers, so it fires for a
+closed laptop as well as for a tapped Back button.
+
+It is also re-stamped on a timer, because that handler covers the ordinary
+case and not the odd one: a client can die in a way the server never notices
+— a lid, a tunnel — and a record older than `PRESENCE_STALE_MS` is read as
+offline rather than shown to a friend who would then wait for somebody who is
+not there.
+
+This is a different thing from the `connected` flag on a seat, and the two are
+kept apart deliberately. A seat answers *"is the player I am facing still on
+the other end of THIS game"*; a person answers *"is my friend about at all"*.
+The first is about a room and dies with it; the second outlives every room.
+Going online starts the friends layer even if the panel is never opened —
+otherwise somebody with friends would appear idle to all of them for the
+whole game they are visibly in the middle of.
+
 **Captured pieces, drawn in 3D** — the piles are the board's own pieces, not
 Unicode glyphs. `Board3D.pieceSprite()` builds the real piece — the same lathed
 body, the same detail solids, the same clearcoat material — and reads it back
@@ -451,9 +538,9 @@ Applied before first paint by the same inline script that applies the skin,
 so coming back to a saved choice never flashes the default first.
 
 **Interface** — start screen, new-game setup, waiting room with the shareable
-code, responsive game screen, settings (sound, board theme, background,
-coordinates, animations, auto-flip), custom confirmation modals, toasts, and a
-collapsible move history.
+code, responsive game screen, friends panel, chat sheet, settings (sound,
+board theme, background, coordinates, animations, auto-flip, chat and emotes),
+custom confirmation modals, toasts, and a collapsible move history.
 
 **Every control answers the pointer** — hovering any button lifts it 2px,
 opens a shadow under it, and on the gold and red solid buttons sends a sheen
@@ -499,6 +586,8 @@ chess-game/
 │   ├── app.js                    Composition root (entry point)
 │   ├── avatar.js                 Profile pictures: crop, scale, re-encode, validate
 │   ├── firebase-config.js        YOUR Firebase project config (empty by default)
+│   ├── firebase-client.js        One app, one sign-in, shared by the two things that connect
+│   ├── social.js                 Friend codes, requests, friends, presence
 │   ├── chess-engine.js           Defensive wrapper around chess.js
 │   ├── game-controller.js        Orchestration, selection, autosave
 │   ├── board-shared.js           Square list, FEN parsing, labels — used by BOTH boards
@@ -604,6 +693,18 @@ firebase deploy --only database
 The rules in `firebase/database.rules.json` are what stop anyone from writing
 to your database. See [`firebase/README.md`](firebase/README.md) for exactly
 what they enforce.
+
+**Redeploy them after updating the app.** The rules have grown three times
+now — seat pictures, then chat, then friends and presence — and each time,
+a project still running the older set refuses the new feature rather than
+ignoring it. Nothing breaks: a room is still created, a game is still
+playable, and the app says which thing needs the deploy. But the feature
+stays off until this command is run.
+
+If `firebase-tools` is not installed, the same file can be pasted into
+**Realtime Database → Rules** in the Firebase console and published — which
+is a much shorter road than installing a CLI and logging in, for a console
+you are already signed in to.
 
 ### 4. Play
 
@@ -838,9 +939,35 @@ One Realtime Database node per game, at `rooms/{CODE}`:
     "w": { "uid": "abc123…", "name": "Alex", "connected": true,
            "avatar": "data:image/webp;base64,UklGR…" },
     "b": { "uid": "def456…", "name": "Sam",  "connected": true }
+  },
+  "chat": {
+    "mk3f9x-a2b": { "uid": "abc123…", "color": "w", "kind": "text",
+                    "body": "good luck", "at": 1736300031000 },
+    "mk3fa1-7qz": { "uid": "def456…", "color": "b", "kind": "emote",
+                    "body": "gg", "at": 1736300044000 }
   }
 }
 ```
+
+A message key is its timestamp in base 36 plus a short random tail, so the
+natural key order is also the reading order and two messages sent in the same
+millisecond — one from each device — are still two messages. `push()` would
+do this better; it is not used because appending goes through a transaction
+on the whole `chat` node, which has to know the key it is adding before it
+adds it, so that it can sort and drop the oldest in the same write.
+
+The stamp is the **sender's** clock, which is the honest trade. A server
+stamp would order two badly-skewed phones correctly, but it does not resolve
+until the write lands, and the write is the thing that needs to sort the log
+in order to trim it.
+
+The rules on a message are worth reading carefully, because one line in them
+is load-bearing in a way that is easy to miss. `uid` must equal `auth.uid`
+**or be unchanged from what is already there**, and `color` likewise must
+either be unchanged or match the seat you are sitting in. Without the
+"unchanged" halves, the first message would break every subsequent move: a
+move rewrites the whole room, chat included, so the opponent's messages are
+re-sent by your client on every move and would be refused as forgeries.
 
 `avatar` is optional and absent rather than null when there is no picture:
 Realtime Database reads a null child as a deletion instruction, and the rules
@@ -899,6 +1026,54 @@ persists the same uid across reloads, and **Continue Game** rejoins the room and
 resyncs from it. A *different* user cannot take a seat that still belongs to
 someone else, so a brief disconnect can't cost you your game.
 
+### Friends, and who is about
+
+Rooms are not the only thing in the database any more. Two more trees sit
+beside them, and neither one dies with a game:
+
+```json
+{
+  "handles": { "K7M2QD": "abc123…" },
+
+  "users": {
+    "abc123…": {
+      "profile":  { "name": "Alex", "code": "K7M2QD", "updatedAt": 1736300000000,
+                    "avatar": "data:image/webp;base64,UklGR…" },
+      "presence": { "state": "playing", "at": 1736300042000 },
+      "friends":  { "def456…": { "at": 1736200000000 } },
+      "requests": { "ghi789…": { "name": "Sam", "code": "P4XB2T", "at": 1736290000000 } },
+      "sent":     { "jkl012…": { "at": 1736295000000 } }
+    }
+  }
+}
+```
+
+`handles` is a claim-once index from code to uid: the rules let you write one
+only if it does not exist or already points at you, and only with your own
+uid as the value. That is what makes "add by code" possible without anybody
+being able to repoint somebody else's code at themselves.
+
+`profile` and `presence` are readable by **anyone signed in**, and that is
+deliberate rather than an oversight — resolving a friend code means reading a
+stranger's row, so it could not work otherwise. `friends`, `requests` and
+`sent` are readable **only by their owner**.
+
+Accepting a request is the one operation that writes into somebody else's
+subtree, and the rules allow it narrowly: you may add yourself to
+`users/$them/friends` only while `users/$you/requests/$them` still exists —
+that is, only while their request to you is standing. Because `root` in a
+rules expression is the state *before* the write, the same update can delete
+the request it is relying on, which is how both lists and both cleanups land
+atomically. Removing a friend is allowed without that proof, since a delete
+cannot be used to put anything anywhere.
+
+Each friend on your list gets one profile listener and one presence listener,
+rebuilt from the list whenever it changes rather than patched on add and
+remove — a listener left behind by a removed friend would go on reporting a
+presence for a row that is no longer on screen. A request needs no listener at
+all: it carries the name it was sent with, so a stranger asking cannot make
+your device subscribe to a stranger's row.
+
 ---
 
 ## Trust model
@@ -929,9 +1104,34 @@ validation into a Cloud Function that owns the write and have the rules reject
 direct client writes to the game fields. That is a Phase 8 concern, and the
 session boundary means it would not disturb the UI.
 
+**What chat and friends add to this, and what they do not.** A message must
+carry your own uid and the colour of the seat you are in, so nobody can put
+words in their opponent's mouth; it must be text or one of eight emote ids,
+and at most 160 characters, so the log cannot become file storage. A profile
+picture is held to exactly the same rule as a seat picture — the same line,
+checked by the test suite to be the same line. A friend request can only be
+written by the person it is from, and never to yourself.
+
+Two things are worth saying plainly. **Either player can delete the other's
+messages**, because both can write the room and a deletion needs only write
+access — the same reason either can delete the room. And **muting is the only
+moderation there is**: the send cooldown lives on the sender, so it stops a
+leaning finger rather than a modified client. What actually protects somebody
+from an unpleasant opponent is the switch in Settings, plus an emote set with
+nothing in it that can be aimed at a person.
+
+**An anonymous uid is not an identity.** There is no password, so nothing can
+be phished; equally, nothing can be recovered. Somebody who guesses a friend
+code can put one request in front of you, which you decline; they cannot read
+anything of yours. But a friends list built on browser-local credentials is a
+friends list that a cleared cache deletes, and this is the honest ceiling on
+what accounts mean here until real sign-in exists.
+
 **Rate limiting and cleanup are not implemented.** An authenticated user can
-create unlimited rooms, and rooms are never deleted. Before running this
-publicly you would want a scheduled cleanup of stale rooms and App Check.
+create unlimited rooms, and rooms are never deleted. Nor are profiles,
+handles or presence rows. Before running this publicly you would want a
+scheduled cleanup of stale rooms and handles, App Check, and a server-side
+cap on how many requests one account can send.
 
 ---
 
@@ -963,18 +1163,27 @@ Behaviours verified against 1.4.0 and handled in the wrapper:
 Autosave runs after every move, promotion, undo, restart, resignation, draw,
 rematch, board flip and settings change. There is no save button.
 
-Three independent `localStorage` keys are used so a corrupt game never costs
+Five independent `localStorage` keys are used so a corrupt game never costs
 you your preferences:
 
 - `chess-arena:game` — the current game
 - `chess-arena:settings` — sound, board theme, background, coordinates,
-  animations, auto-flip
+  animations, auto-flip, chat and emotes
 - `chess-arena:avatars` — the remembered profile picture for each New Game seat
 - `chess-arena:gauntlet` — how far up the tournament ladder this device has got
+- `chess-arena:profile` — the name this device plays online under, and the
+  friend code it claimed
 
 Profile pictures get their own key rather than living inside settings. They
 are the only thing here measured in kilobytes rather than bytes, and a quota
 failure writing a picture must not take the settings record down with it.
+
+The profile is separate for a different reason: it is an identity rather than
+a preference. Losing a setting costs you a tap; losing the friend code costs
+you the list, because the next visit would claim a new one and strand
+everybody holding the old. (The code is also on the profile row in the
+database, and is reclaimed from there first — so this key is the fast path,
+not the only copy.)
 
 Both records are versioned:
 
@@ -1026,7 +1235,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, the tournament ladder **30**, and Speed Chess **57** (35 for the clock, 22 for playing the bot on it). The groups were run separately, so
+Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, the tournament ladder **30**, Speed Chess **57** (35 for the clock, 22 for playing the bot on it), and chat, emotes, friends and presence **84**. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -1054,6 +1263,7 @@ the totals are reported separately rather than as one number:
 | **Tournament ladder (Chromium)** | **30** | **The form (five rungs named, round 1 next, the rest locked, the button naming the opponent), then a real climb driven through the app: a mate wins round 1, the run advances and is written to storage, the dialog offers round 2 by name and Rematch is gone, the next game is the next rung with the same player, and a resignation drops the run to the bottom while leaving the record standing. A saved round-4 game resumes against the Master rather than the Novice. A stored round of 99, of -3, and of "Champion" all land on a rung that exists. Player vs Bot is checked to be untouched — still `bot`, still named Bot, no rung attached. And the rungs are proved to be different OPPONENTS rather than different labels by timing their replies: Novice 465ms against Champion 3078ms, either side of the bot's 450ms think floor** |
 | **Speed Chess (Chromium)** | **35** | **The form (four controls, each named as the game it is, one chosen, spelled out for a screen reader), then the clock itself: full balances at the start, neither side running, and an idle clock that does not move over a real second of waiting. White's first move starts BLACK's clock and costs White nothing; the increment is paid to whoever moved; the lit readout is the right player's card, checked both ways round, because the cards are laid out by orientation rather than colour and a count would not catch a swapped mapping. A flag falls on its own with nobody touching the board — the game ends `finished`, winner Black, reason `timeout`, "White ran out of time" — and the frozen board then refuses another move. A reload resumes with the stored balances and the clock running again rather than frozen. A plain local game still has no clock and shows none. Caught a real bug: the readout was painted from the controller's snapshot, which is only replaced when the session publishes, so between two moves it stood still** |
 | **Speed Chess vs the bot (Chromium)** | **22** | **The opponent choice (the bot by default, no second name box for it, the box coming back for a friend), then a real game: the mode stays `speed` with a bot in the other seat, the bot answers and hands the clock back, and its thinking comes off ITS clock — measured on 5 + 0 where no increment muddies the arithmetic, and separately on 3 + 2 where a bot thinking for under two seconds correctly ends up AHEAD. Left under a second it still produces a move instead of flagging mid-search, and inside the time it had. A saved game records that a bot was in it and resumes with one — checked by playing a move and watching it reply, not just by reading the record. Two people on one device still get a game where nothing answers for Black** |
+| **Chat, emotes, friends, presence (Chromium ×2–3)** | **84** | **Twelve of them read `firebase/database.rules.json` itself and assert what it says — that a message can only be written as yourself *or left exactly as it was*, that a colour must match the seat you hold, that a friends list is readable only by its owner, that somebody may add themselves to yours only while your request stands, that a request cannot be sent to yourself, and that the profile-picture rule is byte-for-byte the seat-picture rule. The rest drive two and three real browsers against a database that enforces that rule text. Two players talk: what you send lands on your own side and the other side, attributed to the seat, counted as unread while the sheet is shut and cleared when it opens. An emote arrives named, pops on the sender's card, and is drawn from the receiver's own list. `<img src=x onerror=alert(1)>` arrives as characters and creates no element. **A move after a conversation is not refused** — the check the "unchanged" rule clauses exist for, and the one that would have broken every game after the first message. A log of 60 is shown 40 deep, oldest dropped, and sending into a full log trims the room rather than growing it. Blank, whitespace-only, over-long and unknown-emote sends are each refused for their own reason, and a second send in the same instant is refused for the cooldown. With the setting off the button is gone, both sends refuse, and nothing arrives on screen. Two devices claim two different friend codes, each handle points back at its claimer, a request crosses with the right name, accepting writes both lists and clears both cleanups, and removing clears both. Presence follows a game: starting one moves a friend to "In a game" on the other device without anybody reopening the panel. A reload reclaims the same code rather than a second one. Then the whole thing again against rules that know none of it: the game is still playable and the move still crosses, the message is refused with an explanation, and the friends panel says the rules need deploying rather than sitting empty. Zero console errors** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
@@ -1225,6 +1435,9 @@ And two from building that WebGL board:
 | 40 | Reload a speed game and continue | The clock comes back where it was and starts again |
 | 41 | Speed Chess against the bot | No second name is asked for; the bot answers and its own clock goes down |
 | 42 | Leave the bot under a second | It still plays a move rather than flagging mid-thought |
+| 43 | Open Friends from the menu | A six-character code appears; copy it |
+| 44 | Type your name in the Friends panel | It is remembered, and the New Game form offers the same name |
+| 45 | Turn Chat & Emotes off, then join a game | No chat button; nothing arrives and nothing can be sent |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 
@@ -1246,6 +1459,12 @@ Positions for tests 9–14 are one tap away via the DEBUG presets below.
 | 30 | Enter a nonsense code | "No room with that code" |
 | 31 | Choose a picture on each device before joining | Both faces show on both devices, on the right seats |
 | 32 | Play with the rules not yet deployed | Room still opens, no pictures, both players told the rules are out of date |
+| 33 | Send a message from device A | It appears on B; the chat button carries a count until B opens the sheet |
+| 34 | Tap an emote | It pops on the sender's card on *both* devices and appears in the log |
+| 35 | Make a move after chatting | The move lands normally — chat does not break the room write |
+| 36 | Swap friend codes and add each other | A request appears with the right name; accepting puts each on the other's list |
+| 37 | Start a game while a friend watches their list | They see you move from Online to In a game |
+| 38 | Close the tab | The friend sees you go offline within moments |
 
 ---
 
@@ -1379,7 +1598,28 @@ the DOM**. Set it to `false` before shipping.
    device.
 8. **Threefold repetition is auto-claimed**, not offered as a choice. FIDE
    makes it claimable; this app ends the game automatically.
-9. **Two modern CSS features are used, both with fallbacks.** `:has()` powers
+9. **A friends list is only as durable as the browser it lives in.** Sign-in
+   is anonymous, so the account is a uid in this browser's storage: clearing
+   site data deletes it, and a phone is a different person from a laptop.
+   Real sign-in is the fix and is a Phase 4 concern; nothing about the data
+   model would have to change, because everything already hangs off a uid.
+10. **You cannot yet invite a friend into a game.** The list shows who is
+   about; starting a game with one of them still means passing a room code.
+   The pieces for it are all here — presence says who is free, and a room
+   code is a string — so it is a small addition rather than a new system.
+11. **Chat has no moderation beyond a mute.** The send cooldown lives on the
+   sender, so it slows a finger rather than a modified client; the emote set
+   is chosen so that nothing in it can be aimed at somebody; and either
+   player can delete the other's messages, because both can write the room.
+   The switch in Settings is the real protection. A reporting or blocking
+   system would need a server.
+12. **Presence can be up to a couple of minutes stale in one direction.**
+   Firebase clears it on disconnect, which covers the ordinary case
+   server-side; a client that dies without the server noticing is caught
+   instead by `PRESENCE_STALE_MS`, so a friend can show as online a little
+   after they have gone. Shortening it means a more frequent heartbeat,
+   which is the trade.
+13. **Two modern CSS features are used, both with fallbacks.** `:has()` powers
    one setup-screen highlight (unsupported browsers lose only that highlight),
    and CSS container queries size the pieces and coordinates relative to the
    board. Both are behind `@supports` or degrade harmlessly — the container
@@ -1396,7 +1636,7 @@ the DOM**. Set it to `false` before shipping.
 | **1** | Local chess core — board, rules, local two-player, history, save, responsive UI, controls | ✅ **Complete** |
 | **2** | Firebase multiplayer — anon auth, create/join room, room codes, two-device sync, reconnect, presence, rematch, resign, draw offers | ✅ **Complete** |
 | **3** | Clocks — 1 / 3 / 5 / 10 / 15 minute | Next |
-| **4** | Accounts — username, profile, match history, statistics | Planned |
+| **4** | Accounts — username, profile, match history, statistics | Partly — a name, a picture, a friend code, friends and presence all exist, on anonymous sign-in; no real accounts, history or statistics yet |
 | **5** | Competitive — ELO, leaderboard, matchmaking, spectators | Planned |
 | **6** | AI — opponent, difficulty levels, analysis, hints | Planned |
 | **7** | Advanced chess — PGN replay, opening recognition, analysis, blunder detection | Planned |

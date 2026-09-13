@@ -2202,6 +2202,487 @@ body.is-modal-open {
   transform: translateY(-2px);
 }
 
+/* ==========================================================================
+   Chat, emotes, friends
+   ========================================================================== */
+
+/*
+  A count riding on a button: the Friends button on the menu, and the chat
+  button in the room bar. Absolute rather than in the flow so that adding a
+  number never changes the size of the thing it is attached to — a menu
+  button that grew when a request arrived would move everything under it.
+*/
+.btn__badge,
+.room-bar__unread {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The badge is positioned against the button, so the button has to be the
+   thing it is positioned against. */
+#btn-menu-friends,
+.room-bar__chat {
+  position: relative;
+}
+
+.room-bar__chat {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+}
+
+.room-bar__chat:hover {
+  background: var(--panel-soft);
+  border-color: var(--border-strong);
+}
+
+.room-bar__chat:active {
+  transform: translateY(1px);
+}
+
+.room-bar__chat-glyph {
+  line-height: 1;
+}
+
+/* --------------------------------------------------------- emote bubble -- */
+
+/*
+  The bubble is positioned against the card it belongs to. Set here rather
+  than on the card rule itself so the whole feature stays in one block — the
+  cards were laid out before there was anything to float above them.
+*/
+.player-card {
+  position: relative;
+}
+
+.player-card__emote {
+  position: absolute;
+  left: 0.6rem;
+  /* Sits over the card's own top edge, so it reads as coming OUT of the
+     card rather than hovering unattached above it. */
+  bottom: calc(100% - 0.9rem);
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  min-width: 2.3rem;
+  height: 2.3rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--panel-soft);
+  box-shadow: var(--shadow);
+  font-size: 1.3rem;
+  line-height: 1;
+  /* Decoration on top of a card that is not interactive anyway — but the
+     board is right beside it, and a bubble that swallowed a tap aimed at a
+     square would be maddening. */
+  pointer-events: none;
+}
+
+/*
+  2.6s mirrors EMOTE_BUBBLE_MS in js/config.js, which is what actually takes
+  the bubble off screen. If they disagree, the shorter one wins and looks
+  broken — either a bubble that vanishes mid-animation or one that sits
+  finished and faded until the timer catches up.
+*/
+.player-card__emote.is-popping {
+  animation: emote-pop 2.6s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+@keyframes emote-pop {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.6); }
+  12%  { opacity: 1; transform: translateY(0) scale(1.12); }
+  22%  { transform: translateY(0) scale(1); }
+  82%  { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(0.9); }
+}
+
+/* ------------------------------------------------------------ chat sheet -- */
+
+.modal--chat .modal__panel,
+.modal--friends .modal__panel {
+  max-width: 460px;
+  /* The panels above are centred announcements; these two are documents you
+     read and type into, and centred prose is neither. */
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.chat__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.chat__head .modal__title {
+  margin: 0;
+}
+
+.chat__log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* Capped in viewport units so the emote row and the box stay on screen on
+     a short phone, where the panel would otherwise scroll them off the
+     bottom and hide the only way to reply. */
+  max-height: min(44dvh, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat__log:empty {
+  display: none;
+}
+
+.chat__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-self: flex-start;
+  max-width: 84%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.chat__row[data-who="me"] {
+  align-self: flex-end;
+  border-color: rgba(232, 180, 76, 0.3);
+  background: var(--accent-soft);
+}
+
+.chat__who {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.chat__body {
+  font-size: 0.92rem;
+  line-height: 1.35;
+  /* A message can legally be 160 characters with no space in it. Without
+     this, one of those widens the panel until the sheet scrolls sideways. */
+  overflow-wrap: anywhere;
+}
+
+.chat__emote {
+  font-size: 1.9rem;
+  line-height: 1.15;
+}
+
+.chat__empty,
+.friends__empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+}
+
+.friends__status {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.friends__status[data-tone="error"] {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------- emote row -- */
+
+.emote-bar {
+  display: grid;
+  /* Four across, so eight emotes are two tidy rows at any width — and each
+     cell stays over the 44px tap target on the narrowest phone. */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+}
+
+.emote {
+  display: grid;
+  place-items: center;
+  min-height: var(--tap);
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+}
+
+.emote:hover {
+  background: var(--panel-soft);
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.emote:active {
+  transform: translateY(0);
+}
+
+.emote__glyph {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.chat__compose {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat__input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------- friends panel -- */
+
+.me-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.me-card__avatar {
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: #23262f;
+  color: #e9ecf2;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.me-card__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.me-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.me-card__code {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.me-card__code-label {
+  width: 100%;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Smaller than the room code on the waiting screen: that one is read across
+   a table, this one is read off your own phone. */
+.me-card__code .room-code__value {
+  font-size: clamp(1.05rem, 6vw, 1.35rem);
+  letter-spacing: 0.2em;
+}
+
+.me-card__code .icon-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
+}
+
+.friends__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.friends__heading {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.friends__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.friend {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.friend__avatar {
+  font-family:
+    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
+    "DejaVu Sans", "FreeSerif", sans-serif;
+  font-variant-emoji: text;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: #23262f;
+  color: #e9ecf2;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.friend__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.friend__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.friend__name {
+  font-weight: 650;
+  /* A name is capped at 20 characters, which still overflows a narrow row
+     next to two buttons. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
+
+/* The dot carries the state as well as the words do, which is what makes a
+   list scannable without reading it. */
+.friend__status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.friend__status[data-state="online"] {
+  color: var(--success);
+}
+
+.friend__status[data-state="online"]::before {
+  background: var(--success);
+}
+
+.friend__status[data-state="playing"] {
+  color: var(--accent);
+}
+
+.friend__status[data-state="playing"]::before {
+  background: var(--accent);
+}
+
+/* A request carries no presence, so it gets the line without the dot — and
+   it shares its row with Accept and Decline, so it must not wrap. */
+.friend__note {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend__pending {
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.friend__remove {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  font-size: 1.1rem;
+}
+
+/* Accept and Decline sit in a row that also holds a name and a face, so they
+   trade the full tap height for fitting. Still 34px, still comfortably over
+   the minimum for a control with a label. */
+.btn--tiny {
+  min-height: 34px;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+}
+
 /* Respect users who prefer less motion */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -2247,6 +2728,12 @@ body.is-modal-open {
   .bg-swatch:hover,
   .bg-swatch:active,
   .bg-swatch:focus-visible,
+  .emote:hover,
+  .emote:active,
+  .emote:focus-visible,
+  .room-bar__chat:hover,
+  .room-bar__chat:active,
+  .room-bar__chat:focus-visible,
 .time-option:focus-visible {
     transform: none !important;
   }

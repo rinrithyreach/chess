@@ -42,12 +42,26 @@ export const EVENT = {
   DRAW_OFFER: 'draw-offer', // a draw has been offered to the opponent
   MOVE: 'move', // a move was just committed (for animation/sound)
   CLOCK: 'clock', // the clock ticked — repaint the readouts, nothing else
+  CHAT: 'chat', // the opponent said something, or sent an emote
 };
 
 export class GameController {
   #session;
   #state = null;
   #listeners = new Map();
+
+  /**
+   * Message ids already announced.
+   *
+   * The room publishes the whole log on every change, so "what is new" is a
+   * question only this device can answer — and it has to answer it without
+   * relying on the log growing, because a trim can shorten it while adding
+   * to it. Ids rather than a count, for exactly that reason.
+   *
+   * Seeded on the first snapshot of a room rather than left empty, so
+   * rejoining a game does not replay an afternoon of chat as new arrivals.
+   */
+  #seenChat = null;
 
   /** View-only concerns the session does not own. */
   #view = {
@@ -232,6 +246,9 @@ export class GameController {
 
     // A deliberate reset (new game, restore, rematch) is adopted silently.
     if (previous.baseline) {
+      // Silently includes the chat log: a room being rejoined arrives with
+      // everything that was said in it, and none of it is news.
+      this.#seenChat = new Set((state.online?.chat ?? []).map((message) => message.id));
       this.#emitChange();
       // Still has to reach the clock. A RESTORED speed game arrives on this
       // path with a clock already running, and returning without starting the
@@ -256,6 +273,8 @@ export class GameController {
       this.#emit(EVENT.MOVE, { move: state.lastMove, state });
     }
 
+    this.#noticeChat(state);
+
     // A draw offered by the opponent, arriving over the network.
     if (drawOffer && drawOffer !== previous.drawOffer && drawOffer !== state.online?.myColor) {
       this.#emit(EVENT.DRAW_OFFER, {
@@ -279,6 +298,27 @@ export class GameController {
       this.#settleGauntlet(state);
       this.#emit(EVENT.GAME_OVER, this.getSnapshot());
     }
+  }
+
+  /**
+   * Work out which messages are new, and say so once each.
+   *
+   * Everything arrives here, including this device's own messages echoed
+   * back by the room. They are announced too, and deliberately: the panel
+   * draws from this event, so a message you sent appearing in your own log
+   * is the same path as one you received. What tells them apart is `mine`,
+   * which the session already worked out.
+   */
+  #noticeChat(state) {
+    const log = state.online?.chat;
+    if (!Array.isArray(log)) return;
+
+    const seen = this.#seenChat ?? new Set();
+    const fresh = log.filter((message) => !seen.has(message.id));
+    // Rebuilt from the log rather than added to, so ids trimmed out of the
+    // room do not accumulate here for the rest of the session.
+    this.#seenChat = new Set(log.map((message) => message.id));
+    if (fresh.length) this.#emit(EVENT.CHAT, { messages: fresh, state });
   }
 
   #opponentOf(color) {
@@ -453,6 +493,37 @@ export class GameController {
     this.#emitChange();
     this.#toast('Reconnected');
     return result;
+  }
+
+  /**
+   * Say something to the other player, or send one of the emotes.
+   *
+   * Thin like the room methods above, and quiet like none of them: a
+   * message that cannot be sent says so through the return value rather
+   * than a toast, because the panel that sent it is on screen and is a far
+   * better place to put the answer than a notice over the board.
+   *
+   * Both are refused outright off the network. There is no local chat and
+   * nothing to write to — a bot has nothing to say and the person across
+   * the table can hear you.
+   */
+  async sendChat(body) {
+    if (!this.isOnline()) return { ok: false, error: 'Chat is for online games' };
+    if (!this.#settings.chat) return { ok: false, error: 'Chat is switched off in Settings' };
+    return this.#session.sendChat?.(body)
+      ?? { ok: false, error: 'Chat is unavailable' };
+  }
+
+  async sendEmote(id) {
+    if (!this.isOnline()) return { ok: false, error: 'Emotes are for online games' };
+    if (!this.#settings.chat) return { ok: false, error: 'Chat is switched off in Settings' };
+    return this.#session.sendEmote?.(id)
+      ?? { ok: false, error: 'Emotes are unavailable' };
+  }
+
+  /** Everything said in the current room, oldest first. Empty off the network. */
+  getChat() {
+    return this.#state?.online?.chat ?? [];
   }
 
   /** Leave the current online room and drop back to local play. */

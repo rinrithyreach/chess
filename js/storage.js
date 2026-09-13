@@ -20,6 +20,7 @@ import {
   GAUNTLET_LENGTH,
   clampGauntletRound,
   clampBoardZoom,
+  FRIEND_CODE_LENGTH,
   STATUS,
   TERMINAL_STATUSES,
   GAME_MODE,
@@ -43,6 +44,16 @@ function detectStorage() {
 }
 
 const store = detectStorage();
+
+/**
+ * What a friend code looks like, built from the one place its length lives.
+ *
+ * The alphabet is the room-code alphabet: no I, O, 0 or 1, because a code
+ * gets read out loud. Written here rather than imported from
+ * firebase-config.js so that storage — which must work with the network
+ * switched off entirely — depends on nothing that knows about a network.
+ */
+const FRIEND_CODE_SHAPE = new RegExp(`^[A-HJ-NP-Z2-9]{${FRIEND_CODE_LENGTH}}$`);
 
 export const isAvailable = () => store !== null;
 
@@ -121,6 +132,7 @@ export function loadSettings() {
   if (typeof source.showCoordinates === 'boolean') merged.showCoordinates = source.showCoordinates;
   if (typeof source.animations === 'boolean') merged.animations = source.animations;
   if (typeof source.autoFlip === 'boolean') merged.autoFlip = source.autoFlip;
+  if (typeof source.chat === 'boolean') merged.chat = source.chat;
   if (VALID_THEME_IDS.includes(source.boardTheme)) merged.boardTheme = source.boardTheme;
   // Resolved rather than checked: an id from a build with more backgrounds
   // than this one lands on the default instead of on no block at all.
@@ -134,6 +146,54 @@ export function saveSettings(settings) {
     version: STORAGE_VERSION,
     savedAt: Date.now(),
     settings,
+  });
+}
+
+// -------------------------------------------------------------------------
+// Who this device is, online
+//
+// The name is remembered where the New Game form deliberately forgets the
+// local ones, because this one is not typed per game: it is the name a
+// friend added, and having it change behind their back is worse than
+// retyping it. The code is remembered because it is not ours to choose — it
+// was claimed from the database, and forgetting it here would claim a second
+// one and strand every friend holding the first.
+// -------------------------------------------------------------------------
+
+const NO_PROFILE = { name: null, code: null };
+
+/**
+ * The name and friend code this device plays online under.
+ *
+ * Both are always present, and either valid or null, so no caller has to
+ * ask. The code is checked against its own shape rather than trusted: a
+ * stored value that is not a code can only produce a lookup that finds
+ * nobody, which reads as "no such player" and sends the owner hunting.
+ */
+export function loadProfile() {
+  const { value: raw } = readJson(STORAGE_KEYS.PROFILE);
+  const source = raw && typeof raw === 'object' ? (raw.profile ?? raw) : null;
+  if (!source) return { ...NO_PROFILE };
+
+  const name = typeof source.name === 'string' ? source.name.trim().slice(0, 20) : '';
+  const code = typeof source.code === 'string' ? source.code.toUpperCase() : '';
+  return {
+    name: name || null,
+    code: FRIEND_CODE_SHAPE.test(code) ? code : null,
+  };
+}
+
+/** Merge into the stored profile; fields left out are left alone. */
+export function saveProfile(patch = {}) {
+  const next = { ...loadProfile() };
+  if (typeof patch.name === 'string') next.name = patch.name.trim().slice(0, 20) || null;
+  if (typeof patch.code === 'string' && FRIEND_CODE_SHAPE.test(patch.code.toUpperCase())) {
+    next.code = patch.code.toUpperCase();
+  }
+  return writeJson(STORAGE_KEYS.PROFILE, {
+    version: STORAGE_VERSION,
+    savedAt: Date.now(),
+    profile: next,
   });
 }
 

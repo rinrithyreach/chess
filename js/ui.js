@@ -19,6 +19,12 @@ import {
   BACKGROUNDS,
   DEFAULT_BACKGROUND,
   resolveBackground,
+  EMOTES,
+  emote,
+  CHAT_MAX_LENGTH,
+  EMOTE_BUBBLE_MS,
+  FRIEND_CODE_LENGTH,
+  PRESENCE,
   BOARD_ZOOM_LEVELS,
   clampBoardZoom,
   GAME_MODE,
@@ -32,6 +38,29 @@ import {
 } from './config.js';
 import { fileToAvatar, isAvatar } from './avatar.js';
 import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
+
+/** A blank friend code, drawn the same way a blank room code is. */
+const FRIEND_CODE_BLANK = '-'.repeat(FRIEND_CODE_LENGTH);
+
+/**
+ * How long ago, in the roughest terms that are still useful.
+ *
+ * Deliberately coarse. "Last seen 3 minutes ago" and "last seen 4 minutes
+ * ago" are the same fact — that they just missed you — and a readout that
+ * changes every minute invites watching it, which is not a thing a friends
+ * list should invite.
+ */
+function describeSince(at) {
+  if (!at) return 'Offline';
+  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
+  if (seconds < 120) return 'Last seen just now';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `Last seen ${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Last seen ${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  return `Last seen ${days} day${days === 1 ? '' : 's'} ago`;
+}
 
 /** What an empty room code looks like: one dash per character. */
 const ROOM_CODE_BLANK = '-'.repeat(ROOM_CODE_LENGTH);
@@ -103,6 +132,53 @@ export class UI {
   #historyExpanded = false;
 
   /**
+   * Messages that have arrived since the sheet was last open.
+   *
+   * Counted here rather than derived from the log, because "unread" is a
+   * fact about this screen and nothing else knows it — the room has no idea
+   * whether anybody is looking.
+   */
+  #unread = 0;
+
+  /**
+   * The ids of the log as it was last painted, joined.
+   *
+   * Chat is repainted from render(), which runs on every move, every clock
+   * tick that changes a card, and every settings change. Rebuilding the list
+   * each time would throw away the scroll position mid-conversation, so the
+   * whole render is skipped unless the log has actually changed.
+   */
+  #chatPainted = '';
+
+  /**
+   * The room the chat panel is currently showing.
+   *
+   * Unread is a fact about one conversation, and a conversation is a room.
+   * Without this, joining a second game would open with a count left over
+   * from the first, pointing at messages that are no longer there.
+   */
+  #chatRoom = null;
+
+  /** Whether chat is switched on, remembered from the last render. */
+  #chatOn = true;
+
+  /**
+   * Which card each colour is on, as of the last render.
+   *
+   * An emote lands on its sender's card, and which card that is depends on
+   * board orientation — which flips on a rematch, on Auto Flip, and on the
+   * Flip button. Read from the render that already worked it out rather than
+   * worked out again here from a different source.
+   */
+  #cardSide = { w: 'bottom', b: 'top' };
+
+  /** Per-card timer that takes an emote back off again. */
+  #emoteTimers = { top: null, bottom: null };
+
+  /** The last social snapshot, kept so a re-render needs no round trip. */
+  #social = null;
+
+  /**
    * The picker element for each New Game seat, by slot id.
    *
    * Held rather than re-queried because the same three elements are read on
@@ -168,6 +244,15 @@ export class UI {
       'room-bar', 'room-bar-code', 'room-bar-status', 'room-bar-status-text',
       'modal-draw-offer', 'draw-offer-text', 'btn-draw-accept', 'btn-draw-decline',
       'modal-opponent-left', 'btn-leave-room',
+      // Chat, emotes and friends
+      'set-chat', 'btn-chat', 'chat-unread',
+      'modal-chat', 'chat-log', 'chat-empty', 'emote-bar',
+      'chat-form', 'chat-input', 'btn-chat-send',
+      'top-emote', 'bottom-emote',
+      'btn-menu-friends', 'friends-badge',
+      'modal-friends', 'me-photo', 'input-my-name', 'my-code', 'btn-copy-friend-code',
+      'friends-status', 'form-add-friend', 'input-friend-code', 'btn-add-friend',
+      'requests-section', 'requests-list', 'friends-list', 'friends-empty',
       'style-picker',
     ];
     ids.forEach((id) => {
@@ -176,6 +261,33 @@ export class UI {
   }
 
   #buildDynamic() {
+    // The emote row, from the one list that defines what an emote is. The
+    // glyph is decoration and the label is the name: a screen reader hears
+    // "Send Good game", not a codepoint.
+    const emotes = this.#dom['emote-bar'];
+    if (emotes) {
+      emotes.innerHTML = '';
+      EMOTES.forEach(({ id, glyph, label }) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'emote';
+        button.dataset.emote = id;
+        button.setAttribute('aria-label', `Send ${label}`);
+        button.title = label;
+        button.innerHTML = '<span class="emote__glyph" aria-hidden="true"></span>';
+        button.querySelector('.emote__glyph').textContent = glyph;
+        emotes.append(button);
+      });
+    }
+
+    // Both caps come from config so that a message can never be typed that
+    // the room would then refuse, and a code box can never hold more than a
+    // code. Set here rather than in the markup for the same reason the room
+    // code field is: the markup cannot import a constant.
+    this.#dom['chat-input']?.setAttribute('maxlength', String(CHAT_MAX_LENGTH));
+    this.#dom['input-friend-code']?.setAttribute('maxlength', String(FRIEND_CODE_LENGTH));
+    if (this.#dom['my-code']) this.#dom['my-code'].textContent = FRIEND_CODE_BLANK;
+
     // Promotion choices
     const choices = this.#dom['promotion-choices'];
     if (choices) {
@@ -536,6 +648,7 @@ export class UI {
     this.#renderStatus(snapshot);
     this.#renderHistory(state);
     this.#renderControls(snapshot);
+    this.#chatOn = snapshot.settings?.chat !== false;
     this.#renderOnline(state);
     // Painted here as well as on every tick, so the readouts are right the
     // instant a game appears rather than up to a tenth of a second later.
@@ -586,6 +699,155 @@ export class UI {
     if (this.#dom['room-bar-status-text']) {
       this.#dom['room-bar-status-text'].textContent = text;
     }
+
+    // Hidden outright when chat is switched off, rather than shown and
+    // refusing: a button that is there is a promise that pressing it does
+    // something.
+    const chatButton = this.#dom['btn-chat'];
+    if (chatButton) chatButton.hidden = !online.roomCode || !this.#chatOn;
+
+    if (online.roomCode !== this.#chatRoom) {
+      this.#chatRoom = online.roomCode;
+      this.#unread = 0;
+      this.#chatPainted = '';
+    }
+
+    this.#renderChat(state);
+    this.#renderUnread();
+  }
+
+  // -----------------------------------------------------------------------
+  // Chat and emotes
+  // -----------------------------------------------------------------------
+
+  /**
+   * Paint the log, but only when it has actually changed.
+   *
+   * See #chatPainted: this runs from render(), which runs constantly, and
+   * rebuilding the list would reset the scroll position of a conversation
+   * somebody is in the middle of reading.
+   */
+  #renderChat(state) {
+    const log = this.#dom['chat-log'];
+    if (!log) return;
+
+    const messages = state.online?.chat ?? [];
+    const painted = messages.map((message) => message.id).join(',');
+    if (painted === this.#chatPainted) return;
+    this.#chatPainted = painted;
+
+    log.innerHTML = '';
+    messages.forEach((message) => log.append(this.#chatRow(message, state)));
+    if (this.#dom['chat-empty']) this.#dom['chat-empty'].hidden = messages.length > 0;
+
+    // Newest last, so the bottom is where the conversation is.
+    log.scrollTop = log.scrollHeight;
+  }
+
+  /**
+   * One message.
+   *
+   * Built out of nodes and written with textContent. It has to be: the body
+   * of a text message is the one string in this app that another person
+   * chose, and innerHTML anywhere on this path would be a way to put markup
+   * on somebody else's screen. An emote is looked up rather than printed,
+   * so an id that is not on the list draws nothing at all.
+   */
+  #chatRow(message, state) {
+    const row = document.createElement('li');
+    row.className = 'chat__row';
+    row.dataset.who = message.mine ? 'me' : 'them';
+
+    const who = document.createElement('span');
+    who.className = 'chat__who';
+    who.textContent = state.players?.[message.color]?.name ?? '';
+
+    const body = document.createElement('span');
+    if (message.kind === 'emote') {
+      const found = emote(message.body);
+      body.className = 'chat__emote';
+      body.textContent = found?.glyph ?? '';
+      body.setAttribute('aria-label', found?.label ?? 'Emote');
+    } else {
+      body.className = 'chat__body';
+      body.textContent = message.body;
+    }
+
+    row.append(who, body);
+    return row;
+  }
+
+  /**
+   * React to messages the controller has just noticed.
+   *
+   * The log itself is painted by the render that follows this — what happens
+   * here is only the two things a render cannot do: pop the emote onto a
+   * card, and count what has not been read.
+   */
+  onChatMessages(messages = []) {
+    if (!this.#chatOn) return;
+
+    messages.forEach((message) => {
+      if (message.kind === 'emote') this.showEmote(message.color, message.body);
+    });
+
+    if (this.#openModal === 'chat') return;
+    const incoming = messages.filter((message) => !message.mine).length;
+    if (!incoming) return;
+    this.#unread += incoming;
+    this.#renderUnread();
+  }
+
+  /**
+   * Put an emote on the sender's card for a couple of seconds.
+   *
+   * The class is removed and forced through a reflow before being added
+   * again, so a second emote replays the animation instead of sitting still
+   * because the class was already there.
+   */
+  showEmote(color, id) {
+    const found = emote(id);
+    if (!found) return;
+
+    const side = this.#cardSide[color] ?? 'top';
+    const node = this.#dom[`${side}-emote`];
+    if (!node) return;
+
+    node.textContent = found.glyph;
+    node.hidden = false;
+    node.classList.remove('is-popping');
+    void node.offsetWidth;
+    node.classList.add('is-popping');
+
+    window.clearTimeout(this.#emoteTimers[side]);
+    this.#emoteTimers[side] = window.setTimeout(() => {
+      node.classList.remove('is-popping');
+      node.hidden = true;
+    }, EMOTE_BUBBLE_MS);
+  }
+
+  /** Is the sheet up? Decides whether an arrival is news or already on screen. */
+  isChatOpen() {
+    return this.#openModal === 'chat';
+  }
+
+  #renderUnread() {
+    const badge = this.#dom['chat-unread'];
+    if (!badge) return;
+    badge.hidden = this.#unread === 0;
+    badge.textContent = this.#unread > 9 ? '9+' : String(this.#unread);
+  }
+
+  /** Open the sheet, and treat everything in it as read. */
+  openChat() {
+    this.#unread = 0;
+    this.#renderUnread();
+    this.openModal('chat');
+    // openModal focuses the first control, which here is the close button.
+    // The box is what you came for.
+    this.#dom['chat-input']?.focus();
+    const log = this.#dom['chat-log'];
+    if (log) log.scrollTop = log.scrollHeight;
   }
 
   /** Ask the local player whether to accept the opponent's draw offer. */
@@ -724,6 +986,12 @@ export class UI {
 
     apply('top', topColor);
     apply('bottom', bottomColor);
+
+    // Kept for showEmote(), which needs to know whose card is where and
+    // must not work it out from a second source that could disagree.
+    this.#cardSide = bottomColor === WHITE
+      ? { [WHITE]: 'bottom', [BLACK]: 'top' }
+      : { [WHITE]: 'top', [BLACK]: 'bottom' };
   }
 
   /**
@@ -1239,6 +1507,7 @@ export class UI {
       'set-coords': 'showCoordinates',
       'set-animations': 'animations',
       'set-autoflip': 'autoFlip',
+      'set-chat': 'chat',
     };
     Object.entries(map).forEach(([id, key]) => {
       const input = this.#dom[id];
@@ -1271,6 +1540,214 @@ export class UI {
     this.#dom.board?.setAttribute('data-theme', settings.boardTheme);
     document.documentElement.setAttribute('data-ui-style', settings.uiStyle ?? DEFAULT_UI_STYLE);
     document.documentElement.setAttribute('data-bg', background);
+  }
+
+  // -----------------------------------------------------------------------
+  // Friends
+  // -----------------------------------------------------------------------
+
+  /**
+   * The name this device plays online under, put in both boxes that hold it.
+   *
+   * Two boxes, one name: the New Game form asks for it before a room, and
+   * the friends panel shows it as who you are. Whichever one was not just
+   * typed into follows the other, so the next room is never created under a
+   * name the player thought they had changed.
+   */
+  setOnlineName(name) {
+    const value = name ?? '';
+    [this.#dom['input-online-name'], this.#dom['input-my-name']].forEach((input) => {
+      if (input && document.activeElement !== input) input.value = value;
+    });
+  }
+
+  /** Empty the add-a-friend box, once the request in it has gone. */
+  clearFriendCodeInput() {
+    const input = this.#dom['input-friend-code'];
+    if (input) input.value = '';
+  }
+
+  /**
+   * Whether the Friends button is on the menu at all.
+   *
+   * Hidden rather than disabled when there is no Firebase project: a
+   * disabled button is a promise of a feature that is coming, and for a copy
+   * of this app with no project behind it, it is not.
+   */
+  setFriendsAvailable(available) {
+    const button = this.#dom['btn-menu-friends'];
+    if (button) button.hidden = !available;
+  }
+
+  /**
+   * Draw everything in the friends panel from one social snapshot.
+   *
+   * Called on every change, including while the panel is shut — the badge on
+   * the menu is part of this render, and it is the only way a request is ever
+   * noticed.
+   */
+  renderSocial(social) {
+    if (!social) return;
+    this.#social = social;
+
+    const badge = this.#dom['friends-badge'];
+    if (badge) {
+      const waiting = social.requests.length;
+      badge.hidden = waiting === 0;
+      badge.textContent = waiting > 9 ? '9+' : String(waiting);
+    }
+
+    if (this.#dom['my-code']) {
+      this.#dom['my-code'].textContent = social.code ?? FRIEND_CODE_BLANK;
+    }
+
+    // Never while it is being typed in: a render landing mid-word would
+    // take the rest of the name with it.
+    const nameInput = this.#dom['input-my-name'];
+    if (nameInput && document.activeElement !== nameInput) {
+      nameInput.value = social.name ?? '';
+    }
+
+    const photo = this.#dom['me-photo'];
+    if (photo) {
+      const usable = isAvatar(social.avatar);
+      if (usable && photo.getAttribute('src') !== social.avatar) {
+        photo.setAttribute('src', social.avatar);
+      }
+      if (!usable) photo.removeAttribute('src');
+      photo.hidden = !usable;
+      const glyph = photo.parentElement?.querySelector('.me-card__glyph');
+      if (glyph) glyph.hidden = usable;
+    }
+
+    const status = this.#dom['friends-status'];
+    if (status) {
+      const message = social.error ?? (social.ready ? null : 'Connecting…');
+      status.hidden = !message;
+      status.textContent = message ?? '';
+      status.dataset.tone = social.error ? 'error' : 'info';
+    }
+
+    this.#renderRequests(social);
+    this.#renderFriends(social);
+  }
+
+  #renderRequests(social) {
+    const list = this.#dom['requests-list'];
+    const section = this.#dom['requests-section'];
+    if (!list) return;
+
+    if (section) section.hidden = social.requests.length === 0;
+    list.innerHTML = '';
+
+    social.requests.forEach((request) => {
+      const row = document.createElement('li');
+      row.className = 'friend';
+      row.dataset.uid = request.uid;
+
+      const body = document.createElement('span');
+      body.className = 'friend__body';
+      const name = document.createElement('span');
+      name.className = 'friend__name';
+      name.textContent = request.name;
+      const note = document.createElement('span');
+      // Not friend__status: that carries a presence dot, and a request has
+      // no presence. It also has to share the row with two buttons, so it
+      // is the one label here that cannot afford to wrap.
+      note.className = 'friend__note';
+      note.textContent = 'Sent you a request';
+      body.append(name, note);
+
+      const accept = document.createElement('button');
+      accept.type = 'button';
+      accept.className = 'btn btn--primary btn--tiny';
+      accept.dataset.action = 'accept';
+      accept.textContent = 'Accept';
+      accept.setAttribute('aria-label', `Accept ${request.name}`);
+
+      const decline = document.createElement('button');
+      decline.type = 'button';
+      decline.className = 'btn btn--ghost btn--tiny';
+      decline.dataset.action = 'decline';
+      decline.textContent = 'Decline';
+      decline.setAttribute('aria-label', `Decline ${request.name}`);
+
+      row.append(this.#friendFace(null), body, accept, decline);
+      list.append(row);
+    });
+  }
+
+  #renderFriends(social) {
+    const list = this.#dom['friends-list'];
+    if (!list) return;
+
+    const empty = this.#dom['friends-empty'];
+    if (empty) empty.hidden = social.friends.length > 0;
+    list.innerHTML = '';
+
+    social.friends.forEach((friend) => {
+      const row = document.createElement('li');
+      row.className = 'friend';
+      row.dataset.uid = friend.uid;
+
+      const body = document.createElement('span');
+      body.className = 'friend__body';
+      const name = document.createElement('span');
+      name.className = 'friend__name';
+      name.textContent = friend.name;
+
+      const status = document.createElement('span');
+      status.className = 'friend__status';
+      status.dataset.state = friend.state;
+      status.textContent = friend.state === PRESENCE.PLAYING
+        ? 'In a game'
+        : (friend.state === PRESENCE.ONLINE ? 'Online' : describeSince(friend.since));
+      body.append(name, status);
+
+      const waiting = social.sent.includes(friend.uid);
+      if (waiting) {
+        const pending = document.createElement('span');
+        pending.className = 'friend__pending';
+        pending.textContent = 'Pending';
+        body.append(pending);
+      }
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'icon-btn friend__remove';
+      remove.dataset.action = 'remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remove ${friend.name}`);
+
+      row.append(this.#friendFace(friend.avatar), body, remove);
+      list.append(row);
+    });
+  }
+
+  /**
+   * A friend's picture, or the king glyph.
+   *
+   * Validated here for the same reason a seat picture is: this is the last
+   * point before a string somebody else wrote becomes an img src.
+   */
+  #friendFace(avatar) {
+    const wrap = document.createElement('span');
+    wrap.className = 'friend__avatar';
+    wrap.setAttribute('aria-hidden', 'true');
+
+    if (isAvatar(avatar)) {
+      const image = document.createElement('img');
+      image.className = 'friend__photo';
+      image.alt = '';
+      image.src = avatar;
+      wrap.append(image);
+    } else {
+      const glyph = document.createElement('span');
+      glyph.className = 'friend__glyph';
+      glyph.textContent = '♚\uFE0E';
+      wrap.append(glyph);
+    }
+    return wrap;
   }
 
   // -----------------------------------------------------------------------
@@ -1440,6 +1917,83 @@ export class UI {
       this.#call('onLeaveGame');
     });
 
+    // --- Chat and emotes ---
+    this.#dom['btn-chat']?.addEventListener('click', () => {
+      this.openChat();
+      this.#call('onOpenChat');
+    });
+
+    this.#dom['chat-form']?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = this.#dom['chat-input'];
+      const body = input?.value ?? '';
+      if (!body.trim()) return;
+      // Cleared before the send resolves, because the send is a round trip
+      // and a box that empties when the network says so feels broken. A
+      // refusal comes back as a toast with the message in it.
+      if (input) input.value = '';
+      this.#call('onSendChat', { body });
+    });
+
+    this.#dom['emote-bar']?.addEventListener('click', (event) => {
+      const button = event.target.closest('.emote');
+      if (!button) return;
+      this.#call('onSendEmote', { id: button.dataset.emote });
+    });
+
+    // --- Friends ---
+    this.#dom['btn-menu-friends']?.addEventListener('click', () => {
+      this.openModal('friends');
+      this.#call('onOpenFriends');
+    });
+
+    this.#dom['form-add-friend']?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = this.#dom['input-friend-code'];
+      this.#call('onAddFriend', { code: input?.value ?? '' });
+    });
+
+    // Same cleaning as the room-code field: upper case, code characters only.
+    this.#dom['input-friend-code']?.addEventListener('input', (event) => {
+      const cleaned = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (cleaned !== event.target.value) event.target.value = cleaned;
+    });
+
+    this.#dom['btn-copy-friend-code']?.addEventListener('click', () => {
+      this.#call('onCopyFriendCode', this.#social?.code ?? null);
+    });
+
+    // A rename lands on blur and on Enter, not on every keystroke: each one
+    // is a write, and a friends list is not the place to publish a name
+    // letter by letter.
+    const rename = () => this.#call('onRenameMe', {
+      name: this.#dom['input-my-name']?.value ?? '',
+    });
+    this.#dom['input-my-name']?.addEventListener('change', rename);
+    this.#dom['input-my-name']?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      event.target.blur();
+    });
+
+    // One delegated handler for both lists: the rows differ in what they
+    // offer, not in how an offer is answered.
+    ['requests-list', 'friends-list'].forEach((id) => {
+      this.#dom[id]?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-action]');
+        if (!button) return;
+        const uid = button.closest('.friend')?.dataset.uid;
+        if (!uid) return;
+        const actions = {
+          accept: 'onAcceptRequest',
+          decline: 'onDeclineRequest',
+          remove: 'onRemoveFriend',
+        };
+        const handler = actions[button.dataset.action];
+        if (handler) this.#call(handler, { uid });
+      });
+    });
+
     // --- Game header ---
     this.#dom['btn-game-menu']?.addEventListener('click', () => this.openModal('menu'));
     this.#dom['btn-game-settings']?.addEventListener('click', () => this.openModal('settings'));
@@ -1528,6 +2082,7 @@ export class UI {
       'set-coords': 'showCoordinates',
       'set-animations': 'animations',
       'set-autoflip': 'autoFlip',
+      'set-chat': 'chat',
     };
     Object.entries(settingInputs).forEach(([id, key]) => {
       this.#dom[id]?.addEventListener('change', (event) => {

@@ -35,23 +35,24 @@ import {
   TERMINAL_STATUSES,
   GAME_MODE,
   DEFAULT_PLAYER_NAMES,
+  CHAT_MAX_LENGTH,
+  CHAT_HISTORY,
+  CHAT_COOLDOWN_MS,
+  VALID_EMOTES,
   log,
   warn,
 } from '../config.js';
 import { isAvatar, toOnlineAvatar } from '../avatar.js';
 import {
-  FIREBASE_MODULES,
-  EMULATOR,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   ONLINE_AVATARS,
-  isFirebaseConfigured,
-  firebaseConfigError,
-  isEmulatorMode,
-  emulatorHost,
-  emulatorAuthUrl,
-  resolveFirebaseConfig,
 } from '../firebase-config.js';
+import {
+  firebaseReady,
+  isPermissionDenied,
+  explainFirebaseError,
+} from '../firebase-client.js';
 import { END_REASON, SESSION_ACTION } from './local-session.js';
 
 /** Connection states surfaced to the UI. */
@@ -64,57 +65,13 @@ export const CONNECTION = {
 const colorName = (color) => (color === WHITE ? 'White' : 'Black');
 const other = (color) => (color === WHITE ? BLACK : WHITE);
 
-/**
- * Did the rules refuse this write?
- *
- * The SDK reports it as "PERMISSION_DENIED" in some paths and "Permission
- * denied" in others, so both spellings are matched. Worth its own function
- * because it is asked twice: once to explain the failure, and once to decide
- * whether a seat is worth retrying without its picture.
+/*
+ * Both of these moved to firebase-client.js when the friends panel became a
+ * second thing that talks to Firebase and needed the same explanations. They
+ * are re-exported from here because this is where they were, and because a
+ * session is still the most likely place to go looking for them.
  */
-export function isPermissionDenied(error) {
-  const message = String(error?.message ?? error ?? '');
-  return /permission[\s_]denied/i.test(message) || error?.code === 'PERMISSION_DENIED';
-}
-
-/**
- * Turn Firebase's error codes into something a person can act on.
- *
- * A freshly created project fails in the same handful of ways, and the raw
- * SDK messages ("PERMISSION_DENIED", "auth/operation-not-allowed") do not say
- * which setup step was missed. Each of these maps to one concrete fix.
- */
-export function explainFirebaseError(error) {
-  const code = error?.code ?? '';
-  const message = String(error?.message ?? error ?? '');
-
-  if (code === 'auth/operation-not-allowed' || /operation-not-allowed/i.test(message)) {
-    return 'Anonymous sign-in is not enabled. Firebase console → Build → Authentication → Sign-in method → Anonymous → Enable.';
-  }
-  if (code === 'auth/api-key-not-valid' || /api-key-not-valid|invalid.*api key/i.test(message)) {
-    return 'That apiKey is not valid. Re-copy it from Project settings → Your apps → Web app.';
-  }
-  if (code === 'auth/configuration-not-found') {
-    return 'Authentication is not set up for this project yet. Enable Anonymous sign-in in the Firebase console.';
-  }
-  if (isPermissionDenied(error)) {
-    // Names the console first. The CLI line was the only instruction here
-    // before, which is no help at all to the many people who have a Firebase
-    // project but have never installed firebase-tools — and installing it,
-    // then logging in, is a far longer road than pasting one file into a page
-    // you are already signed in to.
-    return 'The database rejected that. Your security rules are out of date — '
-      + 'paste firebase/database.rules.json into Realtime Database → Rules in '
-      + 'the Firebase console and publish (or run: npx firebase-tools deploy --only database)';
-  }
-  if (/Cannot parse Firebase url|FIREBASE FATAL ERROR|Can't determine Firebase Database URL/i.test(message)) {
-    return 'databaseURL is missing or malformed. Copy it exactly from Realtime Database in the console — regional databases do not end in firebaseio.com.';
-  }
-  if (/network|offline|Failed to fetch/i.test(message)) {
-    return 'Could not reach Firebase. Check the network connection.';
-  }
-  return message || 'Unknown Firebase error';
-}
+export { isPermissionDenied, explainFirebaseError };
 
 /** Cryptographically-random room code from an unambiguous alphabet. */
 function generateRoomCode() {
@@ -139,6 +96,46 @@ export function normalizeRoomCode(input) {
 
 /** Said once, by both room paths, when the rules turned the picture down. */
 const AVATAR_REFUSED = 'Your picture could not be sent — the room rules are out of date';
+
+/**
+ * A key for one chat message: sortable, and legal as a database key.
+ *
+ * Time first so that the natural key order is also the reading order, which
+ * means a log that arrives out of order still renders right even before it is
+ * sorted. The random tail is what stops two messages sent in the same
+ * millisecond — one from each device — from being the same message.
+ *
+ * push() would do this too, and better. It is not used because every write
+ * here goes through a transaction on the whole chat node (see #say), which
+ * needs to know the key it is adding before it adds it.
+ */
+function messageId(at) {
+  const noise = Math.floor(Math.random() * 46656).toString(36).padStart(3, "0");
+  return `${at.toString(36)}-${noise}`;
+}
+
+/**
+ * Is this something the other device wrote that we are willing to show?
+ *
+ * Applied on the way OUT of the room, on top of the rules that guard the way
+ * in, and for a different reason. The rules protect the room from a value
+ * nobody should be able to write; this protects this device from one that
+ * somehow was — the same split as the seat pictures. An emote is checked
+ * against the list rather than trusted, so an unknown id renders as nothing
+ * at all rather than as a gap where a picture should be.
+ */
+function isChatMessage(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  if (typeof entry.uid !== 'string' || !entry.uid) return false;
+  if (entry.color !== WHITE && entry.color !== BLACK) return false;
+  if (typeof entry.body !== 'string' || !entry.body) return false;
+  if (typeof entry.at !== 'number' || !Number.isFinite(entry.at)) return false;
+  if (entry.kind === 'emote') return VALID_EMOTES.includes(entry.body);
+  return entry.kind === 'text' && entry.body.length <= CHAT_MAX_LENGTH;
+}
+
+/** Oldest first, with the key breaking a tie between two identical stamps. */
+const byTime = (a, b) => (a[1].at - b[1].at) || (a[0] < b[0] ? -1 : 1);
 
 /**
  * The picture as it may be written to a seat, or null.
@@ -193,6 +190,15 @@ export class FirebaseSession {
   #connection = CONNECTION.OFFLINE;
   #destroyed = false;
 
+  /**
+   * When this device last said something.
+   *
+   * On the sender, so it stops a leaning finger rather than a modified
+   * client — see CHAT_COOLDOWN_MS. The real answer to somebody determined is
+   * the mute switch on the other end.
+   */
+  #lastSaid = 0;
+
   // --- Subscriptions to detach on leave ---
   #detachers = [];
 
@@ -207,41 +213,17 @@ export class FirebaseSession {
   async initialize() {
     if (this.#sdk) return this;
 
-    if (!isFirebaseConfigured()) {
-      throw new Error(firebaseConfigError());
-    }
-
     this.#connection = CONNECTION.CONNECTING;
 
-    const [appMod, authMod, dbMod] = await Promise.all([
-      import(/* @vite-ignore */ FIREBASE_MODULES.app),
-      import(/* @vite-ignore */ FIREBASE_MODULES.auth),
-      import(/* @vite-ignore */ FIREBASE_MODULES.database),
-    ]);
-
-    this.#sdk = { ...appMod, ...authMod, ...dbMod };
-
-    this.#app = this.#sdk.initializeApp(resolveFirebaseConfig());
-    this.#auth = this.#sdk.getAuth(this.#app);
-    this.#db = this.#sdk.getDatabase(this.#app);
-
-    if (isEmulatorMode()) {
-      // Host is resolved from the page's own address so that a phone on the
-      // LAN reaches the computer running the emulator, not itself.
-      const host = emulatorHost();
-      this.#sdk.connectDatabaseEmulator(this.#db, host, EMULATOR.databasePort);
-      this.#sdk.connectAuthEmulator(this.#auth, emulatorAuthUrl(), { disableWarnings: true });
-      log('Firebase emulator mode via', host);
-    }
-
-    try {
-      const credential = await this.#sdk.signInAnonymously(this.#auth);
-      this.#uid = credential.user.uid;
-    } catch (error) {
-      // Surface the setup step that was missed, not the raw SDK code.
-      warn('Anonymous sign-in failed', error);
-      throw new Error(explainFirebaseError(error));
-    }
+    // The SDK, the app and the sign-in are shared with the friends panel,
+    // which is on screen at the same time as a game and must be the same
+    // account. Everything that used to be done here is done there once.
+    const { sdk, app, auth, db, uid } = await firebaseReady();
+    this.#sdk = sdk;
+    this.#app = app;
+    this.#auth = auth;
+    this.#db = db;
+    this.#uid = uid;
 
     this.#watchConnection();
 
@@ -961,6 +943,100 @@ export class FirebaseSession {
     return { ok: true, state: this.getState() };
   }
 
+  // -----------------------------------------------------------------------
+  // Chat and emotes
+  // -----------------------------------------------------------------------
+
+  /** Say something to the other player. */
+  async sendChat(body) {
+    return this.#say('text', body);
+  }
+
+  /** Send one of the eight emotes, by id. */
+  async sendEmote(id) {
+    return this.#say('emote', id);
+  }
+
+  /**
+   * Append one message to the room log, dropping the oldest past the cap.
+   *
+   * A transaction on the chat node rather than a plain write, because the
+   * trim has to see the other device's messages to know which are oldest —
+   * a blind write would race, and the loser would come back from the dead.
+   *
+   * The stamp is this device's clock, which is the honest trade here. A
+   * server stamp would order two badly-skewed phones correctly, but it does
+   * not resolve until the write lands, and the write is the thing that needs
+   * to sort the log to trim it. So the log is ordered by the sender's idea of
+   * now, and two phones minutes apart can interleave oddly. In a two-person
+   * chat where each message arrives as it is sent, nobody notices.
+   */
+  async #say(kind, raw) {
+    if (this.#destroyed) return { ok: false, error: 'Session destroyed' };
+    if (!this.#roomCode || !this.#myColor) return { ok: false, error: 'Not in a room' };
+    if (!this.#bothSeated()) return { ok: false, error: 'Nobody is here yet' };
+
+    // Collapsed rather than merely trimmed: a message that is forty newlines
+    // is inside every cap the rules check and still takes the panel over.
+    const body = kind === 'emote'
+      ? String(raw ?? '')
+      : String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX_LENGTH);
+
+    if (!body) return { ok: false, error: 'Nothing to send' };
+    if (kind === 'emote' && !VALID_EMOTES.includes(body)) {
+      return { ok: false, error: 'Unknown emote' };
+    }
+
+    const at = Date.now();
+    if (at - this.#lastSaid < CHAT_COOLDOWN_MS) {
+      return { ok: false, error: 'One at a time' };
+    }
+
+    const id = messageId(at);
+    const message = { uid: this.#uid, color: this.#myColor, kind, body, at };
+
+    const { ref, runTransaction } = this.#sdk;
+    const chatRef = ref(this.#db, `rooms/${this.#roomCode}/chat`);
+
+    try {
+      const outcome = await runTransaction(chatRef, (current) => {
+        const entries = Object.entries(current ?? {});
+        entries.push([id, message]);
+        if (entries.length <= CHAT_HISTORY) return Object.fromEntries(entries);
+        entries.sort(byTime);
+        return Object.fromEntries(entries.slice(-CHAT_HISTORY));
+      });
+      if (!outcome.committed) return { ok: false, error: 'Message not sent' };
+    } catch (error) {
+      // Rules that predate chat refuse the whole node, the same way rules
+      // that predated pictures refused a seat. There is nothing to retry
+      // without, so this one just says what happened.
+      warn('Could not send message', error);
+      return { ok: false, error: explainFirebaseError(error) };
+    }
+
+    this.#lastSaid = at;
+    return { ok: true, message: { id, ...message, mine: true } };
+  }
+
+  /**
+   * The room log, oldest first, capped and vetted.
+   *
+   * Rebuilt on each read rather than cached, because the only thing that
+   * reads it is a render, and a render already happens exactly when the room
+   * changes. `mine` is added here so that nothing downstream has to know what
+   * a uid is to draw a message on the correct side.
+   */
+  #chatLog() {
+    const raw = this.#room?.chat;
+    if (!raw || typeof raw !== 'object') return [];
+    return Object.entries(raw)
+      .filter(([, entry]) => isChatMessage(entry))
+      .sort(byTime)
+      .slice(-CHAT_HISTORY)
+      .map(([id, entry]) => ({ id, ...entry, mine: entry.uid === this.#uid }));
+  }
+
   /** Merge fields into the room, guarded so a stale client cannot clobber it. */
   async #updateRoom(fields) {
     const { runTransaction, serverTimestamp } = this.#sdk;
@@ -1089,6 +1165,9 @@ export class FirebaseSession {
         drawOfferFrom: room?.drawOffer?.from ?? null,
         rematch: room?.rematch ?? null,
         uid: this.#uid,
+        // Everything said in this room, in order, already checked. The
+        // panel that draws it does no validation of its own.
+        chat: this.#chatLog(),
       },
     };
   }

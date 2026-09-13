@@ -62,6 +62,16 @@
           Continue Game
           <span class="btn__meta" id="continue-meta"></span>
         </button>
+        <!--
+          Friends sits above Settings because it is a place you go, not a
+          thing you adjust. The count rides on the button rather than in a
+          notification: there is nowhere else for it to be seen, and a
+          request that nobody notices is a request that never happened.
+        -->
+        <button type="button" class="btn btn--ghost btn--block" id="btn-menu-friends" hidden>
+          Friends
+          <span class="btn__badge" id="friends-badge" hidden aria-hidden="true">0</span>
+        </button>
         <button type="button" class="btn btn--ghost btn--block" id="btn-menu-settings">Settings</button>
       </div>
 
@@ -306,6 +316,16 @@
         <span class="room-bar__dot" aria-hidden="true"></span>
         <span id="room-bar-status-text">Connecting…</span>
       </span>
+      <!--
+        Chat lives behind one button rather than in the panel beside the
+        board, because on a phone that panel IS the space under the board and
+        a chat log there would push the controls off the screen. The count is
+        the only thing that leaks out of the sheet while it is shut.
+      -->
+      <button type="button" class="room-bar__chat" id="btn-chat" aria-label="Chat">
+        <span class="room-bar__chat-glyph" aria-hidden="true">💬</span>
+        <span class="room-bar__unread" id="chat-unread" hidden>0</span>
+      </button>
     </div>
 
     <div class="game">
@@ -339,6 +359,17 @@
              changes without anybody doing anything, so it is announced
              politely rather than on every tenth of a second. -->
         <span class="player-card__clock" id="top-clock" hidden aria-hidden="true"></span>
+        <!--
+          Where an emote lands. On the card of whoever sent it, so it is
+          obvious who is waving without a name attached to it.
+
+          aria-hidden because a bare glyph read out is noise, and because
+          this is not where the announcement happens: an emote that
+          arrives while the sheet is shut raises a toast naming it in
+          words ("Bo: Good game"), and the toast container is the live
+          region. One event, announced once, in language.
+        -->
+        <span class="player-card__emote" id="top-emote" hidden aria-hidden="true"></span>
         <span class="player-card__turn" id="top-turn" hidden>To move</span>
       </section>
 
@@ -377,6 +408,17 @@
              changes without anybody doing anything, so it is announced
              politely rather than on every tenth of a second. -->
         <span class="player-card__clock" id="bottom-clock" hidden aria-hidden="true"></span>
+        <!--
+          Where an emote lands. On the card of whoever sent it, so it is
+          obvious who is waving without a name attached to it.
+
+          aria-hidden because a bare glyph read out is noise, and because
+          this is not where the announcement happens: an emote that
+          arrives while the sheet is shut raises a toast naming it in
+          words ("Bo: Good game"), and the toast container is the live
+          region. One event, announced once, in language.
+        -->
+        <span class="player-card__emote" id="bottom-emote" hidden aria-hidden="true"></span>
         <span class="player-card__turn" id="bottom-turn" hidden>To move</span>
       </section>
 
@@ -515,6 +557,11 @@
         <input type="checkbox" id="set-autoflip" class="switch">
       </div>
 
+      <div class="setting">
+        <label class="setting__label" for="set-chat">Chat &amp; Emotes</label>
+        <input type="checkbox" id="set-chat" class="switch">
+      </div>
+
       <div class="setting setting--stack">
         <span class="setting__label" id="style-label">Look &amp; Feel</span>
         <div class="style-picker" id="style-picker" role="radiogroup" aria-labelledby="style-label"></div>
@@ -577,6 +624,99 @@
         <button type="button" class="btn btn--primary btn--block" data-close="opponent-left">Keep Waiting</button>
         <button type="button" class="btn btn--ghost btn--block" id="btn-leave-room">Leave Room</button>
       </div>
+    </div>
+  </div>
+
+  <!--
+    Chat (online). A sheet rather than a panel: it covers the board while it
+    is open, which is the right trade on a phone — you are either reading the
+    position or reading the message, never both.
+  -->
+  <div class="modal modal--sheet modal--chat" id="modal-chat" role="dialog" aria-modal="true"
+       aria-labelledby="chat-title" hidden>
+    <div class="modal__backdrop" data-close="chat"></div>
+    <div class="modal__panel">
+      <div class="chat__head">
+        <h2 class="modal__title" id="chat-title">Chat</h2>
+        <button type="button" class="icon-btn" data-close="chat" aria-label="Close chat">×</button>
+      </div>
+
+      <!-- aria-live so a message arriving while the sheet is open is read out. -->
+      <ol class="chat__log" id="chat-log" aria-live="polite" aria-relevant="additions"></ol>
+
+      <p class="chat__empty" id="chat-empty">Say hello — nothing here yet.</p>
+
+      <!-- Built from EMOTES in js/config.js: adding one is a row in that list. -->
+      <div class="emote-bar" id="emote-bar" aria-label="Send an emote"></div>
+
+      <form class="chat__compose" id="chat-form">
+        <!-- maxlength is re-applied from CHAT_MAX_LENGTH at startup. -->
+        <input class="field__input chat__input" type="text" id="chat-input" maxlength="160"
+               autocomplete="off" placeholder="Message" aria-label="Message">
+        <button type="submit" class="btn btn--primary" id="btn-chat-send">Send</button>
+      </form>
+    </div>
+  </div>
+
+  <!--
+    Friends. Reachable from the main menu, so it works with no game running
+    — which is most of the time you would want it.
+  -->
+  <div class="modal modal--sheet modal--friends" id="modal-friends" role="dialog" aria-modal="true"
+       aria-labelledby="friends-title" hidden>
+    <div class="modal__backdrop" data-close="friends"></div>
+    <div class="modal__panel">
+      <div class="chat__head">
+        <h2 class="modal__title" id="friends-title">Friends</h2>
+        <button type="button" class="icon-btn" data-close="friends" aria-label="Close friends">×</button>
+      </div>
+
+      <!--
+        Your own card first. The code is the whole point of the panel for
+        whoever opened it to be added rather than to add, so it is the thing
+        in the largest type.
+      -->
+      <div class="me-card">
+        <span class="me-card__avatar" id="me-avatar" aria-hidden="true">
+          <img class="me-card__photo" id="me-photo" alt="" hidden>
+          <span class="me-card__glyph">♚&#xFE0E;</span>
+        </span>
+        <div class="me-card__body">
+          <label class="field__label" for="input-my-name">Your name</label>
+          <input class="field__input" type="text" id="input-my-name" maxlength="20"
+                 autocomplete="off" placeholder="Your name" spellcheck="false">
+          <div class="me-card__code">
+            <span class="me-card__code-label">Your friend code</span>
+            <span class="room-code__value" id="my-code">------</span>
+            <button type="button" class="icon-btn" id="btn-copy-friend-code"
+                    aria-label="Copy your friend code">⧉</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="friends__status" id="friends-status" hidden></p>
+
+      <form class="join-row" id="form-add-friend">
+        <input class="field__input field__input--code" type="text" id="input-friend-code"
+               maxlength="6" autocomplete="off" spellcheck="false" placeholder="CODE"
+               aria-label="Friend code" inputmode="latin" autocapitalize="characters">
+        <button type="submit" class="btn btn--ghost" id="btn-add-friend">Add</button>
+      </form>
+
+      <section class="friends__section" id="requests-section" hidden>
+        <h3 class="friends__heading">Requests</h3>
+        <ul class="friends__list" id="requests-list"></ul>
+      </section>
+
+      <section class="friends__section">
+        <h3 class="friends__heading">Your friends</h3>
+        <ul class="friends__list" id="friends-list"></ul>
+        <p class="friends__empty" id="friends-empty">
+          Nobody yet. Swap codes with someone and add them above.
+        </p>
+      </section>
+
+      <button type="button" class="btn btn--primary btn--block" data-close="friends">Done</button>
     </div>
   </div>
 
