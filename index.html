@@ -136,32 +136,18 @@
 
         <fieldset class="field field--modes">
           <legend class="field__label">Game Mode</legend>
-          <label class="mode mode--available">
+          <label class="mode">
             <input type="radio" name="mode" value="local" checked>
             <span class="mode__body">
               <span class="mode__name">Local Two Player</span>
               <span class="mode__desc">Both players share this device</span>
             </span>
           </label>
-          <label class="mode mode--available">
+          <label class="mode">
             <input type="radio" name="mode" value="bot" id="mode-bot">
             <span class="mode__body">
               <span class="mode__name">Player vs Bot</span>
               <span class="mode__desc">Play against the computer</span>
-            </span>
-          </label>
-          <label class="mode mode--available">
-            <input type="radio" name="mode" value="speed" id="mode-speed">
-            <span class="mode__body">
-              <span class="mode__name">Speed Chess</span>
-              <span class="mode__desc">On the clock, against the bot or a friend</span>
-            </span>
-          </label>
-          <label class="mode mode--available">
-            <input type="radio" name="mode" value="tournament" id="mode-tournament">
-            <span class="mode__body">
-              <span class="mode__name">Tournament</span>
-              <span class="mode__desc">Climb a ladder of five bots</span>
             </span>
           </label>
           <label class="mode" id="mode-online-label">
@@ -169,6 +155,20 @@
             <span class="mode__body">
               <span class="mode__name">Online Multiplayer</span>
               <span class="mode__desc" id="mode-online-desc">Play on two devices</span>
+            </span>
+          </label>
+          <label class="mode">
+            <input type="radio" name="mode" value="speed" id="mode-speed">
+            <span class="mode__body">
+              <span class="mode__name">Speed Chess</span>
+              <span class="mode__desc">On the clock, against the bot or a friend</span>
+            </span>
+          </label>
+          <label class="mode">
+            <input type="radio" name="mode" value="tournament" id="mode-tournament">
+            <span class="mode__body">
+              <span class="mode__name">Tournament</span>
+              <span class="mode__desc">Climb a ladder of five bots</span>
             </span>
           </label>
         </fieldset>

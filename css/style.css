@@ -610,7 +610,14 @@ body.is-modal-open {
   font-size: 0.82rem;
 }
 
-.mode--available:has(input:checked) {
+/*
+  The chosen mode. Keyed on "not disabled" rather than on a class each
+  label has to carry, because the label that forgot to carry it was the
+  online one — the only mode that can be unavailable, and so the only one
+  whose row state was worth anything. Derived from the real condition, a
+  new mode is highlighted correctly without anybody remembering anything.
+*/
+.mode:not(.mode--disabled):has(input:checked) {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
