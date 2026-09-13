@@ -575,6 +575,7 @@ chess-game/
 ├── index.html                    All screens and modals
 ├── README.md
 ├── firebase.json                 Rules wiring, hosting, emulator ports
+├── .nojekyll                     Tells GitHub Pages to serve the files as they are
 ├── .firebaserc                   Emulator project alias (demo-chess-arena)
 ├── css/
 │   ├── style.css                 Design tokens, shell, controls, modals, online UI
