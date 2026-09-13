@@ -2634,6 +2634,12 @@ body.is-modal-open {
   background: var(--text-faint);
 }
 
+/* Not yet heard from. Deliberately dimmer than offline rather than a
+   different colour: it is an absence of news, not news. */
+.friend__status[data-state="unknown"] {
+  opacity: 0.7;
+}
+
 .friend__status[data-state="online"] {
   color: var(--success);
 }

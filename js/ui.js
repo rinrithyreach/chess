@@ -1698,10 +1698,18 @@ export class UI {
 
       const status = document.createElement('span');
       status.className = 'friend__status';
-      status.dataset.state = friend.state;
-      status.textContent = friend.state === PRESENCE.PLAYING
-        ? 'In a game'
-        : (friend.state === PRESENCE.ONLINE ? 'Online' : describeSince(friend.since));
+      // Three states, not two: a friend whose presence has not arrived yet
+      // is not offline, and saying so would be a guess dressed as a fact.
+      status.dataset.state = friend.known ? friend.state : 'unknown';
+      if (!friend.known) {
+        status.textContent = 'Checking…';
+      } else if (friend.state === PRESENCE.PLAYING) {
+        status.textContent = 'In a game';
+      } else if (friend.state === PRESENCE.ONLINE) {
+        status.textContent = 'Online';
+      } else {
+        status.textContent = describeSince(friend.since);
+      }
       body.append(name, status);
 
       const waiting = social.sent.includes(friend.uid);

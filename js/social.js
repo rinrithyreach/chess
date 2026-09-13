@@ -527,6 +527,9 @@ export class SocialHub {
   getState() {
     const friends = [...this.#friends.keys()].map((uid) => {
       const profile = this.#profiles.get(uid) ?? {};
+      // Whether this friend's presence has actually been delivered yet, as
+      // opposed to what it says. See `known` below.
+      const heard = this.#presence.has(uid);
       const stored = this.#presence.get(uid) ?? { state: PRESENCE.OFFLINE, at: 0 };
       // Re-read rather than used as stored, because a record goes stale
       // while nothing about it changes — nobody writes "still offline" — and
@@ -541,6 +544,12 @@ export class SocialHub {
         state: presence.state,
         since: presence.at,
         online: presence.state !== PRESENCE.OFFLINE,
+        // False until their presence row has been read once. The list
+        // arrives before any of it, so without this a friend is announced
+        // as offline before anyone has looked — which is a claim, not a
+        // default, and it is wrong most often at the worst moment: right
+        // after you add somebody, who is by definition at their screen.
+        known: heard,
       };
     });
 
@@ -669,6 +678,14 @@ export class SocialHub {
         },
         [`users/${this.#uid}/sent/${target}`]: { at: serverTimestamp() },
       });
+
+      // Recorded here rather than waited for. The write has landed, so the
+      // answer to "have I already asked?" is yes from this moment — and
+      // that question is asked again the instant somebody taps Add twice.
+      // The listener overwrites this with the server's own stamp shortly.
+      this.#sent.set(target, { at: Date.now() });
+      this.#publish();
+
       return { ok: true, uid: target };
     } catch (error) {
       warn('Friend request failed', error);
