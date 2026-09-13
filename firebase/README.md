@@ -34,11 +34,14 @@ firebase deploy --only database
 | Nobody can speak as their opponent | a message's `uid` must be yours and its `color` must be the seat you hold — **or both must be unchanged**, which is what lets a move rewrite the room without re-forging every message already in it |
 | Chat cannot become storage | `body` capped at 160 characters, `kind` only `text` or `emote` |
 | A friend code is claimed once | `handles/$code` is writable only when absent or already yours, and only with your own uid as the value |
-| Your lists are yours | `friends`, `requests` and `sent` are readable only by their owner |
+| Your lists are yours | `friends`, `requests`, `sent` and `invites` are readable only by their owner |
 | A profile is readable by anyone signed in | deliberately — resolving a friend code means reading a stranger's row |
 | Only you write your own profile and presence | `.write` is `auth.uid === $uid`, with no exceptions |
 | Somebody can join your list only if you asked | writing `users/$you/friends/$them` as *them* requires `users/$them/requests/$you` to exist |
 | You cannot send yourself a request | `$fromUid !== $uid` |
+| Only a friend can invite you into a room | writing `users/$you/invites/$them` requires `users/$you/friends/$them` to already exist — stricter than a request on purpose, because an invitation is an offer to walk into a room somebody else controls |
+| An invitation can always be taken back | the friendship check is skipped when the write is a deletion, so one can still be withdrawn after a falling-out |
+| An invitation names a room and nothing more | `room` must match the room-code pattern, `name` is capped like every other name, and `$other` refuses the rest |
 | A profile picture is held to the seat rule | the same expression, character for character — the test suite asserts the two strings are equal |
 
 ### What the rules cannot enforce
@@ -55,8 +58,9 @@ They still cannot:
 - seat themselves twice or evict an opponent,
 - write fields the schema does not define,
 - put words in the opponent's mouth, or an emote id that is not one of the eight,
-- read anybody's friends, requests or sent list but their own,
-- add themselves to a friends list that has not asked for them.
+- read anybody's friends, requests, sent or invites list but their own,
+- add themselves to a friends list that has not asked for them,
+- put an invitation in front of somebody who has not accepted them as a friend.
 
 Two things they deliberately allow, which are worth knowing:
 
@@ -67,6 +71,10 @@ Two things they deliberately allow, which are worth knowing:
   makes "add by friend code" work at all. Nothing else about an account is
   readable, and a profile holds only a display name, a code and an optional
   picture.
+- **A friend can keep inviting you.** There is no cap on invitations and no
+  block list; one invitation per friend is all that can be outstanding, and
+  removing them from your list is what stops them. Rules cannot count
+  children, so a real cap needs a server.
 
 For a casual two-friends game this is the normal trade-off, and it is the same
 one most client-authoritative multiplayer games make. To close the gap fully,

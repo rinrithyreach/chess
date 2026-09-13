@@ -155,6 +155,18 @@
           }
         },
 
+        "invites": {
+          ".read": "auth.uid === $uid",
+          "$fromUid": {
+            ".write": "auth.uid === $uid || (auth.uid === $fromUid && $fromUid !== $uid && (!newData.exists() || root.child('users').child($uid).child('friends').child($fromUid).exists()))",
+            ".validate": "newData.hasChildren(['name', 'room', 'at'])",
+            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20" },
+            "room": { ".validate": "newData.isString() && newData.val().matches(/^[A-HJ-NP-Z2-9]{6}$/)" },
+            "at": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+
         "sent": {
           ".read": "auth.uid === $uid",
           "$toUid": {

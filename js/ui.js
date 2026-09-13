@@ -252,7 +252,9 @@ export class UI {
       'btn-menu-friends', 'friends-badge',
       'modal-friends', 'me-photo', 'input-my-name', 'my-code', 'btn-copy-friend-code',
       'friends-status', 'form-add-friend', 'input-friend-code', 'btn-add-friend',
+      'invites-section', 'invites-list',
       'requests-section', 'requests-list', 'friends-list', 'friends-empty',
+      'btn-invite-friend',
       'style-picker',
     ];
     ids.forEach((id) => {
@@ -1577,6 +1579,15 @@ export class UI {
   setFriendsAvailable(available) {
     const button = this.#dom['btn-menu-friends'];
     if (button) button.hidden = !available;
+    // The same panel reached from the waiting screen, which is where you
+    // are standing when the friend you invited has not answered.
+    const inviting = this.#dom['btn-invite-friend'];
+    if (inviting) inviting.hidden = !available;
+  }
+
+  /** Whether the friends sheet is the thing being looked at. */
+  isFriendsOpen() {
+    return this.#openModal === 'friends';
   }
 
   /**
@@ -1592,7 +1603,10 @@ export class UI {
 
     const badge = this.#dom['friends-badge'];
     if (badge) {
-      const waiting = social.requests.length;
+      // A request and an invite both mean somebody is waiting on you, and
+      // they sit behind the same button — so they share one count rather
+      // than growing a second badge beside the first.
+      const waiting = social.requests.length + (social.invites?.length ?? 0);
       badge.hidden = waiting === 0;
       badge.textContent = waiting > 9 ? '9+' : String(waiting);
     }
@@ -1628,8 +1642,59 @@ export class UI {
       status.dataset.tone = social.error ? 'error' : 'info';
     }
 
+    this.#renderInvites(social);
     this.#renderRequests(social);
     this.#renderFriends(social);
+  }
+
+  /**
+   * Invitations to a game, at the top of the panel.
+   *
+   * First because they are the only thing here that expires. A friend
+   * request can be answered tomorrow; the room behind an invite is open
+   * now, with somebody sitting in it watching the door.
+   */
+  #renderInvites(social) {
+    const list = this.#dom['invites-list'];
+    const section = this.#dom['invites-section'];
+    if (!list) return;
+
+    const invites = social.invites ?? [];
+    if (section) section.hidden = invites.length === 0;
+    list.innerHTML = '';
+
+    invites.forEach((invite) => {
+      const row = document.createElement('li');
+      row.className = 'friend friend--invite';
+      row.dataset.uid = invite.uid;
+
+      const body = document.createElement('span');
+      body.className = 'friend__body';
+      const name = document.createElement('span');
+      name.className = 'friend__name';
+      name.textContent = invite.name;
+      const note = document.createElement('span');
+      note.className = 'friend__note';
+      note.textContent = 'Wants to play now';
+      body.append(name, note);
+
+      const join = document.createElement('button');
+      join.type = 'button';
+      join.className = 'btn btn--primary btn--tiny';
+      join.dataset.action = 'join';
+      join.textContent = 'Join';
+      join.setAttribute('aria-label', `Join ${invite.name}`);
+
+      const ignore = document.createElement('button');
+      ignore.type = 'button';
+      ignore.className = 'btn btn--ghost btn--tiny';
+      ignore.dataset.action = 'ignore';
+      ignore.textContent = 'Ignore';
+      ignore.setAttribute('aria-label', `Ignore ${invite.name}`);
+
+      row.append(this.#friendFace(invite.avatar ?? null), body, join, ignore);
+      list.append(row);
+    });
   }
 
   #renderRequests(social) {
@@ -1720,6 +1785,24 @@ export class UI {
         body.append(pending);
       }
 
+      // Asking somebody to play is what a list of friends is for, so it
+      // is the one control on the row that carries a word rather than a
+      // glyph. Refused rather than hidden when it cannot work: a button
+      // that says why is worth more than a gap where one used to be.
+      const invite = document.createElement('button');
+      invite.type = 'button';
+      invite.className = 'btn btn--primary btn--tiny friend__invite';
+      invite.dataset.action = 'invite';
+
+      const asked = (social.invited ?? []).includes(friend.uid);
+      const away = friend.known && friend.state === PRESENCE.OFFLINE;
+      invite.textContent = asked ? 'Invited' : 'Invite';
+      invite.disabled = asked || away;
+      invite.setAttribute('aria-label', asked
+        ? `${friend.name} has been invited`
+        : `Invite ${friend.name} to play`);
+      if (away) invite.title = 'They are not online right now';
+
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'icon-btn friend__remove';
@@ -1727,7 +1810,7 @@ export class UI {
       remove.textContent = '×';
       remove.setAttribute('aria-label', `Remove ${friend.name}`);
 
-      row.append(this.#friendFace(friend.avatar), body, remove);
+      row.append(this.#friendFace(friend.avatar), body, invite, remove);
       list.append(row);
     });
   }
@@ -1955,6 +2038,11 @@ export class UI {
       this.#call('onOpenFriends');
     });
 
+    this.#dom['btn-invite-friend']?.addEventListener('click', () => {
+      this.openModal('friends');
+      this.#call('onOpenFriends');
+    });
+
     this.#dom['form-add-friend']?.addEventListener('submit', (event) => {
       event.preventDefault();
       const input = this.#dom['input-friend-code'];
@@ -1984,9 +2072,9 @@ export class UI {
       event.target.blur();
     });
 
-    // One delegated handler for both lists: the rows differ in what they
-    // offer, not in how an offer is answered.
-    ['requests-list', 'friends-list'].forEach((id) => {
+    // One delegated handler for all three lists: the rows differ in what
+    // they offer, not in how an offer is answered.
+    ['invites-list', 'requests-list', 'friends-list'].forEach((id) => {
       this.#dom[id]?.addEventListener('click', (event) => {
         const button = event.target.closest('[data-action]');
         if (!button) return;
@@ -1996,6 +2084,9 @@ export class UI {
           accept: 'onAcceptRequest',
           decline: 'onDeclineRequest',
           remove: 'onRemoveFriend',
+          invite: 'onInviteFriend',
+          join: 'onAcceptInvite',
+          ignore: 'onDeclineInvite',
         };
         const handler = actions[button.dataset.action];
         if (handler) this.#call(handler, { uid });

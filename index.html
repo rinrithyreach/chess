@@ -279,6 +279,16 @@
         and enter this code.
       </p>
 
+      <!--
+        Hidden until the app knows there is a project behind it, by the same
+        call that decides whether Friends is on the menu at all. Here so the
+        answer to "they are not answering" is another invite rather than a
+        trip back to the menu, which would take the room down with it.
+      -->
+      <button type="button" class="btn btn--ghost btn--block" id="btn-invite-friend" hidden>
+        Invite a friend
+      </button>
+
       <button type="button" class="btn btn--ghost btn--block" id="btn-cancel-room">Cancel</button>
     </div>
   </main>
@@ -702,6 +712,15 @@
                aria-label="Friend code" inputmode="latin" autocapitalize="characters">
         <button type="submit" class="btn btn--ghost" id="btn-add-friend">Add</button>
       </form>
+
+      <!--
+        Invitations first. They are the only thing in this panel with a
+        clock on it: the room is open now, and in a few minutes it is not.
+      -->
+      <section class="friends__section" id="invites-section" hidden>
+        <h3 class="friends__heading">Game invites</h3>
+        <ul class="friends__list" id="invites-list"></ul>
+      </section>
 
       <section class="friends__section" id="requests-section" hidden>
         <h3 class="friends__heading">Requests</h3>

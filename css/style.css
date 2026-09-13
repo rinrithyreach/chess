@@ -2686,6 +2686,31 @@ body.is-modal-open {
   font-size: 1.1rem;
 }
 
+/* The only control on a friend row with a word in it, so it is the only
+   one that can be squeezed into two lines. It is not allowed to be. */
+.friend__invite {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Already asked, or not there to ask. Dimmed rather than removed, so the
+   row keeps its shape and the reason stays readable. */
+.friend__invite:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* An invitation is the one row here that is worth interrupting for, and
+   the only one that will not still be true in ten minutes. */
+.friend--invite {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.friend--invite .friend__note {
+  color: var(--accent);
+}
+
 /* Accept and Decline sit in a row that also holds a name and a face, so they
    trade the full tap height for fitting. Still 34px, still comfortably over
    the minimum for a control with a label. */

@@ -386,6 +386,21 @@ export const MAX_FRIENDS = 60;
 export const MAX_REQUESTS = 30;
 
 /**
+ * How long an invitation to play is worth anything, in ms.
+ *
+ * An invite names a room, and a room only exists while its host is sitting
+ * on the waiting screen looking at the code. Nobody waits ten minutes for an
+ * answer, so an older invite almost certainly points at a room that has gone
+ * — and tapping Join on one of those gets "room not found", which reads like
+ * a broken app rather than a late reply.
+ *
+ * So an invite expires on its own: hidden on the receiving side, withdrawn
+ * from the database on the sending side. Three minutes is about as long as
+ * anyone stares at a waiting screen.
+ */
+export const INVITE_TTL_MS = 180_000;
+
+/**
  * Board zoom — how big the squares are, and how even.
  *
  * Implemented as camera elevation rather than as a dolly, which sounds like

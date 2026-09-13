@@ -51,11 +51,12 @@ import {
   FRIEND_CODE_LENGTH,
   MAX_FRIENDS,
   MAX_REQUESTS,
+  INVITE_TTL_MS,
   log,
   warn,
 } from './config.js';
 import { isAvatar, toOnlineAvatar } from './avatar.js';
-import { ROOM_CODE_ALPHABET } from './firebase-config.js';
+import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from './firebase-config.js';
 import { firebaseReady, explainFirebaseError, isPermissionDenied } from './firebase-client.js';
 import * as storage from './storage.js';
 
@@ -91,6 +92,19 @@ export function normalizeFriendCode(input) {
     .filter((character) => ROOM_CODE_ALPHABET.includes(character))
     .join('')
     .slice(0, FRIEND_CODE_LENGTH);
+}
+
+/**
+ * Is this shaped like a room code?
+ *
+ * Asked of a string that arrived over the network and is about to be used
+ * to join a game. Nothing terrible happens if it is wrong — a bad code
+ * simply finds no room — but a row offering to take you somewhere that
+ * cannot exist is worth not drawing at all.
+ */
+function isRoomCode(value) {
+  if (typeof value !== 'string' || value.length !== ROOM_CODE_LENGTH) return false;
+  return [...value].every((character) => ROOM_CODE_ALPHABET.includes(character));
 }
 
 /** A name we are willing to show, from a record somebody else wrote. */
@@ -133,6 +147,18 @@ export class SocialHub {
   #requests = new Map();  // uid -> { name, code, at }
   #sent = new Map();      // uid -> { at }
 
+  /**
+   * Invitations to a game.
+   *
+   * `#invites` is a list this account owns and reads, like the three above.
+   * `#invited` is not: nobody can read what they have written into somebody
+   * else's inbox, so the only record of an invite this device sent is the
+   * one it keeps here. It is what "Invited" on a row is drawn from, and
+   * what the withdrawal aims at when the room goes.
+   */
+  #invites = new Map();   // uid -> { name, room, at }
+  #invited = new Map();   // uid -> { room, at }
+
   /** What we know about other people, filled in by per-friend listeners. */
   #profiles = new Map();  // uid -> { name, avatar, code }
   #presence = new Map();  // uid -> { state, at }
@@ -141,6 +167,7 @@ export class SocialHub {
   #listeners = new Set();
   #detachers = [];
   #heartbeat = null;
+  #expiry = null;
   #started = null;
   #ready = false;
   #error = null;
@@ -358,14 +385,22 @@ export class SocialHub {
   setActivity(state) {
     const next = state === PRESENCE.PLAYING ? PRESENCE.PLAYING : PRESENCE.ONLINE;
     if (next === this.#activity) return;
+
+    // Coming out of a game means the room those invites named has gone.
+    // Noticed here rather than in the button that left it, for the same
+    // reason presence is: there are five ways out of a game and only one
+    // of them is a button.
+    const left = this.#activity === PRESENCE.PLAYING && next === PRESENCE.ONLINE;
     this.#activity = next;
     if (this.#ready) this.#touchPresence();
+    if (left) this.withdrawInvites();
   }
 
   /** Drop every listener and mark this device away. Survivable — start() again. */
   async stop() {
     this.#stopped = true;
     this.#stopHeartbeat();
+    this.#stopExpiry();
     this.#unwatchAll();
 
     try {
@@ -419,6 +454,7 @@ export class SocialHub {
     list('friends', this.#friends, () => this.#syncFriendWatchers());
     list('requests', this.#requests);
     list('sent', this.#sent);
+    list('invites', this.#invites);
   }
 
   /**
@@ -500,12 +536,77 @@ export class SocialHub {
 
   #publish() {
     const state = this.getState();
+    this.#scheduleExpiry(state);
     this.#listeners.forEach((listener) => {
       try {
         listener(state);
       } catch (error) {
         warn('Social listener threw', error);
       }
+    });
+  }
+
+  /**
+   * Wake up when the oldest invite runs out, and repaint.
+   *
+   * Invites are the only thing in this panel that goes stale while nothing
+   * is written. Presence is re-stamped every heartbeat, so a change always
+   * arrives to redraw it; nothing at all touches an invite between sending
+   * it and it being too old to use. Without this the row would sit there
+   * looking live, and Join would reach a room that had already gone.
+   *
+   * This cannot loop: only deadlines in the future are scheduled, and each
+   * firing either removes the entry that caused it or finds it already
+   * gone.
+   */
+  #scheduleExpiry(state) {
+    this.#stopExpiry();
+    const now = Date.now();
+    const deadlines = [
+      ...state.invites.map((invite) => invite.at + INVITE_TTL_MS),
+      ...[...this.#invited.values()].map((entry) => entry.at + INVITE_TTL_MS),
+    ].filter((deadline) => deadline > now);
+    if (!deadlines.length) return;
+
+    this.#expiry = window.setTimeout(() => {
+      this.#expiry = null;
+      this.#sweepInvited();
+      this.#publish();
+    }, Math.min(...deadlines) - now + 50);
+  }
+
+  #stopExpiry() {
+    if (this.#expiry === null) return;
+    window.clearTimeout(this.#expiry);
+    this.#expiry = null;
+  }
+
+  /**
+   * Take back the invites this device sent that have run out of time.
+   *
+   * Deleted rather than merely forgotten: the row is sitting in somebody
+   * else's inbox where they cannot see it — their client hides anything
+   * this old — so forgetting it here would leave it there for good.
+   */
+  #sweepInvited() {
+    const now = Date.now();
+    const dead = [...this.#invited.entries()]
+      .filter(([, entry]) => now - entry.at >= INVITE_TTL_MS)
+      .map(([uid]) => uid);
+    if (!dead.length) return;
+    dead.forEach((uid) => this.#invited.delete(uid));
+    this.#deleteInvites(dead);
+  }
+
+  /** One write for however many invites are being taken back. */
+  #deleteInvites(targets) {
+    if (!this.#ready || !targets.length) return Promise.resolve({ ok: true });
+    const { ref, update } = this.#sdk;
+    return update(ref(this.#db), Object.fromEntries(
+      targets.map((uid) => [`users/${uid}/invites/${this.#uid}`, null]),
+    )).then(() => ({ ok: true })).catch((error) => {
+      warn('Could not withdraw an invite', error);
+      return { ok: false, error: explainFirebaseError(error) };
     });
   }
 
@@ -571,6 +672,29 @@ export class SocialHub {
 
     const sent = [...this.#sent.keys()];
 
+    // An invite is the one thing here with a clock on it. Everything that
+    // cannot be acted on is dropped rather than drawn: a room code from
+    // somebody who is no longer a friend, a code that is not a code, and
+    // an invite old enough that the room it names has almost certainly
+    // gone. See INVITE_TTL_MS.
+    const now = Date.now();
+    const invites = [...this.#invites.entries()]
+      .map(([uid, entry]) => ({
+        uid,
+        name: safeName(entry?.name),
+        room: typeof entry?.room === 'string' ? entry.room.toUpperCase() : '',
+        at: typeof entry?.at === 'number' ? entry.at : 0,
+      }))
+      .filter((invite) => isRoomCode(invite.room)
+        && this.#friends.has(invite.uid)
+        && now - invite.at < INVITE_TTL_MS)
+      .sort((a, b) => b.at - a.at)
+      .slice(0, MAX_REQUESTS);
+
+    const invited = [...this.#invited.entries()]
+      .filter(([, entry]) => now - entry.at < INVITE_TTL_MS)
+      .map(([uid]) => uid);
+
     return {
       ready: this.#ready,
       error: this.#error,
@@ -582,6 +706,8 @@ export class SocialHub {
       friends,
       requests,
       sent,
+      invites,
+      invited,
     };
   }
 
@@ -755,6 +881,83 @@ export class SocialHub {
     } catch (error) {
       return { ok: false, error: explainFirebaseError(error) };
     }
+  }
+
+  /**
+   * Put a room in front of a friend.
+   *
+   * The room has to exist first — this writes a code, not a game — so the
+   * caller creates or reuses one and hands it over. Only friends may be
+   * invited, which the rules enforce as well as this does: an invite is an
+   * offer to join a room somebody else controls, and that is not something
+   * a stranger holding your code should be able to put on your screen.
+   *
+   * One invite per friend, replacing whatever was there: inviting the same
+   * person into a second room should leave them with the room you are
+   * actually sitting in, not a choice of two.
+   */
+  async invite(uid, room) {
+    if (!this.#ready) return { ok: false, error: 'Not connected yet' };
+    if (!this.#friends.has(uid)) return { ok: false, error: 'Only friends can be invited' };
+    if (!isRoomCode(room)) return { ok: false, error: 'No room to invite anyone into' };
+
+    const { ref, set, serverTimestamp } = this.#sdk;
+    const friend = this.#profiles.get(uid)?.name ?? 'your friend';
+
+    try {
+      await set(ref(this.#db, `users/${uid}/invites/${this.#uid}`), {
+        name: safeName(this.#name, 'Player'),
+        room,
+        // The server's clock rather than this one. Both ends compare this
+        // against their own Date.now() to decide whether the invite is
+        // still worth anything, and a server stamp leaves one wrong clock
+        // in that sum instead of two.
+        at: serverTimestamp(),
+      });
+
+      // Kept because it cannot be read back: nobody may read another
+      // account's inbox, so this map is the only record that the invite
+      // exists. Stamped locally, which is all the expiry here needs.
+      this.#invited.set(uid, { room, at: Date.now() });
+      this.#publish();
+      return { ok: true, uid, room, name: friend };
+    } catch (error) {
+      warn('Could not send an invite', error);
+      return {
+        ok: false,
+        error: isPermissionDenied(error) ? RULES_OUT_OF_DATE : explainFirebaseError(error),
+      };
+    }
+  }
+
+  /**
+   * Take an invite off this list — joined, or not wanted.
+   *
+   * Dropped locally before the write goes out, because the row has been
+   * answered and a list that waits for the network to agree looks stuck.
+   */
+  async dismissInvite(uid) {
+    const had = this.#invites.delete(uid);
+    if (had) this.#publish();
+    if (!this.#ready) return { ok: false, error: 'Not connected yet' };
+
+    const { ref, set } = this.#sdk;
+    try {
+      await set(ref(this.#db, `users/${this.#uid}/invites/${uid}`), null);
+      return { ok: true };
+    } catch (error) {
+      warn('Could not clear an invite', error);
+      return { ok: false, error: explainFirebaseError(error) };
+    }
+  }
+
+  /** Withdraw every invite this device has sent. The room has gone. */
+  async withdrawInvites() {
+    const targets = [...this.#invited.keys()];
+    if (!targets.length) return { ok: true };
+    this.#invited.clear();
+    this.#publish();
+    return this.#deleteInvites(targets);
   }
 
   /** Remove a friend, from both lists. Their copy goes too — see acceptRequest. */

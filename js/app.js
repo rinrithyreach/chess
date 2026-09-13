@@ -78,7 +78,10 @@ async function boot() {
       social = new SocialHub();
       // Subscribing before starting so the panel has a first paint —
       // "Connecting…" — rather than sitting empty through the round trip.
-      social.subscribe((state) => ui.renderSocial(state));
+      social.subscribe((state) => {
+        ui.renderSocial(state);
+        noticeInvites(state);
+      });
     }
 
     // Before start(), so the very first presence write already says whether
@@ -205,6 +208,70 @@ async function boot() {
       warn('Could not start online session', error);
       return { ok: false, error: error.message ?? 'Could not connect' };
     }
+  }
+
+  /**
+   * A room to invite somebody into, hosting one if there is not already
+   * a suitable one on screen.
+   *
+   * The room on screen is reused only while a seat is still free. That is
+   * the "they are not answering, ask somebody else" case, and it must not
+   * quietly abandon the room the first invite pointed at.
+   *
+   * A new room is hosted under the name and picture this device is known
+   * by, from storage, because an invite is sent from the friends panel and
+   * never passes the form that would otherwise ask for them.
+   */
+  async function ensureInvitableRoom() {
+    const online = controller.getSnapshot().state?.online;
+    if (online?.roomCode && online.waitingForOpponent) {
+      return { ok: true, roomCode: online.roomCode };
+    }
+    if (online?.roomCode) return { ok: false, error: 'Finish this game first' };
+
+    const started = await goOnline();
+    if (!started.ok) return { ok: false, error: started.error ?? 'Online play unavailable' };
+
+    const profile = storage.loadProfile();
+    const result = await controller.createRoom({
+      name: profile.name || 'Player',
+      avatar: storage.loadAvatars().online ?? null,
+    });
+    // A failure here has already been said out loud, in the controller's
+    // own toast. Saying it again in different words would be worse.
+    if (!result.ok) return { ok: false };
+
+    ui.showWaitingRoom(result.roomCode);
+    return { ok: true, roomCode: result.roomCode };
+  }
+
+  /**
+   * Say something when an invitation arrives.
+   *
+   * The badge on the Friends button is the signal that keeps — but it is
+   * on the menu, and somebody in the middle of a game against the bot is
+   * not looking at the menu. An invite is only good for a few minutes, so
+   * it earns one interruption: a sound and a line, and nothing at all
+   * while the panel it would point at is already open.
+   */
+  const seenInvites = new Set();
+
+  function noticeInvites(state) {
+    const invites = state.invites ?? [];
+    const live = new Set(invites.map((invite) => invite.uid));
+    // Forgotten as it goes, so the same friend asking again is news again.
+    seenInvites.forEach((uid) => {
+      if (!live.has(uid)) seenInvites.delete(uid);
+    });
+
+    const fresh = invites.filter((invite) => !seenInvites.has(invite.uid));
+    fresh.forEach((invite) => seenInvites.add(invite.uid));
+    if (!fresh.length || ui.isFriendsOpen()) return;
+
+    sound.play('move');
+    // One line for a burst that arrived together, like the chat notice.
+    const last = fresh[fresh.length - 1];
+    ui.toast(`${last.name} invited you to play`);
   }
 
   /**
@@ -664,6 +731,70 @@ async function boot() {
       ui.clearFriendCodeInput();
       ui.toast('Request sent');
     },
+
+    /**
+     * Invite a friend into a game.
+     *
+     * The room comes first, because an invite is a room code and there is
+     * no code until somebody is hosting. So one tap hosts a room, puts its
+     * code in front of the friend, and leaves this player on the waiting
+     * screen — with the code still on it, for a friend who would rather
+     * type it than tap it.
+     */
+    onInviteFriend: async ({ uid }) => {
+      sound.unlock();
+      const hub = await ensureSocial();
+      if (!hub) return;
+
+      const room = await ensureInvitableRoom();
+      if (!room.ok) {
+        if (room.error) ui.toast(room.error, 'warn');
+        return;
+      }
+      if (ui.isFriendsOpen()) ui.closeModal('friends');
+
+      const result = await hub.invite(uid, room.roomCode);
+      if (!result.ok) {
+        ui.toast(result.error ?? 'Could not send that invite', 'warn');
+        return;
+      }
+      ui.toast(`Invited ${result.name}`);
+    },
+
+    /**
+     * Take somebody up on an invitation.
+     *
+     * Spent either way: the invite named one room, and after this we are
+     * either in it or it was never going to happen. Leaving it on the list
+     * would only offer a second go at a room that has gone.
+     */
+    onAcceptInvite: async ({ uid }) => {
+      sound.unlock();
+      const hub = await ensureSocial();
+      const invite = hub?.getState().invites.find((entry) => entry.uid === uid);
+      if (!invite) {
+        ui.toast('That invite has gone', 'warn');
+        return;
+      }
+
+      ui.closeModal('friends');
+      const started = await goOnline();
+      if (!started.ok) {
+        ui.toast(started.error ?? 'Online play unavailable', 'error');
+        return;
+      }
+
+      const profile = storage.loadProfile();
+      const result = await controller.joinRoom(invite.room, {
+        name: profile.name || 'Player',
+        avatar: storage.loadAvatars().online ?? null,
+      });
+      hub.dismissInvite(uid);
+      if (result.ok) ui.showScreen('game');
+    },
+
+    /** No thanks. The sender finds out by nobody arriving. */
+    onDeclineInvite: ({ uid }) => social?.dismissInvite(uid),
 
     onAcceptRequest: async ({ uid }) => {
       const result = await social?.acceptRequest(uid);

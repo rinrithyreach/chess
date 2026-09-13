@@ -290,6 +290,31 @@ label on that uid, kept in local storage *and* on the profile row, and
 reclaimed from either on the next visit rather than a new one being claimed,
 which would strand every friend holding the old one.
 
+**Inviting somebody to play** — the point of keeping a list. Every friend
+on it has an **Invite** button, and one tap does the whole thing: it hosts
+a room, puts that room's code in front of them, and leaves you on the
+waiting screen. On their phone the invitation appears at the top of the
+Friends panel with **Join** and **Ignore**, the menu button carries a count,
+and a line says who is asking even if they are in the middle of something
+else. Joining needs no code typed and none read out — but the code is still
+on the waiting screen for a friend who would rather type it.
+
+An invitation is the one thing in that panel with a clock on it, because it
+names a room rather than a person and a room only exists while its host is
+sitting in it. So it expires by itself after three minutes — hidden on the
+receiving side, and actually deleted from the database on the sending side
+— and leaving the room takes every invitation into it along as well. That
+is deliberate: an invitation pointing at a room that has gone is worse than
+no invitation, because tapping Join on one gets "room not found", which
+reads like a broken app rather than a late reply.
+
+Only somebody already on your list can send you one, which is stricter than
+a friend request on purpose. A request from a stranger is a name and a
+question you can decline; an invitation is an offer to walk into a room
+somebody else controls, and that is not something a guessed code should be
+able to put on your screen. The rules enforce it as well as the client
+does.
+
 **Online status** — a friend shows as **Online**, **In a game**, or offline
 with a rough "last seen", each with a coloured dot so a list can be scanned
 rather than read. Presence is written when the app opens and cleared by an
@@ -1043,7 +1068,8 @@ beside them, and neither one dies with a game:
       "presence": { "state": "playing", "at": 1736300042000 },
       "friends":  { "def456…": { "at": 1736200000000 } },
       "requests": { "ghi789…": { "name": "Sam", "code": "P4XB2T", "at": 1736290000000 } },
-      "sent":     { "jkl012…": { "at": 1736295000000 } }
+      "sent":     { "jkl012…": { "at": 1736295000000 } },
+      "invites":  { "def456…": { "name": "Sam", "room": "K7M2QD", "at": 1736299000000 } }
     }
   }
 }
@@ -1067,6 +1093,20 @@ rules expression is the state *before* the write, the same update can delete
 the request it is relying on, which is how both lists and both cleanups land
 atomically. Removing a friend is allowed without that proof, since a delete
 cannot be used to put anything anywhere.
+
+`invites` is an inbox like `requests`, with one difference that carries the
+whole feature: a request may be written by anybody who knows your code,
+while an invite may only be written by somebody **already on your friends
+list** — `root.child('users').child($uid).child('friends').child($fromUid)`
+has to exist. Deleting one is exempt from that check, so an invitation can
+still be withdrawn after a falling-out. There is no lock on the room code
+itself beyond its shape, because a room code is not a secret: knowing one
+has always been the way into a game.
+
+Nobody can read what they have written into somebody else's inbox, so the
+sending device keeps its own record of what it has sent. That is what the
+"Invited" on a row is drawn from, and what the withdrawal aims at when the
+room goes.
 
 Each friend on your list gets one profile listener and one presence listener,
 rebuilt from the list whenever it changes rather than patched on add and
@@ -1111,7 +1151,10 @@ words in their opponent's mouth; it must be text or one of eight emote ids,
 and at most 160 characters, so the log cannot become file storage. A profile
 picture is held to exactly the same rule as a seat picture — the same line,
 checked by the test suite to be the same line. A friend request can only be
-written by the person it is from, and never to yourself.
+written by the person it is from, and never to yourself. An **invitation**
+is held tighter still: only somebody already on your list may write one,
+and it may carry nothing but a name, a room code of the right shape, and a
+time.
 
 Two things are worth saying plainly. **Either player can delete the other's
 messages**, because both can write the room and a deletion needs only write
@@ -1128,9 +1171,18 @@ anything of yours. But a friends list built on browser-local credentials is a
 friends list that a cleared cache deletes, and this is the honest ceiling on
 what accounts mean here until real sign-in exists.
 
+What an invitation does **not** protect you from is a friend you have
+stopped wanting to hear from: they can keep sending them for as long as
+they are on your list. The answer to that is the same as the answer to an
+unpleasant opponent — take them off it, which is one tap and clears both
+sides.
+
 **Rate limiting and cleanup are not implemented.** An authenticated user can
 create unlimited rooms, and rooms are never deleted. Nor are profiles,
-handles or presence rows. Before running this publicly you would want a
+handles or presence rows. Expired invitations are the one thing here that
+does clean up after itself, and only because the client that sent it is
+still running; one sent by a tab that was then closed is left behind,
+invisible to everybody, until that device sends the next one. Before running this publicly you would want a
 scheduled cleanup of stale rooms and handles, App Check, and a server-side
 cap on how many requests one account can send.
 
@@ -1236,7 +1288,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, the tournament ladder **30**, Speed Chess **57** (35 for the clock, 22 for playing the bot on it), and chat, emotes, friends and presence **88**, with a further **15** run against the deployed site and the real Firebase project rather than a stand-in. The groups were run separately, so
+Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, the tournament ladder **30**, Speed Chess **57** (35 for the clock, 22 for playing the bot on it), and chat, emotes, friends and presence **108**, with a further **15** run against the deployed site and the real Firebase project rather than a stand-in. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -1265,7 +1317,7 @@ the totals are reported separately rather than as one number:
 | **Speed Chess (Chromium)** | **35** | **The form (four controls, each named as the game it is, one chosen, spelled out for a screen reader), then the clock itself: full balances at the start, neither side running, and an idle clock that does not move over a real second of waiting. White's first move starts BLACK's clock and costs White nothing; the increment is paid to whoever moved; the lit readout is the right player's card, checked both ways round, because the cards are laid out by orientation rather than colour and a count would not catch a swapped mapping. A flag falls on its own with nobody touching the board — the game ends `finished`, winner Black, reason `timeout`, "White ran out of time" — and the frozen board then refuses another move. A reload resumes with the stored balances and the clock running again rather than frozen. A plain local game still has no clock and shows none. Caught a real bug: the readout was painted from the controller's snapshot, which is only replaced when the session publishes, so between two moves it stood still** |
 | **Speed Chess vs the bot (Chromium)** | **22** | **The opponent choice (the bot by default, no second name box for it, the box coming back for a friend), then a real game: the mode stays `speed` with a bot in the other seat, the bot answers and hands the clock back, and its thinking comes off ITS clock — measured on 5 + 0 where no increment muddies the arithmetic, and separately on 3 + 2 where a bot thinking for under two seconds correctly ends up AHEAD. Left under a second it still produces a move instead of flagging mid-search, and inside the time it had. A saved game records that a bot was in it and resumes with one — checked by playing a move and watching it reply, not just by reading the record. Two people on one device still get a game where nothing answers for Black** |
 | **The deployed site (Chromium ×2 + real project)** | **15** | **The published URL on a phone viewport, the real SDK from the CDN, the real rules: two anonymous accounts claim two friend codes, one adds the other by code, the request arrives with the right name, accepting writes both lists, then a real room with a real message and a real emote crossing between them, a move landing after the conversation, and presence moving to "in a game" on the friend's screen. It removes its own rooms, profiles, presence, friendships and handles afterwards, so the database is left as it was found. Caught a real bug: a friend whose presence had not arrived yet was being announced as offline** |
-| **Chat, emotes, friends, presence (Chromium ×2–3)** | **88** | **Twelve of them read `firebase/database.rules.json` itself and assert what it says — that a message can only be written as yourself *or left exactly as it was*, that a colour must match the seat you hold, that a friends list is readable only by its owner, that somebody may add themselves to yours only while your request stands, that a request cannot be sent to yourself, and that the profile-picture rule is byte-for-byte the seat-picture rule. The rest drive two and three real browsers against a database that enforces that rule text. Two players talk: what you send lands on your own side and the other side, attributed to the seat, counted as unread while the sheet is shut and cleared when it opens. An emote arrives named, pops on the sender's card, and is drawn from the receiver's own list. `<img src=x onerror=alert(1)>` arrives as characters and creates no element. **A move after a conversation is not refused** — the check the "unchanged" rule clauses exist for, and the one that would have broken every game after the first message. A log of 60 is shown 40 deep, oldest dropped, and sending into a full log trims the room rather than growing it. Blank, whitespace-only, over-long and unknown-emote sends are each refused for their own reason, and a second send in the same instant is refused for the cooldown. With the setting off the button is gone, both sends refuse, and nothing arrives on screen. Two devices claim two different friend codes, each handle points back at its claimer, a request crosses with the right name, accepting writes both lists and clears both cleanups, and removing clears both. Presence follows a game: starting one moves a friend to "In a game" on the other device without anybody reopening the panel. A reload reclaims the same code rather than a second one. Then the whole thing again against rules that know none of it: the game is still playable and the move still crosses, the message is refused with an explanation, and the friends panel says the rules need deploying rather than sitting empty. It also holds the mode list in place: the five modes in their intended order, and choosing any one of them marking that one and only that one — measured from computed styles after the transition has finished, because a row caught mid-fade looks selected and this project has been fooled by that twice. That check found a real bug: Online Multiplayer could not be highlighted at all, because the rule keyed on a class its label had never carried. Zero console errors** |
+| **Chat, emotes, friends, presence, invitations (Chromium ×2–3)** | **108** | **Fifteen of them read `firebase/database.rules.json` itself and assert what it says — that a message can only be written as yourself *or left exactly as it was*, that a colour must match the seat you hold, that a friends list is readable only by its owner, that somebody may add themselves to yours only while your request stands, that a request cannot be sent to yourself, that an invitation may only be written by somebody already on the list while withdrawing one is always allowed, and that the profile-picture rule is byte-for-byte the seat-picture rule. The rest drive two and three real browsers against a database that enforces that rule text. Two players talk: what you send lands on your own side and the other side, attributed to the seat, counted as unread while the sheet is shut and cleared when it opens. An emote arrives named, pops on the sender's card, and is drawn from the receiver's own list. `<img src=x onerror=alert(1)>` arrives as characters and creates no element. **A move after a conversation is not refused** — the check the "unchanged" rule clauses exist for, and the one that would have broken every game after the first message. A log of 60 is shown 40 deep, oldest dropped, and sending into a full log trims the room rather than growing it. Blank, whitespace-only, over-long and unknown-emote sends are each refused for their own reason, and a second send in the same instant is refused for the cooldown. With the setting off the button is gone, both sends refuse, and nothing arrives on screen. Two devices claim two different friend codes, each handle points back at its claimer, a request crosses with the right name, accepting writes both lists and clears both cleanups, and removing clears both. Presence follows a game: starting one moves a friend to "In a game" on the other device without anybody reopening the panel. A reload reclaims the same code rather than a second one. Then the whole thing again against rules that know none of it: the game is still playable and the move still crosses, the message is refused with an explanation, and the friends panel says the rules need deploying rather than sitting empty. It also holds the mode list in place: the five modes in their intended order, and choosing any one of them marking that one and only that one — measured from computed styles after the transition has finished, because a row caught mid-fade looks selected and this project has been fooled by that twice. That check found a real bug: Online Multiplayer could not be highlighted at all, because the rule keyed on a class its label had never carried. Then invitations, on three browsers at once: a friend who is about can be asked, one who is not on the list cannot — and a third browser going round the client and writing straight at the database is refused by the rules, which is the check that matters, since the client is the half an attacker replaces. One tap hosts a room, stands in it, gets the panel out of the way, and writes an invitation naming that room, under the right name, carrying nothing else; the row for that friend then says "Invited" and will not send a second. Cancelling the room withdraws it rather than leaving it pointing at a room that has gone. Asked again, the other phone shows a count with the panel shut, the invitation named and offering both answers, and Join seats both players in that one room with no code typed anywhere — after which the invitation is deleted and the count is gone. An invitation seeded three minutes old is not offered at all, neither in the panel nor in the state behind it. And the only write refused in the whole run is the one that was supposed to be. Zero console errors** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
@@ -1440,6 +1492,7 @@ And two from building that WebGL board:
 | 43 | Open Friends from the menu | A six-character code appears; copy it |
 | 44 | Type your name in the Friends panel | It is remembered, and the New Game form offers the same name |
 | 45 | Turn Chat & Emotes off, then join a game | No chat button; nothing arrives and nothing can be sent |
+| 46 | Open Friends with nobody on the list | No Game invites section at all, and the empty line explains what to do |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 
@@ -1467,6 +1520,11 @@ Positions for tests 9–14 are one tap away via the DEBUG presets below.
 | 36 | Swap friend codes and add each other | A request appears with the right name; accepting puts each on the other's list |
 | 37 | Start a game while a friend watches their list | They see you move from Online to In a game |
 | 38 | Close the tab | The friend sees you go offline within moments |
+| 39 | Tap Invite beside a friend | You land on the waiting screen with a code; their phone shows a count on Friends |
+| 40 | Open their Friends panel | The invitation is at the top, named, with Join and Ignore |
+| 41 | Tap Join | Both devices are in the same game, no code typed anywhere |
+| 42 | Invite, then Cancel the room | The invitation disappears from their panel rather than pointing at a dead room |
+| 43 | Invite somebody who is offline | The button is there but refuses, and says why |
 
 ---
 
@@ -1605,23 +1663,37 @@ the DOM**. Set it to `false` before shipping.
    site data deletes it, and a phone is a different person from a laptop.
    Real sign-in is the fix and is a Phase 4 concern; nothing about the data
    model would have to change, because everything already hangs off a uid.
-10. **You cannot yet invite a friend into a game.** The list shows who is
-   about; starting a game with one of them still means passing a room code.
-   The pieces for it are all here — presence says who is free, and a room
-   code is a string — so it is a small addition rather than a new system.
-11. **Chat has no moderation beyond a mute.** The send cooldown lives on the
+10. **An invitation only reaches somebody with the app open.** There are no
+   push notifications, so an invite lands in a panel rather than on a lock
+   screen: a friend who has the tab closed will never see it, and it will
+   have expired by the time they do. Presence is what makes that workable —
+   the button is refused for somebody who is not there — but "Online" can
+   be up to a couple of minutes stale in the optimistic direction, so an
+   invitation can still be sent into an empty room. Real notifications mean
+   a service worker and FCM, which means a server, which is a Phase 8
+   concern.
+11. **An invitation sent by a tab that is then closed is left behind.** It
+   expires from view on both sides after three minutes, and the sender
+   deletes it when the room goes — but that deletion runs in the sender's
+   browser, so a tab closed before then leaves the row in the database,
+   invisible to everybody, until that device sends its next one. Nothing
+   here can fix that without a server; an `onDisconnect` handler could
+   cover the common case and was left out deliberately, because it would
+   have to be registered per recipient and would then fire against
+   whatever invitation happened to be there at the time.
+12. **Chat has no moderation beyond a mute.** The send cooldown lives on the
    sender, so it slows a finger rather than a modified client; the emote set
    is chosen so that nothing in it can be aimed at somebody; and either
    player can delete the other's messages, because both can write the room.
    The switch in Settings is the real protection. A reporting or blocking
    system would need a server.
-12. **Presence can be up to a couple of minutes stale in one direction.**
+13. **Presence can be up to a couple of minutes stale in one direction.**
    Firebase clears it on disconnect, which covers the ordinary case
    server-side; a client that dies without the server noticing is caught
    instead by `PRESENCE_STALE_MS`, so a friend can show as online a little
    after they have gone. Shortening it means a more frequent heartbeat,
    which is the trade.
-13. **Two modern CSS features are used, both with fallbacks.** `:has()` powers
+14. **Two modern CSS features are used, both with fallbacks.** `:has()` powers
    the setup screen's "this is the mode you picked" highlight — keyed on the
    row not being *disabled*, rather than on a class every label has to
    remember to carry (unsupported browsers lose only that highlight),
@@ -1640,7 +1712,7 @@ the DOM**. Set it to `false` before shipping.
 | **1** | Local chess core — board, rules, local two-player, history, save, responsive UI, controls | ✅ **Complete** |
 | **2** | Firebase multiplayer — anon auth, create/join room, room codes, two-device sync, reconnect, presence, rematch, resign, draw offers | ✅ **Complete** |
 | **3** | Clocks — 1 / 3 / 5 / 10 / 15 minute | Next |
-| **4** | Accounts — username, profile, match history, statistics | Partly — a name, a picture, a friend code, friends and presence all exist, on anonymous sign-in; no real accounts, history or statistics yet |
+| **4** | Accounts — username, profile, match history, statistics | Partly — a name, a picture, a friend code, friends, presence and invitations to play all exist, on anonymous sign-in; no real accounts, history or statistics yet |
 | **5** | Competitive — ELO, leaderboard, matchmaking, spectators | Planned |
 | **6** | AI — opponent, difficulty levels, analysis, hints | Planned |
 | **7** | Advanced chess — PGN replay, opening recognition, analysis, blunder detection | Planned |
