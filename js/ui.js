@@ -353,6 +353,11 @@ export class UI {
     ['input-white', 'input-black', 'input-online-name', 'input-my-name',
       'input-rename-top', 'input-rename-bottom']
       .forEach((id) => this.#dom[id]?.setAttribute('maxlength', String(NAME_MAX_LENGTH)));
+
+    // How long an emote bubble lasts is one number, and both halves of it
+    // read this: the animation from here, and the timer that hides the
+    // bubble from the constant directly.
+    document.documentElement.style.setProperty('--emote-bubble', `${EMOTE_BUBBLE_MS}ms`);
     if (this.#dom['my-code']) this.#dom['my-code'].textContent = FRIEND_CODE_BLANK;
 
     // Promotion choices
@@ -923,7 +928,7 @@ export class UI {
   }
 
   /**
-   * Put an emote on the sender's card for a couple of seconds.
+   * Put an emote on the sender's card for EMOTE_BUBBLE_MS.
    *
    * The class is removed and forced through a reflow before being added
    * again, so a second emote replays the animation instead of sitting still

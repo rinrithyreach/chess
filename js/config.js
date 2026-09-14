@@ -373,8 +373,23 @@ export const CHAT_HISTORY = 40;
  */
 export const CHAT_COOLDOWN_MS = 700;
 
-/** How long an emote sits on its sender's player card, in ms. */
-export const EMOTE_BUBBLE_MS = 2600;
+/**
+ * How long an emote sits on its sender's player card, in ms.
+ *
+ * Long enough to be seen by somebody who was looking at the board rather than
+ * at the cards when it arrived — which is nearly always, since the board is
+ * the reason both people are here. At the old 2.6s an emote sent while the
+ * other player was thinking about a move had usually gone by the time they
+ * looked up, so it registered as nothing at all.
+ *
+ * This is the ONLY place the duration is written. The stylesheet reads it
+ * from the `--emote-bubble` custom property, which ui.js sets from here at
+ * startup, so the animation and the timer that hides the bubble cannot
+ * disagree — and when they disagreed the shorter one won and looked broken,
+ * either a bubble vanishing mid-animation or one sitting finished and faded
+ * until the timer caught up.
+ */
+export const EMOTE_BUBBLE_MS = 5000;
 
 // -------------------------------------------------------------------------
 // Friends, and who is about

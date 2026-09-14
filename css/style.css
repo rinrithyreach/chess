@@ -2368,21 +2368,49 @@ body.is-modal-open {
 }
 
 /*
-  2.6s mirrors EMOTE_BUBBLE_MS in js/config.js, which is what actually takes
-  the bubble off screen. If they disagree, the shorter one wins and looks
-  broken — either a bubble that vanishes mid-animation or one that sits
-  finished and faded until the timer catches up.
+  --emote-bubble is set on the root by ui.js from EMOTE_BUBBLE_MS, which is
+  also what takes the bubble off screen. One number, so the animation and the
+  timer cannot disagree — when they did, the shorter one won and looked
+  broken: a bubble vanishing mid-animation, or one sitting finished and faded
+  until the timer caught up. The fallback is only for a page whose scripts
+  have not run, and matches the constant.
 */
 .player-card__emote.is-popping {
-  animation: emote-pop 2.6s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+  animation: emote-pop var(--emote-bubble, 5000ms) cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
 }
 
+/*
+  The percentages are tuned so that lengthening the bubble lengthens the part
+  worth lengthening. Arriving and leaving are gestures — about 300ms and
+  500ms — and stretching those just makes the bubble feel slow to appear; it
+  is the STILL part in the middle that decides whether somebody looking at
+  the board gets a chance to see it. At 5s that is 300ms in, 250ms settling,
+  3.95s held, 500ms out.
+*/
 @keyframes emote-pop {
   0%   { opacity: 0; transform: translateY(6px) scale(0.6); }
-  12%  { opacity: 1; transform: translateY(0) scale(1.12); }
-  22%  { transform: translateY(0) scale(1); }
-  82%  { opacity: 1; transform: translateY(0) scale(1); }
+  6%   { opacity: 1; transform: translateY(0) scale(1.12); }
+  11%  { transform: translateY(0) scale(1); }
+  90%  { opacity: 1; transform: translateY(0) scale(1); }
   100% { opacity: 0; transform: translateY(-8px) scale(0.9); }
+}
+
+/*
+  Reduced motion keeps the bubble and drops the travel. It still has to fade
+  out on its own, because the class is what the timer removes — a bubble left
+  fully opaque would simply disappear at the end instead of leaving.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .player-card__emote.is-popping {
+    animation: emote-hold var(--emote-bubble, 5000ms) linear forwards;
+  }
+
+  @keyframes emote-hold {
+    0%   { opacity: 0; }
+    4%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
 }
 
 /* ------------------------------------------------------------ chat sheet -- */
