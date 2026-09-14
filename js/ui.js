@@ -22,6 +22,7 @@ import {
   EMOTES,
   emote,
   CHAT_MAX_LENGTH,
+  NAME_MAX_LENGTH,
   EMOTE_BUBBLE_MS,
   FRIEND_CODE_LENGTH,
   PRESENCE,
@@ -340,6 +341,12 @@ export class UI {
     // code field is: the markup cannot import a constant.
     this.#dom['chat-input']?.setAttribute('maxlength', String(CHAT_MAX_LENGTH));
     this.#dom['input-friend-code']?.setAttribute('maxlength', String(FRIEND_CODE_LENGTH));
+
+    // Every box a name can be typed into, from one number. Four boxes, and
+    // the markup cannot import the constant, so the attributes there are a
+    // fallback for a page whose scripts have not run rather than the source.
+    ['input-white', 'input-black', 'input-online-name', 'input-my-name']
+      .forEach((id) => this.#dom[id]?.setAttribute('maxlength', String(NAME_MAX_LENGTH)));
     if (this.#dom['my-code']) this.#dom['my-code'].textContent = FRIEND_CODE_BLANK;
 
     // Promotion choices
@@ -1082,7 +1089,14 @@ export class UI {
       const turnEl = this.#dom[`${prefix}-turn`];
       const card = this.#dom[`card-${prefix === 'top' ? 'top' : 'bottom'}`];
 
-      if (name) name.textContent = state.players[color]?.name ?? '';
+      // The card is one line with an ellipsis, and a name is now allowed to
+      // be long enough to reach it. The title carries the whole thing, so a
+      // clipped name can still be read rather than merely noticed.
+      if (name) {
+        const full = state.players[color]?.name ?? '';
+        name.textContent = full;
+        name.title = full;
+      }
       if (colorEl) colorEl.textContent = color === WHITE ? 'White' : 'Black';
 
       const avatar = card?.querySelector('.player-card__avatar');

@@ -49,6 +49,7 @@ import {
   PRESENCE_STALE_MS,
   PRESENCE_HEARTBEAT_MS,
   FRIEND_CODE_LENGTH,
+  NAME_MAX_LENGTH,
   MAX_FRIENDS,
   MAX_REQUESTS,
   INVITE_TTL_MS,
@@ -60,8 +61,15 @@ import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from './firebase-config.js';
 import { firebaseReady, explainFirebaseError, isPermissionDenied } from './firebase-client.js';
 import * as storage from './storage.js';
 
-/** What a name is allowed to be, before it is anybody else's problem. */
-const NAME_MAX = 20;
+/**
+ * What a name is allowed to be, before it is anybody else's problem.
+ *
+ * The cap itself is NAME_MAX_LENGTH in config.js, which is also what the
+ * database rules enforce — a second number here could drift from the one the
+ * rules were written against, and the first anybody would know of it is a
+ * write being refused.
+ */
+const NAME_MAX = NAME_MAX_LENGTH;
 
 /** Said whenever the rules are the thing standing in the way. */
 const RULES_OUT_OF_DATE = 'Friends need the database rules deployed — see firebase/database.rules.json';

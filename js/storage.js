@@ -21,6 +21,7 @@ import {
   clampGauntletRound,
   clampBoardZoom,
   FRIEND_CODE_LENGTH,
+  NAME_MAX_LENGTH,
   STATUS,
   TERMINAL_STATUSES,
   GAME_MODE,
@@ -176,7 +177,9 @@ export function loadProfile() {
   const source = raw && typeof raw === 'object' ? (raw.profile ?? raw) : null;
   if (!source) return { ...NO_PROFILE };
 
-  const name = typeof source.name === 'string' ? source.name.trim().slice(0, 20) : '';
+  const name = typeof source.name === 'string'
+    ? source.name.trim().slice(0, NAME_MAX_LENGTH)
+    : '';
   const code = typeof source.code === 'string' ? source.code.toUpperCase() : '';
   return {
     name: name || null,
@@ -187,7 +190,9 @@ export function loadProfile() {
 /** Merge into the stored profile; fields left out are left alone. */
 export function saveProfile(patch = {}) {
   const next = { ...loadProfile() };
-  if (typeof patch.name === 'string') next.name = patch.name.trim().slice(0, 20) || null;
+  if (typeof patch.name === 'string') {
+    next.name = patch.name.trim().slice(0, NAME_MAX_LENGTH) || null;
+  }
   if (typeof patch.code === 'string' && FRIEND_CODE_SHAPE.test(patch.code.toUpperCase())) {
     next.code = patch.code.toUpperCase();
   }

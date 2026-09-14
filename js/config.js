@@ -328,6 +328,31 @@ export function emote(id) {
 export const CHAT_MAX_LENGTH = 160;
 
 /**
+ * The longest a player's name may be, in characters.
+ *
+ * Like CHAT_MAX_LENGTH, this number lives in two places that have to agree:
+ * here, where it sets every name box's maxlength, and in
+ * firebase/database.rules.json, where it is enforced for the names that
+ * actually leave this device — your seat in a room, your profile, and the
+ * name attached to a friend request or an invitation. Matching them is what
+ * stops a name being typed that the database then refuses, which is a
+ * refusal that arrives after the fact with the box already emptied.
+ *
+ * **Raising it here means deploying the rules again.** Until they are
+ * deployed, a longer name still works everywhere it never left the device —
+ * a local, bot, speed, tournament or elemental game — and is refused for
+ * anything online.
+ *
+ * There is a limit at all, rather than none, for two reasons that have
+ * nothing to do with taste. Online, the whole room record is rewritten on
+ * every move, both names included, so a name is a cost paid again on every
+ * move by both devices. And the cards the name is drawn on are one line with
+ * an ellipsis, so past a point the extra characters cannot be seen by anyone
+ * anyway. Fifty is a long name and still a cheap one.
+ */
+export const NAME_MAX_LENGTH = 50;
+
+/**
  * How many messages a room keeps.
  *
  * Small on purpose. There is no server here to prune anything, so the log is
