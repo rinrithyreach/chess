@@ -18,6 +18,7 @@ import {
   FEN_ONLY_MODES,
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
+  AIM_STAGE,
   DEFAULT_GAUNTLET,
   CLOCK_TICK_MS,
   GAUNTLET_LENGTH,
@@ -30,8 +31,9 @@ import {
   warn,
 } from './config.js';
 import { isAvatar } from './avatar.js';
-// The element table, for naming a power in a toast. Pure data, no engine.
-import { ELEMENTS } from './elemental.js';
+// The element table, for naming a power in a toast and for telling the two
+// capture-triggered powers from the five that are chosen. Pure data, no engine.
+import { ELEMENTS, POWER_TRIGGER } from './elemental.js';
 import { LocalSession, SESSION_ACTION } from './sessions/local-session.js';
 import * as storage from './storage.js';
 import sound, { SOUND } from './sound.js';
@@ -697,6 +699,73 @@ export class GameController {
   }
 
   /**
+   * Every power the side to move still holds — the panel's list.
+   *
+   * Empty in an ordinary game, and empty on a device that cannot move this
+   * colour, so the panel can render it without asking which mode it is in.
+   */
+  getArsenal() {
+    return this.#session.getArsenal?.() ?? [];
+  }
+
+  /**
+   * Fire a power chosen by element rather than by piece.
+   *
+   * The other way round from beginAiming(), which starts at the piece. Both
+   * end in the same place, and deliberately: choosing Freeze from the panel
+   * selects the rook that will cast it, so the board looks exactly as it would
+   * have done had the player tapped that rook themselves, and the tap after
+   * this one is the same tap either way.
+   *
+   * The one thing it will not do is pick the caster when picking the caster is
+   * the decision. Two charged rooks are two quite different freezes.
+   */
+  async castPower(element) {
+    const row = this.getArsenal().find((entry) => entry.element === element);
+    if (!row) return { ok: false, error: 'Not this game' };
+
+    if (!row.squares.length) {
+      this.#toast(`${row.info.emoji} ${row.info.power} — all spent`, 'warn');
+      return { ok: false, error: 'Spent' };
+    }
+    // Fire and Lightning have no button anywhere else either; saying why is
+    // better than a row that does nothing when pressed.
+    if (row.info.trigger === POWER_TRIGGER.CAPTURE) {
+      this.#toast(`${row.info.emoji} ${row.info.power} goes off by itself when that piece captures`);
+      return { ok: false, error: 'Not a chosen power' };
+    }
+    if (this.#state?.elemental?.powerUsed) {
+      this.#toast('One power a turn — make your move', 'warn');
+      return { ok: false, error: 'Already used' };
+    }
+    if (row.blockedBy) {
+      this.#toast('A charged Light bishop holds the shadows shut', 'warn');
+      return { ok: false, error: 'Blocked' };
+    }
+    if (!row.ready.length) {
+      this.#toast(`${row.info.power} has nothing to aim at`, 'warn');
+      return { ok: false, error: 'No targets' };
+    }
+
+    // Only one piece could cast it, so there is no choice to offer and asking
+    // for one would be ceremony.
+    if (row.ready.length === 1) {
+      this.#select(row.ready[0]);
+      return this.beginAiming();
+    }
+
+    this.#view.aiming = {
+      stage: AIM_STAGE.CAST,
+      element,
+      from: null,
+      name: row.info.power,
+      targets: [...row.ready],
+    };
+    this.#emitChange();
+    return { ok: true };
+  }
+
+  /**
    * Start aiming the selected piece's power.
    *
    * A power that needs no target — Cleanse — is fired on the spot instead of
@@ -718,6 +787,7 @@ export class GameController {
     if (!power.targets.length) return this.usePower(power.square, null);
 
     this.#view.aiming = {
+      stage: AIM_STAGE.AIM,
       element: power.element,
       from: power.square,
       name: power.info.power,
@@ -739,6 +809,14 @@ export class GameController {
     const aiming = this.#view.aiming;
     if (!aiming.targets.includes(square)) {
       this.cancelAiming();
+      return;
+    }
+    // The cast stage is asking who, not what at. Answering it hands straight
+    // over to the ordinary aim rather than firing, so the player gets the same
+    // two taps whichever end they came in from.
+    if (aiming.stage === AIM_STAGE.CAST) {
+      this.#select(square);
+      await this.beginAiming();
       return;
     }
     await this.usePower(aiming.from, square);

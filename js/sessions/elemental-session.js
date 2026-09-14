@@ -34,6 +34,7 @@ import {
   PIECE_WORTH,
   activeEffects,
   arcTarget,
+  arsenal,
   burnSquares,
   chargesAfterMove,
   chargesAfterRemoval,
@@ -387,6 +388,31 @@ export const withElemental = (Base) => class extends Base {
 
     return powerAt({
       square,
+      fen: state.fen,
+      color: state.turn,
+      charges: this.#charges,
+      isQuiet: (fen) => this.#isQuiet(fen),
+    });
+  }
+
+  /**
+   * Every power this side still holds, spent ones included.
+   *
+   * The panel's question rather than the power bar's: the bar is only ever
+   * about the piece in hand, and this is about what is left in the match. Not
+   * folded into getState() on purpose — it walks the board and probes the
+   * engine for the Shadow king, and the state is read on every tick and
+   * written into every save, neither of which wants to pay for a panel that
+   * is usually closed.
+   */
+  getArsenal() {
+    const state = super.getState();
+    if (!state || state.isGameOver) return [];
+    // Same gate as getPower: a device that cannot move this colour has no
+    // business being shown its powers, let alone offered them.
+    if (!this.#mayAct(state.turn)) return [];
+
+    return arsenal({
       fen: state.fen,
       color: state.turn,
       charges: this.#charges,

@@ -487,14 +487,34 @@
           sixth control. Hidden outright in every other game.
         -->
         <div class="powerbar" id="powerbar" hidden>
-          <span class="powerbar__glyph" id="power-glyph" aria-hidden="true">🔥</span>
-          <span class="powerbar__body">
-            <span class="powerbar__name" id="power-name">Burn</span>
-            <span class="powerbar__hint" id="power-hint">Select a piece</span>
-          </span>
-          <button type="button" class="btn btn--primary btn--tiny" id="btn-power" hidden>
-            Use
-          </button>
+          <div class="powerbar__row">
+            <span class="powerbar__glyph" id="power-glyph" aria-hidden="true">🔥</span>
+            <span class="powerbar__body">
+              <span class="powerbar__name" id="power-name">Burn</span>
+              <span class="powerbar__hint" id="power-hint">Select a piece</span>
+            </span>
+            <button type="button" class="btn btn--primary btn--tiny" id="btn-power" hidden>
+              Use
+            </button>
+            <!--
+              The way to the other six. The bar can only ever speak about the
+              piece in hand, and a charge is a glyph the size of a fingernail,
+              so without this the only way to know what you still hold is to
+              read all sixty-four squares.
+            -->
+            <button
+              type="button"
+              class="btn btn--ghost btn--tiny powerbar__toggle"
+              id="btn-powers-toggle"
+              aria-expanded="false"
+              aria-controls="powers-list"
+            >
+              All powers
+              <span class="powerbar__caret" aria-hidden="true">⌄</span>
+            </button>
+          </div>
+          <!-- Filled from ELEMENTS by #renderPowers — seven rows, always. -->
+          <ul class="powers" id="powers-list" hidden></ul>
         </div>
 
         <!-- Primary controls -->

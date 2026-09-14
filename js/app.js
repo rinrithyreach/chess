@@ -894,6 +894,14 @@ async function boot() {
 
     onCancelPower: () => controller.cancelAiming(),
 
+    // Chosen from the panel rather than from the piece. The controller works
+    // out whether that still needs a caster picked, so this end does not have
+    // to know there are two ways in.
+    onCastPower: async (element) => {
+      sound.unlock();
+      await controller.castPower(element);
+    },
+
     onAcceptDraw: () => controller.acceptDraw(),
     onDeclineDraw: () => controller.declineDraw(),
 

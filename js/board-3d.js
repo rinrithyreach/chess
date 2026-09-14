@@ -1811,7 +1811,12 @@ export class Board3D {
     // "your piece can go here", which is not what the next tap is going to do.
     const aiming = view?.aiming ?? null;
     if (aiming) {
-      place(aiming.from, HIGHLIGHT.selected, 0.008);
+      // There is no caster to light up in the cast stage — picking one is the
+      // question being asked — so `from` is null until it is answered. place()
+      // needs a real square, and a throw here is invisible: the controller
+      // catches what a listener throws so a broken view cannot stop the game,
+      // which means the whole UI would just quietly stop repainting.
+      if (aiming.from) place(aiming.from, HIGHLIGHT.selected, 0.008);
       (aiming.targets ?? []).forEach((square) => {
         const marker = place(square, ELEMENTAL_HIGHLIGHT.aim, 0.011);
         marker.scale.setScalar(0.5);

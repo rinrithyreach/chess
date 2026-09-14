@@ -2854,14 +2854,147 @@ body.is-modal-open {
 */
 .powerbar {
   display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  min-height: 52px;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--panel);
   transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+/* What the bar used to be, now that it is only the top line of it. */
+.powerbar__row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 42px;
+}
+
+.powerbar__toggle {
+  flex: none;
+  gap: 0.3rem;
+}
+
+.powerbar__caret {
+  display: inline-block;
+  font-size: 0.8em;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.powerbar__toggle[aria-expanded="true"] .powerbar__caret {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .powerbar__caret {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The seven powers, open
+
+   Always seven rows, spent ones included and greyed rather than dropped. The
+   list is read mid-game with a thumb hovering over it, and a row that vanishes
+   when its last piece dies takes the five below it up a place — which is how
+   you freeze with the queen you meant to shield with.
+   --------------------------------------------------------------------------- */
+.powers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.4rem 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.powers__item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) * 0.6);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.powers__item:hover:not(:disabled) {
+  background: var(--panel-soft);
+}
+
+.powers__item:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* Ready to fire right now — the only rows worth a thumb. */
+.powers__item[data-ready="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.powers__glyph {
+  flex: none;
+  width: 1.6rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.powers__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.powers__name {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.powers__who {
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+  How many pieces still hold it. A count, not a badge: it goes down and never
+  up, so it is the one number in the panel worth watching.
+*/
+.powers__count {
+  flex: none;
+  min-width: 2.1rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-faint);
+}
+
+.powers__item[data-ready="true"] .powers__count {
+  color: var(--text);
+}
+
+/* Whose turn it is, when it is not yours. */
+.powers__note {
+  padding: 0.3rem 0.5rem 0.1rem;
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  line-height: 1.35;
 }
 
 .powerbar__glyph {

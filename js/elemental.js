@@ -865,3 +865,56 @@ export function powerAt({ square, fen, color, charges, isQuiet }) {
 
   return { element, info, square, ready: targets.length > 0, targets, blockedBy };
 }
+
+/**
+ * Every power the side to move still holds, in a fixed order.
+ *
+ * powerAt() answers "what can THIS piece do", which is the right question once
+ * a piece is already in your hand. This answers the other one — "what do I
+ * still have" — which is the question asked before anything is picked up, and
+ * which the board on its own cannot answer: a charge is a small glyph on a
+ * square, so counting what is left means reading all sixty-four of them and
+ * knowing by heart which element each piece carries.
+ *
+ * One row per element, always, in ELEMENT_ORDER — including the ones that are
+ * spent. A panel drawn from this keeps the same seven rows in the same places
+ * for the whole match, so a power running out leaves a gap where it was
+ * instead of letting the rest shuffle up under the player's thumb.
+ *
+ * `ready` is the subset of `squares` that could fire right now, and it is
+ * empty for the capture-triggered powers by construction: Fire and Lightning
+ * are never offered, only announced, and a Use button beside a loaded Fire
+ * pawn would be a button that does nothing when pressed.
+ */
+export function arsenal({ fen, color, charges, isQuiet }) {
+  const board = boardFromFen(fen);
+  const held = new Map(ELEMENT_ORDER.map((id) => [id, []]));
+
+  board.forEach((piece, square) => {
+    if (piece.color !== color || !charges.has(square)) return;
+    const element = elementAt(piece, square);
+    if (element) held.get(element)?.push(square);
+  });
+
+  return ELEMENT_ORDER.map((element) => {
+    const info = ELEMENTS[element];
+    const squares = held.get(element) ?? [];
+
+    const ready = info.trigger === POWER_TRIGGER.TURN
+      ? squares.filter(
+        (square) => powerAt({ square, fen, color, charges, isQuiet })?.ready,
+      )
+      : [];
+
+    // Said out loud rather than left as an empty `ready`, because "nothing in
+    // reach" and "their Light bishop is holding this shut" are different
+    // problems and only one of them is worth waiting for.
+    const blockedBy = element === ELEMENT.SHADOW
+      && squares.length > 0
+      && !canTeleport({ fen, color, charges })
+      ? ELEMENT.LIGHT
+      : null;
+
+    return { element, info, squares, ready, blockedBy };
+  });
+}

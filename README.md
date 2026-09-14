@@ -183,6 +183,29 @@ be used per turn. The element is a pure function of the piece and its square,
 so nothing is tracked per piece except the charge, and a promoted piece simply
 arrives as whatever it has become, loaded.
 
+**All seven are on screen, and a power can be chosen instead of a piece.**
+*All powers* under the board opens a panel of the seven, each saying who
+carries it, how many of them are still charged, and why it can or cannot fire
+right now — *ready*, *nothing in reach*, *held shut*, *one power a turn*, *all
+spent*. The rows keep their places for the whole match, spent ones greyed
+rather than dropped, because the list is read with a thumb already moving and
+a row that vanishes when its last piece dies takes the five below it up a
+place.
+
+It is also the only way to read the rules mid-game: the card on the New Game
+form goes out of reach the moment you start, and the bar above the panel can
+only ever speak about the piece in your hand — which is the wrong half of the
+question before you have picked one up. "What do I still have" is not
+answerable from a board where a charge is a glyph the size of a fingernail
+and you have to know by heart which element each piece carries.
+
+Tapping a power works from the other end to tapping a piece, and the two meet
+in the middle. Choosing *Freeze* with one charged rook selects that rook and
+goes straight to aiming, exactly as if you had tapped it yourself. With two,
+it asks which — because two charged rooks are two quite different freezes,
+and picking one for you would be choosing the half of the decision that
+actually matters. Both ways in cost the same two taps.
+
 Three rules keep it chess underneath:
 
 **A king is never burned, frozen, shielded or struck.** Not only for balance.
@@ -1439,7 +1462,7 @@ resignation, and rejection of a third player or a bad code.
 
 ### Bugs this found
 
-Thirteen real bugs were caught and fixed. Three in Phase 1:
+Fourteen real bugs were caught and fixed. Three in Phase 1:
 
 1. **Every modal was an invisible full-screen click trap.** `.modal` sets
    `display: grid`, which silently overrides the `hidden` attribute (only
@@ -1581,6 +1604,31 @@ round trip lands, read as though it were empty because there is nothing there:
    The test that catches it aborts every remote Firebase request and then
    checks the picture is still there — which it is not, against the version
    without this fix.
+
+And one from the powers panel, which is the only bug here that was invisible
+by design:
+
+14. **Choosing a power from the panel froze the entire UI, silently.** The
+   panel can ask which piece should cast, and in that moment there is no
+   caster yet — so the aiming state carries a null square until the question
+   is answered. The 3D board had never seen one: it marks the caster on every
+   repaint, and a null square threw. Nothing went red. The controller wraps
+   every view listener so that a broken renderer cannot take the game down
+   with it, which is right, and it means a renderer throwing on every repaint
+   looks *exactly* like a UI that has decided to stop changing — no error, no
+   crash, stale pixels. Escape did nothing, the bar kept the wrong text, and
+   the power bar was still sitting there after a resignation, because none of
+   them had been repainted since. Fixed by not marking a caster that does not
+   exist yet. The flat board was unaffected, and not by luck — it compares
+   `square === aiming.from`, which is simply false everywhere when `from` is
+   null.
+
+   The lesson was the test rather than the fix. The suites all asserted "no
+   console errors", and that assertion **passed for the whole time the bug was
+   live** — a swallowed throw is a warning, not an error. The harness now
+   collects warnings too and every suite asserts that no view threw and got
+   caught. Putting the bug back proves it: the old check still passes, the new
+   one fails and names the line.
 
 ### Manual checklist
 

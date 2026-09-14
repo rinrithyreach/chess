@@ -32,6 +32,7 @@ import {
   SELECTABLE_UI_STYLES,
   DEFAULT_UI_STYLE,
   LOCKED_CONTROLS,
+  AIM_STAGE,
   isControlLocked,
   TOAST_MS,
   warn,
@@ -42,6 +43,27 @@ import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
 // be built from the same table the variant's rules are written against —
 // rather than from a second copy of them kept in step by hand.
 import { ELEMENTS, ELEMENT_ORDER, POWER_TRIGGER } from './elemental.js';
+
+/**
+ * The second line of a row in the powers panel: who holds it, and why you can
+ * or cannot press it.
+ *
+ * One line and one function, because the seven answers are mutually exclusive
+ * and the order they are tested in IS the explanation: "all spent" beats
+ * "nothing in reach", which beats "one a turn". Spread across the render loop
+ * as ternaries, that order stops being visible and starts being an accident.
+ */
+function powerLine(info, entry, { mine, used }) {
+  if (!mine) return info.piece;
+  if (!entry || !entry.squares.length) return `${info.piece} · all spent`;
+  // Fire and Lightning are never pressed, only announced. Saying so on the
+  // row is the whole reason they earn a place in a panel of buttons.
+  if (info.trigger === POWER_TRIGGER.CAPTURE) return `${info.piece} · on capture`;
+  if (entry.blockedBy) return `${info.piece} · held shut`;
+  if (used) return `${info.piece} · one power a turn`;
+  if (!entry.ready.length) return `${info.piece} · nothing in reach`;
+  return `${info.piece} · ready`;
+}
 
 /** A blank friend code, drawn the same way a blank room code is. */
 const FRIEND_CODE_BLANK = '-'.repeat(FRIEND_CODE_LENGTH);
@@ -134,6 +156,28 @@ export class UI {
   #confirmDismiss = false;
   #confirmAltValue = 'alt';
   #historyExpanded = false;
+
+  /**
+   * Whether the seven-power panel is open, and its rows once built.
+   *
+   * Closed to start with: the bar above it answers the common question on its
+   * own, and the panel is the one you open when you want to plan rather than
+   * move. The choice is deliberately NOT remembered across games — it costs
+   * one tap to reopen, and a panel that is already open on move one hides the
+   * bottom of the board before anybody has asked it to.
+   */
+  #powersOpen = false;
+  #powerRows = null;
+
+  /**
+   * The last thing render() was given.
+   *
+   * Kept for one reason: opening the powers panel changes nothing about the
+   * game, so no change event is coming to repaint it with. Rather than route
+   * a view-only tap out through the controller and back, the toggle repaints
+   * itself from here.
+   */
+  #lastSnapshot = null;
 
   /**
    * Messages that have arrived since the sheet was last open.
@@ -240,6 +284,7 @@ export class UI {
       'opponent-fields', 'opponent-picker', 'opponent-bot-hint',
       'mode-elemental', 'elemental-fields', 'elements-list',
       'powerbar', 'power-glyph', 'power-name', 'power-hint', 'btn-power',
+      'btn-powers-toggle', 'powers-list',
       'top-clock', 'bottom-clock',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
@@ -692,12 +737,14 @@ export class UI {
   render(snapshot) {
     const { state } = snapshot;
     if (!state) return;
+    this.#lastSnapshot = snapshot;
     this.#renderZoomControl(snapshot.settings);
     this.#renderPlayers(snapshot);
     this.#renderStatus(snapshot);
     this.#renderHistory(state);
     this.#renderControls(snapshot);
     this.#renderPowerBar(snapshot);
+    this.#renderPowers(snapshot);
     this.#chatOn = snapshot.settings?.chat !== false;
     this.#renderOnline(state);
     // Painted here as well as on every tick, so the readouts are right the
@@ -1178,15 +1225,24 @@ export class UI {
     // a mode, and a mode with no visible exit is a trap.
     if (view?.aiming) {
       const aimed = ELEMENTS[view.aiming.element];
-      say(aimed.emoji, view.aiming.name, 'Tap a highlighted square', 'Cancel', 'aiming');
+      // Which of the two taps this is. "Tap a highlighted square" is true of
+      // both and useless for telling them apart, and the difference matters:
+      // one of them costs a charge and the other does not.
+      const asking = view.aiming.stage === AIM_STAGE.CAST
+        ? 'Which piece should use it?'
+        : 'Tap a highlighted square';
+      say(aimed.emoji, view.aiming.name, asking, 'Cancel', 'aiming');
       return;
     }
 
     const power = this.#controller.getSelectedPower?.() ?? null;
     if (!power) {
       const spent = state.elemental.powerUsed;
-      say('🜁', 'Powers',
-        spent ? 'One a turn — make your move' : 'Select one of your pieces');
+      // Short enough to survive a 320px screen whole. The hint is one line
+      // with an ellipsis by design, and the All powers button beside it took
+      // room the longer wordings used to have — a hint that reads "Select one
+      // of your pie…" is worse than a shorter one that finishes its sentence.
+      say('🜁', 'Powers', spent ? 'One power a turn' : 'Select a piece');
       return;
     }
 
@@ -1202,7 +1258,7 @@ export class UI {
       return;
     }
     if (state.elemental.powerUsed) {
-      say(element.emoji, power.info.power, 'One power a turn — make your move');
+      say(element.emoji, power.info.power, 'One power a turn');
       return;
     }
     if (!power.ready) {
@@ -1210,6 +1266,133 @@ export class UI {
       return;
     }
     say(element.emoji, power.info.power, element.blurb, 'Use');
+  }
+
+  /**
+   * The seven powers, open.
+   *
+   * The power bar above can only ever speak about the piece in hand, which is
+   * the wrong half of the question before you have picked one up: "what do I
+   * still have" is not answerable from a board where a charge is a glyph the
+   * size of a fingernail and you have to know by heart which element each
+   * piece carries. This is that answer, and it is also the rules card — the
+   * one on the New Game form goes out of reach the moment the game starts.
+   *
+   * Seven rows, always, spent ones greyed rather than dropped. The list is
+   * read mid-game with a thumb already moving, and a row that vanishes when
+   * its last piece dies takes the five below it up a place.
+   */
+  #renderPowers(snapshot) {
+    const list = this.#dom['powers-list'];
+    const toggle = this.#dom['btn-powers-toggle'];
+    if (!list || !toggle) return;
+
+    const { state } = snapshot;
+    const on = Boolean(state.elemental) && !state.isGameOver;
+    toggle.hidden = !on;
+    if (!on) {
+      list.hidden = true;
+      return;
+    }
+
+    list.hidden = !this.#powersOpen;
+    toggle.setAttribute('aria-expanded', String(this.#powersOpen));
+    if (!this.#powersOpen) return;
+
+    if (!this.#powerRows) this.#buildPowerRows(list);
+
+    // Empty while the other side is to move — getArsenal() is gated the same
+    // way getPower() is. The rows stay up regardless: somebody reading what
+    // Vines does while the bot thinks should not have the panel blink out
+    // from under them.
+    const held = new Map(
+      this.#controller.getArsenal().map((row) => [row.element, row]),
+    );
+    const mine = held.size > 0;
+    const used = Boolean(state.elemental.powerUsed);
+
+    ELEMENT_ORDER.forEach((id) => {
+      const info = ELEMENTS[id];
+      const row = this.#powerRows.get(id);
+      if (!row) return;
+
+      const entry = held.get(id) ?? null;
+      const count = entry ? entry.squares.length : null;
+      const ready = Boolean(
+        entry && !used && !entry.blockedBy && entry.ready.length,
+      );
+
+      // Blank at nought rather than "×0", which would sit next to a row
+      // already saying "all spent" and add nothing but noise.
+      row.count.textContent = count ? `×${count}` : '';
+      row.item.dataset.ready = String(ready);
+
+      // Enabled whenever it is your turn, even when the power cannot fire —
+      // the refusals say something worth hearing ("their Light bishop holds
+      // it shut", "goes off by itself when that piece captures") and a
+      // disabled row cannot say anything at all on a screen with no hover.
+      row.item.disabled = !mine;
+      row.who.textContent = powerLine(info, entry, { mine, used });
+      row.item.setAttribute(
+        'aria-label',
+        `${info.name} — ${info.power}. ${info.detail}`,
+      );
+    });
+
+    this.#powerRows.get('note').hidden = mine;
+  }
+
+  /**
+   * Build the seven rows once and keep them.
+   *
+   * Not re-created on every render: the panel repaints on every tick of the
+   * clock, and replacing the element under a thumb mid-tap loses the tap.
+   */
+  #buildPowerRows(list) {
+    this.#powerRows = new Map();
+    list.textContent = '';
+
+    ELEMENT_ORDER.forEach((id) => {
+      const info = ELEMENTS[id];
+
+      const li = document.createElement('li');
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'powers__item';
+      item.dataset.power = id;
+      item.title = info.detail;
+
+      const glyph = document.createElement('span');
+      glyph.className = 'powers__glyph';
+      glyph.textContent = info.emoji;
+      glyph.setAttribute('aria-hidden', 'true');
+
+      const bodyEl = document.createElement('span');
+      bodyEl.className = 'powers__body';
+
+      const name = document.createElement('span');
+      name.className = 'powers__name';
+      name.textContent = info.power;
+
+      const who = document.createElement('span');
+      who.className = 'powers__who';
+
+      const count = document.createElement('span');
+      count.className = 'powers__count';
+
+      bodyEl.append(name, who);
+      item.append(glyph, bodyEl, count);
+      li.append(item);
+      list.append(li);
+
+      this.#powerRows.set(id, { item, who, count });
+    });
+
+    const note = document.createElement('li');
+    note.className = 'powers__note';
+    note.textContent = 'Your powers appear here on your turn.';
+    list.append(note);
+    this.#powerRows.set('note', note);
   }
 
   #renderControls({ state }) {
@@ -2291,6 +2474,22 @@ export class UI {
       this.#call(this.#dom.powerbar?.dataset.state === 'aiming'
         ? 'onCancelPower'
         : 'onUsePower');
+    });
+
+    this.#dom['btn-powers-toggle']?.addEventListener('click', () => {
+      this.#powersOpen = !this.#powersOpen;
+      // Repainted here rather than waited for: nothing about the game has
+      // changed, so there is no change event on its way.
+      if (this.#lastSnapshot) this.#renderPowers(this.#lastSnapshot);
+    });
+
+    // Delegated: the seven rows are rebuilt at most once per game, but they do
+    // not exist at all until the panel is first opened, and a listener each
+    // would have to be attached from inside the render.
+    this.#dom['powers-list']?.addEventListener('click', (event) => {
+      const item = event.target.closest?.('.powers__item');
+      if (!item || item.disabled) return;
+      this.#call('onCastPower', item.dataset.power);
     });
 
     this.#dom['btn-restart']?.addEventListener('click', () => this.#call('onRestart'));

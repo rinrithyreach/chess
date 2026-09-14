@@ -105,6 +105,25 @@ export const GAME_MODE = {
 export const FEN_ONLY_MODES = [GAME_MODE.ELEMENTAL];
 
 /**
+ * The two taps that firing an elemental power can take.
+ *
+ * Reaching a power from the piece — select the rook, press Use — only ever
+ * needs one: the caster is whatever is already in your hand. Reaching it from
+ * the powers panel can need two, because "Freeze" with both rooks still
+ * charged does not say WHICH rook, and picking one for the player would be
+ * choosing the half of the decision that actually matters.
+ *
+ * So a cast stage comes first when, and only when, there is a genuine choice
+ * of caster. Both stages are the same gesture — tap one of the highlighted
+ * squares — which is why they share one piece of view state rather than
+ * getting a mode each.
+ */
+export const AIM_STAGE = {
+  CAST: 'cast',
+  AIM: 'aim',
+};
+
+/**
  * Roughly how long the bot may think, in ms.
  *
  * A time budget rather than a fixed depth, because depth is a guess about
