@@ -387,7 +387,18 @@
           <span class="player-card__glyph">♚&#xFE0E;</span>
         </span>
         <span class="player-card__info">
-          <span class="player-card__name" id="top-name">Player 2</span>
+          <span class="player-card__nameline">
+            <span class="player-card__name" id="top-name">Player 2</span>
+            <!--
+              Online only, and only on the seat this device is sitting in.
+              Shown as a real button rather than making the name quietly
+              tappable: an affordance nobody can see is one nobody uses.
+            -->
+            <button type="button" class="player-card__rename" id="btn-rename-top"
+                    hidden aria-label="Change your name">✎</button>
+          </span>
+          <input class="player-card__rename-input" id="input-rename-top" type="text"
+                 hidden autocomplete="off" spellcheck="false" aria-label="Your name">
           <!--
             Colour, the pieces this player has taken, and by how much they are
             ahead — all on one line, so the captured pile costs the card no
@@ -443,7 +454,18 @@
           <span class="player-card__glyph">♚&#xFE0E;</span>
         </span>
         <span class="player-card__info">
-          <span class="player-card__name" id="bottom-name">Player 1</span>
+          <span class="player-card__nameline">
+            <span class="player-card__name" id="bottom-name">Player 1</span>
+            <!--
+              Online only, and only on the seat this device is sitting in.
+              Shown as a real button rather than making the name quietly
+              tappable: an affordance nobody can see is one nobody uses.
+            -->
+            <button type="button" class="player-card__rename" id="btn-rename-bottom"
+                    hidden aria-label="Change your name">✎</button>
+          </span>
+          <input class="player-card__rename-input" id="input-rename-bottom" type="text"
+                 hidden autocomplete="off" spellcheck="false" aria-label="Your name">
           <span class="player-card__meta">
             <span class="player-card__color" id="bottom-color">White</span>
             <span class="player-card__edge" id="bottom-edge" hidden></span>

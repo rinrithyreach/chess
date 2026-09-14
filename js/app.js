@@ -894,6 +894,12 @@ async function boot() {
 
     onCancelPower: () => controller.cancelAiming(),
 
+    // Renaming yourself without leaving the game. Online only in practice —
+    // the controller refuses it where the session cannot do it.
+    onRenameSeat: async ({ name }) => {
+      await controller.renameMe(name);
+    },
+
     // Chosen from the panel rather than from the piece. The controller works
     // out whether that still needs a caster picked, so this end does not have
     // to know there are two ways in.

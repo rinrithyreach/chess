@@ -990,6 +990,65 @@ body.is-modal-open {
   text-overflow: ellipsis;
 }
 
+/* ---------------------------------------------------------------------------
+   Renaming yourself mid-game
+
+   The name and its button share a line so the pencil sits against the end of
+   the name rather than out at the edge of the card, where it would read as
+   belonging to the card instead of to the name.
+   --------------------------------------------------------------------------- */
+.player-card__nameline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.player-card__nameline .player-card__name {
+  min-width: 0;
+}
+
+.player-card__rename {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.player-card__rename:hover,
+.player-card__rename:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/*
+  The box stands exactly where the name was. Full width of the line it
+  replaces, so the card does not change size as it opens and close again --
+  a card that resizes under a thumb is a card that moves the Resign button.
+*/
+.player-card__rename-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--accent);
+  border-radius: calc(var(--radius) * 0.5);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+}
+
 /*
   Colour, captured pile and lead share one line, so the pile costs the card no
   height. It is allowed to shrink and clip rather than push the row wider,

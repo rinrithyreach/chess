@@ -38,6 +38,7 @@ import {
   CHAT_MAX_LENGTH,
   CHAT_HISTORY,
   CHAT_COOLDOWN_MS,
+  NAME_MAX_LENGTH,
   VALID_EMOTES,
   log,
   warn,
@@ -1038,6 +1039,63 @@ export class FirebaseSession {
   }
 
   /** Merge fields into the room, guarded so a stale client cannot clobber it. */
+  /**
+   * Rename the seat this device is sitting in, without leaving the game.
+   *
+   * A name is the only thing about yourself you can still get wrong once a
+   * room exists — you typed it in a hurry, or joined with whatever was left
+   * in the box from last time — and until now the only way to fix it was to
+   * leave, which ends the game for the other player too.
+   *
+   * The transaction re-checks the seat rather than trusting the colour it
+   * was called with. A rematch swaps the two players, and that swap is
+   * written by whichever client gets there first: between this device
+   * deciding it is White and the write landing, White can be somebody else.
+   * Renaming them would be worse than refusing.
+   */
+  async setSeatName(raw) {
+    if (this.#destroyed) return { ok: false, error: 'Session destroyed' };
+    if (!this.#roomRef || !this.#myColor || !this.#sdk) {
+      return { ok: false, error: 'Not in a room' };
+    }
+
+    // Collapsed and clipped the same way every other name on the way in is,
+    // so a name cannot mean one thing here and another in the friends list.
+    const name = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX_LENGTH);
+    if (!name) return { ok: false, error: 'Pick a name first' };
+
+    const color = this.#myColor;
+    if (this.#room?.players?.[color]?.name === name) return { ok: true, name };
+
+    try {
+      const { runTransaction, serverTimestamp } = this.#sdk;
+      const outcome = await runTransaction(this.#roomRef, (room) => {
+        if (room === null) return undefined;
+        const seat = room.players?.[color];
+        if (!seat || seat.uid !== this.#uid) return undefined;
+        return {
+          ...room,
+          players: { ...room.players, [color]: { ...seat, name } },
+          updatedAt: serverTimestamp(),
+        };
+      });
+
+      if (!outcome.committed) {
+        return { ok: false, error: 'That seat is not yours any more' };
+      }
+      log('Seat renamed:', color, '->', name);
+      return { ok: true, name, state: this.getState() };
+    } catch (error) {
+      warn('Rename refused', error);
+      return {
+        ok: false,
+        error: isPermissionDenied(error)
+          ? 'The room would not take that name'
+          : explainFirebaseError(error),
+      };
+    }
+  }
+
   async #updateRoom(fields) {
     const { runTransaction, serverTimestamp } = this.#sdk;
     const outcome = await runTransaction(this.#roomRef, (room) => {

@@ -699,6 +699,32 @@ export class GameController {
   }
 
   /**
+   * Change the name on your own seat, mid-game.
+   *
+   * Inert in every mode but online: no other session defines setSeatName,
+   * because no other mode has a name that somebody else is reading off a
+   * different screen.
+   *
+   * The new name is written to the stored profile as well, so the next room
+   * is created under the name you have just chosen rather than the one you
+   * had already decided was wrong.
+   */
+  async renameMe(name) {
+    if (!this.#session.setSeatName) return { ok: false, error: 'Not this game' };
+
+    const result = await this.#session.setSeatName(name);
+    if (!result.ok) {
+      this.#toast(result.error ?? 'Could not change your name', 'warn');
+      return result;
+    }
+
+    storage.saveProfile({ name: result.name });
+    this.#toast(`You are ${result.name} now`);
+    this.#emitChange();
+    return result;
+  }
+
+  /**
    * Every power the side to move still holds — the panel's list.
    *
    * Empty in an ordinary game, and empty on a device that cannot move this

@@ -170,6 +170,9 @@ export class UI {
   #powersOpen = false;
   #powerRows = null;
 
+  /** Which card is currently showing a name box, if either. */
+  #renaming = null;
+
   /**
    * The last thing render() was given.
    *
@@ -269,6 +272,8 @@ export class UI {
       'btn-game-menu', 'btn-game-settings',
       'card-top', 'card-bottom', 'top-name', 'top-color', 'top-turn',
       'bottom-name', 'bottom-color', 'bottom-turn',
+      'btn-rename-top', 'btn-rename-bottom',
+      'input-rename-top', 'input-rename-bottom',
       'tray-top', 'tray-bottom', 'top-edge', 'bottom-edge',
       'board', 'board-area', 'status', 'status-text', 'status-badge',
       'btn-undo', 'btn-flip', 'btn-resign', 'btn-zoom', 'zoom-label',
@@ -345,7 +350,8 @@ export class UI {
     // Every box a name can be typed into, from one number. Four boxes, and
     // the markup cannot import the constant, so the attributes there are a
     // fallback for a page whose scripts have not run rather than the source.
-    ['input-white', 'input-black', 'input-online-name', 'input-my-name']
+    ['input-white', 'input-black', 'input-online-name', 'input-my-name',
+      'input-rename-top', 'input-rename-bottom']
       .forEach((id) => this.#dom[id]?.setAttribute('maxlength', String(NAME_MAX_LENGTH)));
     if (this.#dom['my-code']) this.#dom['my-code'].textContent = FRIEND_CODE_BLANK;
 
@@ -1097,6 +1103,20 @@ export class UI {
         name.textContent = full;
         name.title = full;
       }
+
+      // Renaming is offered on exactly one card: the seat this device is
+      // sitting in, in an online game. Which card that is depends on the
+      // orientation, because Flip can put you at the top — so it follows
+      // the colour rather than the position.
+      const rename = this.#dom[`btn-rename-${prefix}`];
+      if (rename) {
+        const mine = Boolean(state.online) && state.online.myColor === color;
+        rename.hidden = !mine || Boolean(state.isGameOver);
+        // Editing that is still open when the card stops being yours — a
+        // rematch swapping the colours — would be a box writing to somebody
+        // else's seat.
+        if (rename.hidden) this.#stopRenaming(prefix);
+      }
       if (colorEl) colorEl.textContent = color === WHITE ? 'White' : 'Black';
 
       const avatar = card?.querySelector('.player-card__avatar');
@@ -1280,6 +1300,37 @@ export class UI {
       return;
     }
     say(element.emoji, power.info.power, element.blurb, 'Use');
+  }
+
+  /**
+   * Swap the name on a card for a box holding the same name.
+   *
+   * Deliberately not a modal. A name is one short string and the card is
+   * already showing it: putting the box where the name was means the player
+   * is editing the thing they tapped, in the place they tapped it, rather
+   * than reading a dialog about it.
+   */
+  #startRenaming(prefix) {
+    const input = this.#dom[`input-rename-${prefix}`];
+    const line = this.#dom[`${prefix}-name`]?.parentElement;
+    if (!input || !line) return;
+
+    input.value = this.#dom[`${prefix}-name`]?.textContent ?? '';
+    line.hidden = true;
+    input.hidden = false;
+    input.focus();
+    input.select();
+    this.#renaming = prefix;
+  }
+
+  /** Put the name back, whether it changed or not. */
+  #stopRenaming(prefix = this.#renaming) {
+    if (!prefix) return;
+    const input = this.#dom[`input-rename-${prefix}`];
+    const line = this.#dom[`${prefix}-name`]?.parentElement;
+    if (input) input.hidden = true;
+    if (line) line.hidden = false;
+    if (this.#renaming === prefix) this.#renaming = null;
   }
 
   /**
@@ -2488,6 +2539,36 @@ export class UI {
       this.#call(this.#dom.powerbar?.dataset.state === 'aiming'
         ? 'onCancelPower'
         : 'onUsePower');
+    });
+
+    // Renaming yourself mid-game. Both cards are wired; only the one that
+    // is yours ever shows its button.
+    ['top', 'bottom'].forEach((prefix) => {
+      this.#dom[`btn-rename-${prefix}`]?.addEventListener('click', () => {
+        this.#startRenaming(prefix);
+      });
+
+      const input = this.#dom[`input-rename-${prefix}`];
+      // Commits on blur and on Enter, the same as the friends panel, and for
+      // the same reason: each one is a write that the other player sees, and
+      // a name should not be published letter by letter.
+      input?.addEventListener('change', () => {
+        const value = input.value;
+        this.#stopRenaming(prefix);
+        this.#call('onRenameSeat', { name: value });
+      });
+      input?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); input.blur(); return; }
+        if (event.key !== 'Escape') return;
+        // Escape abandons the edit, so the box must not then commit on the
+        // way out — put the old value back before blurring.
+        event.preventDefault();
+        event.stopPropagation();
+        input.value = this.#dom[`${prefix}-name`]?.textContent ?? '';
+        input.blur();
+        this.#stopRenaming(prefix);
+      });
+      input?.addEventListener('blur', () => this.#stopRenaming(prefix));
     });
 
     this.#dom['btn-powers-toggle']?.addEventListener('click', () => {
