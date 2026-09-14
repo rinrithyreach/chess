@@ -2484,30 +2484,22 @@ body.is-modal-open {
   background: var(--panel);
 }
 
-.me-card__avatar {
-  font-family:
-    "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
-    "DejaVu Sans", "FreeSerif", sans-serif;
-  font-variant-emoji: text;
-  display: grid;
-  place-items: center;
+/*
+  Your own picture in the friends panel.
+
+  The ordinary picker, at the size the card was already built around, and a
+  size is the whole of the difference — everything else about it, including
+  which slot it writes to, is shared with the one on the New Game form. It is
+  a little larger than the 44px tap minimum because this card is the panel's
+  header and the face in it is the thing your friends see.
+*/
+.avatar-picker--me {
   width: 48px;
   height: 48px;
-  flex: none;
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  background: #23262f;
-  color: #e9ecf2;
-  font-size: 1.6rem;
-  line-height: 1;
 }
 
-.me-card__photo {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+.avatar-picker--me .avatar-picker__btn {
+  font-size: 1.5rem;
 }
 
 .me-card__body {

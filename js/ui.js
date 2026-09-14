@@ -257,7 +257,7 @@ export class UI {
       'chat-form', 'chat-input', 'btn-chat-send',
       'top-emote', 'bottom-emote',
       'btn-menu-friends', 'friends-badge',
-      'modal-friends', 'me-photo', 'input-my-name', 'my-code', 'btn-copy-friend-code',
+      'modal-friends', 'input-my-name', 'my-code', 'btn-copy-friend-code',
       'friends-status', 'form-add-friend', 'input-friend-code', 'btn-add-friend',
       'invites-section', 'invites-list',
       'requests-section', 'requests-list', 'friends-list', 'friends-empty',
@@ -383,16 +383,24 @@ export class UI {
       const slot = node.dataset.avatarSlot;
       if (!slot) return;
 
-      // The online seat offers a picker only while pictures actually travel.
-      // Better no control than a control that quietly does nothing — and the
-      // decision is read from the same flag the session writes seats by, so
-      // the form and the room cannot disagree about it.
-      if (slot === 'online' && !ONLINE_AVATARS) {
+      // A picker that needs a seat to carry the picture offers itself only
+      // while seats actually do. Better no control than a control that
+      // quietly does nothing — and the decision is read from the same flag
+      // the session writes seats by, so the form and the room cannot disagree
+      // about it. Keyed on the markup rather than on the slot, because the
+      // friends panel shares that slot and is NOT gated by it: a profile row
+      // is a different write with its own rules.
+      if (node.dataset.avatarRequires === 'seat-pictures' && !ONLINE_AVATARS) {
         node.hidden = true;
         return;
       }
 
-      this.#avatarPickers.set(slot, node);
+      // A list per slot, because one picture can have more than one control
+      // onto it: your profile picture is offered both on the online form and
+      // in the friends panel, and setting it in either has to show in both.
+      if (!this.#avatarPickers.has(slot)) this.#avatarPickers.set(slot, []);
+      this.#avatarPickers.get(slot).push(node);
+
       // Stashed on the element so #showAvatar can rewrite the accessible name
       // without having to be told which seat it is looking at.
       node.dataset.avatarWho = this.#avatarWho(slot);
@@ -1574,9 +1582,21 @@ export class UI {
 
   /** Show the remembered picture, if any, in each seat's picker. */
   syncAvatars(avatars = {}) {
-    this.#avatarPickers.forEach((node, slot) => {
-      this.#showAvatar(node, avatars[slot]);
+    this.#avatarPickers.forEach((nodes, slot) => {
+      nodes.forEach((node) => this.#showAvatar(node, avatars[slot]));
     });
+  }
+
+  /**
+   * Paint every control onto one slot's picture.
+   *
+   * The reason this exists rather than each handler painting the node it was
+   * fired from: the profile picture has two controls, and a picture chosen in
+   * the friends panel that did not appear on the online form would look like
+   * two different pictures rather than one.
+   */
+  #showAvatarFor(slot, avatar) {
+    this.#avatarPickers.get(slot)?.forEach((node) => this.#showAvatar(node, avatar));
   }
 
   /**
@@ -1619,10 +1639,15 @@ export class UI {
     return 'yourself';
   }
 
-  /** The picture chosen for a seat, or null. Read straight off the preview. */
+  /**
+   * The picture chosen for a seat, or null. Read straight off the preview.
+   *
+   * The first control is enough: every control onto a slot is repainted
+   * together by #showAvatarFor, so they cannot be showing different pictures.
+   */
   #avatarFor(slot) {
-    const image = this.#avatarPickers.get(slot)?.querySelector('.avatar-picker__img');
-    const src = image?.getAttribute('src');
+    const [node] = this.#avatarPickers.get(slot) ?? [];
+    const src = node?.querySelector('.avatar-picker__img')?.getAttribute('src');
     return isAvatar(src) ? src : null;
   }
 
@@ -1749,17 +1774,17 @@ export class UI {
       nameInput.value = social.name ?? '';
     }
 
-    const photo = this.#dom['me-photo'];
-    if (photo) {
-      const usable = isAvatar(social.avatar);
-      if (usable && photo.getAttribute('src') !== social.avatar) {
-        photo.setAttribute('src', social.avatar);
-      }
-      if (!usable) photo.removeAttribute('src');
-      photo.hidden = !usable;
-      const glyph = photo.parentElement?.querySelector('.me-card__glyph');
-      if (glyph) glyph.hidden = usable;
-    }
+    // Your picture is deliberately NOT painted from here, unlike your name
+    // and your code.
+    //
+    // Storage is what both of them read: syncAvatars() paints the pickers at
+    // startup, and choosing a picture writes storage and tells the hub in the
+    // same breath, so the two cannot drift. Painting it from hub state as
+    // well looks tidier and is a bug: the hub loads the picture inside
+    // #connect, AFTER awaiting Firebase, so until that round trip lands — or
+    // for ever, on a device that cannot reach it — `social.avatar` is null.
+    // Rendering that null wipes the picture off both pickers the moment the
+    // panel opens, which is exactly what it did.
 
     const status = this.#dom['friends-status'];
     if (status) {
@@ -2015,39 +2040,44 @@ export class UI {
    * nor a way to take the picture back off.
    */
   #attachAvatarPickers() {
-    this.#avatarPickers.forEach((node, slot) => {
-      const file = node.querySelector('.avatar-picker__file');
-      const button = node.querySelector('.avatar-picker__btn');
-      const clear = node.querySelector('.avatar-picker__clear');
+    this.#avatarPickers.forEach((nodes, slot) => {
+      nodes.forEach((node) => {
+        const file = node.querySelector('.avatar-picker__file');
+        const button = node.querySelector('.avatar-picker__btn');
+        const clear = node.querySelector('.avatar-picker__clear');
 
-      button?.addEventListener('click', () => file?.click());
+        button?.addEventListener('click', () => file?.click());
 
-      clear?.addEventListener('click', () => {
-        this.#showAvatar(node, null);
-        this.#call('onAvatarChange', { slot, avatar: null });
-        this.toast('Picture removed');
-        button?.focus();
-      });
+        clear?.addEventListener('click', () => {
+          this.#showAvatarFor(slot, null);
+          this.#call('onAvatarChange', { slot, avatar: null });
+          this.toast('Picture removed');
+          button?.focus();
+        });
 
-      file?.addEventListener('change', async () => {
-        const [picked] = file.files ?? [];
-        // Cleared straight away, so choosing the same file twice still fires a
-        // change event — otherwise re-picking after a failure does nothing at
-        // all, which reads as the app ignoring you.
-        file.value = '';
-        if (!picked) return;
+        file?.addEventListener('change', async () => {
+          const [picked] = file.files ?? [];
+          // Cleared straight away, so choosing the same file twice still fires
+          // a change event — otherwise re-picking after a failure does nothing
+          // at all, which reads as the app ignoring you.
+          file.value = '';
+          if (!picked) return;
 
-        node.classList.add('is-busy');
-        const result = await fileToAvatar(picked);
-        node.classList.remove('is-busy');
+          // Only the control being used says it is working. The other control
+          // onto the same picture is on a screen nobody is looking at, and a
+          // spinner there would be for an audience of none.
+          node.classList.add('is-busy');
+          const result = await fileToAvatar(picked);
+          node.classList.remove('is-busy');
 
-        if (!result.ok) {
-          this.toast(result.error, 'error');
-          return;
-        }
+          if (!result.ok) {
+            this.toast(result.error, 'error');
+            return;
+          }
 
-        this.#showAvatar(node, result.avatar);
-        this.#call('onAvatarChange', { slot, avatar: result.avatar });
+          this.#showAvatarFor(slot, result.avatar);
+          this.#call('onAvatarChange', { slot, avatar: result.avatar });
+        });
       });
     });
   }

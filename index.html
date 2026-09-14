@@ -249,7 +249,16 @@
           <div class="field">
             <label class="field__label" for="input-online-name">Your Name</label>
             <div class="name-row">
-              <span class="avatar-picker" data-avatar-slot="online">
+              <!--
+                `data-avatar-requires="seat-pictures"` hides this one when
+                ONLINE_AVATARS is off, because that flag is about what a SEAT
+                in a room carries. The friends panel's copy of this picker is
+                not gated by it: a profile row is a different write with its
+                own rules, so your friends can still see your face even when
+                the players in a game cannot.
+              -->
+              <span class="avatar-picker" data-avatar-slot="online"
+                    data-avatar-requires="seat-pictures">
                 <button type="button" class="avatar-picker__btn"
                         aria-label="Add your profile picture">
                   <img class="avatar-picker__img" alt="" hidden>
@@ -730,9 +739,27 @@
         in the largest type.
       -->
       <div class="me-card">
-        <span class="me-card__avatar" id="me-avatar" aria-hidden="true">
-          <img class="me-card__photo" id="me-photo" alt="" hidden>
-          <span class="me-card__glyph">♚&#xFE0E;</span>
+        <!--
+          Your picture, and the place to set it.
+
+          The same `online` slot as the New Game form's picker, deliberately:
+          there is ONE profile picture, and these are two controls onto it —
+          the same arrangement as your name, which has a box here and a box on
+          the online form. Set it in either and both follow, because the whole
+          point of the picture is the face your friends see beside your name,
+          and the friends panel is where that name lives.
+        -->
+        <span class="avatar-picker avatar-picker--me" data-avatar-slot="online">
+          <button type="button" class="avatar-picker__btn"
+                  aria-label="Add your profile picture">
+            <img class="avatar-picker__img" alt="" hidden>
+            <span class="avatar-picker__glyph" aria-hidden="true">♚&#xFE0E;</span>
+          </button>
+          <span class="avatar-picker__badge" aria-hidden="true">+</span>
+          <button type="button" class="avatar-picker__clear"
+                  aria-label="Remove your profile picture" hidden>×</button>
+          <input type="file" class="avatar-picker__file" accept="image/*"
+                 tabindex="-1" aria-hidden="true">
         </span>
         <div class="me-card__body">
           <label class="field__label" for="input-my-name">Your name</label>

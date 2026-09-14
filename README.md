@@ -287,7 +287,27 @@ their game with a note instead of an error. Deploy
 `firebase/database.rules.json` to get the pictures themselves.
 `ONLINE_AVATARS` in `js/firebase-config.js` turns the whole thing off again if
 you ever want it off — the seat then omits the field and the online form hides
-its picker rather than offering a control that does nothing.
+its picker rather than offering a control that does nothing. The friends
+panel’s copy of that picker is deliberately *not* hidden with it: a profile
+row is a different write with its own rules, so your friends can still see
+your face even when the players in a game cannot.
+
+**Your own picture can be set from the friends panel**, not only from the
+New Game form. It is the same picture and the same slot — two controls onto
+one thing, exactly as your name has a box in both places — so setting it in
+either shows in both. That is where it belongs: the picture’s whole job is to
+be the face beside your name in somebody else’s friends list, and the friends
+panel is where your name and your code already live. Reaching it used to mean
+going to New Game and choosing Online Multiplayer, which is a strange route
+to your own profile.
+
+The pickers are painted from storage rather than from hub state, and that is
+load-bearing rather than incidental. The hub loads its copy of the picture
+inside `#connect`, *after* awaiting Firebase — so until that round trip lands,
+and for ever on a device that cannot reach it, the hub’s idea of your picture
+is `null`. A first pass at this rendered the pickers from that, which wiped
+the picture off both of them the moment the panel opened. There is a test for
+it now, with the network cut.
 
 Wherever a picture is read — and online it was written by the other player's
 client — it is validated at the point of use, because the rules protect the
@@ -1395,6 +1415,7 @@ the totals are reported separately rather than as one number:
 | **Elemental Chess (Chromium)** | **223** | **The variant end to end, on both boards. The form: the mode, its opponent picker shared with Speed Chess, and all seven elements on the rules card. Then the elements themselves, which are a pure function of piece and square — c1 Water and f1 Light for White, c8 Light and f8 Water for Black, so each side gets one of each. Thirty-two charges handed out and drawn on the board. Freeze: the rook sees down an open file and not through a piece, aiming highlights exactly what it can reach and suppresses the move dots while it does, the ice lands, the rook is spent, it is STILL your move, a second standalone power that turn is refused, the frozen piece offers no destinations and says why when asked directly, and the ice expires as your next turn begins. Fire: a pawn takes and three enemy pieces around it burn while its own pawn beside them does not, and a king beside the blast survives. Lightning: the arc picks the rook over the pawn, by value. Shadow: a charged enemy LIGHT bishop holds the teleport shut and the bar says so, a dark-squared one does not, and the real thing slips a checked king to a safe square — none of them on the file it was being checked down — for free, losing castling rights on the way. Water, Nature and Light: a shielded rook cannot be captured and is not even offered, vines block landing on a square AND sliding across it while a square short of them is still fine, and Cleanse fires with no target and clears the board. The bookkeeping around the three awkward moves: castling carries the rook’s charge to f1, en passant kills the charge of a pawn taken from a third square, and a promotion arrives loaded. A save and a reload bring back the position, the spent pieces, the effects and the ply they expire against. The bot freezes the most valuable thing its rook can see, spends the charge, and still moves afterwards; and it reaches for its king’s teleport when that is the way out of check — which is how the first version of that test was found to be wrong rather than the code. Two rules that keep the position legal get their own checks: a burn that would open a line onto your OWN king does not happen at all and costs no charge (the same capture with the bishop removed burns normally), and effects that would leave a player with no legal move break instead of stranding them. Restart and Rematch hand out fresh charges, clear the effects and put the ply back to zero — without which a rematch inherits the previous game’s spent pieces, invisibly, until somebody taps one. And the Continue dialog counts from the position rather than the move list, because a burn clears chess.js’ history and a game seven half-moves deep was offering to resume “0 moves played”. Both were found by these tests. Plus the a11y labels, the toasts, the layer tearing down cleanly when the next game is an ordinary one, the bar fitting and keeping a real tap target at 320, 390 and 768 wide, and a regression pass over all five older modes. Zero console errors** |
 | **The deployed site (Chromium ×2 + real project)** | **15** | **The published URL on a phone viewport, the real SDK from the CDN, the real rules: two anonymous accounts claim two friend codes, one adds the other by code, the request arrives with the right name, accepting writes both lists, then a real room with a real message and a real emote crossing between them, a move landing after the conversation, and presence moving to "in a game" on the friend's screen. It removes its own rooms, profiles, presence, friendships and handles afterwards, so the database is left as it was found. Caught a real bug: a friend whose presence had not arrived yet was being announced as offline** |
 | **Chat, emotes, friends, presence, invitations (Chromium ×2–3)** | **110** | **Fifteen of them read `firebase/database.rules.json` itself and assert what it says — that a message can only be written as yourself *or left exactly as it was*, that a colour must match the seat you hold, that a friends list is readable only by its owner, that somebody may add themselves to yours only while your request stands, that a request cannot be sent to yourself, that an invitation may only be written by somebody already on the list while withdrawing one is always allowed, and that the profile-picture rule is byte-for-byte the seat-picture rule. The rest drive two and three real browsers against a database that enforces that rule text. Two players talk: what you send lands on your own side and the other side, attributed to the seat, counted as unread while the sheet is shut and cleared when it opens. An emote arrives named and is drawn from the receiver's own list; with the sheet open it stays in the log on **both** devices, and only with the sheet shut does it pop on the card of whoever sent it. That pair replaced an assertion that checked for a bubble while the sheet was open — a bubble nobody could see, since the sheet is drawn over the cards, so it passed for as long as the bug existed and would have gone on passing. `<img src=x onerror=alert(1)>` arrives as characters and creates no element. **A move after a conversation is not refused** — the check the "unchanged" rule clauses exist for, and the one that would have broken every game after the first message. A log of 60 is shown 40 deep, oldest dropped, and sending into a full log trims the room rather than growing it. Blank, whitespace-only, over-long and unknown-emote sends are each refused for their own reason, and a second send in the same instant is refused for the cooldown. With the setting off the button is gone, both sends refuse, and nothing arrives on screen. Two devices claim two different friend codes, each handle points back at its claimer, a request crosses with the right name, accepting writes both lists and clears both cleanups, and removing clears both. Presence follows a game: starting one moves a friend to "In a game" on the other device without anybody reopening the panel. A reload reclaims the same code rather than a second one. Then the whole thing again against rules that know none of it: the game is still playable and the move still crosses, the message is refused with an explanation, and the friends panel says the rules need deploying rather than sitting empty. It also holds the mode list in place: the five modes in their intended order, and choosing any one of them marking that one and only that one — measured from computed styles after the transition has finished, because a row caught mid-fade looks selected and this project has been fooled by that twice. That check found a real bug: Online Multiplayer could not be highlighted at all, because the rule keyed on a class its label had never carried. Then invitations, on three browsers at once: a friend who is about can be asked, one who is not on the list cannot — and a third browser going round the client and writing straight at the database is refused by the rules, which is the check that matters, since the client is the half an attacker replaces. One tap hosts a room, stands in it, gets the panel out of the way, and writes an invitation naming that room, under the right name, carrying nothing else; the row for that friend then says "Invited" and will not send a second. Cancelling the room withdraws it rather than leaving it pointing at a room that has gone. Asked again, the other phone shows a count with the panel shut, the invitation named and offering both answers, and Join seats both players in that one room with no code typed anywhere — after which the invitation is deleted and the count is gone. An invitation seeded three minutes old is not offered at all, neither in the panel nor in the state behind it. And the only write refused in the whole run is the one that was supposed to be. Zero console errors** |
+| **Your picture from the friends panel (Chromium)** | **38** | **The picker is in your own card, says what it does, and imports a real PNG through the real pipeline. It is ONE picture: the same data URL lands on the online form’s picker, in storage and on the hub, setting it in either place shows in both, and clearing it in either clears both. It survives a reload. Then the same again with every remote Firebase request aborted — the hub up, not connected, its own copy of the picture null — where the picture has to stay put on both pickers and in storage, which is the bug that pass caught. Plus a regression pass proving the two seat pickers are still separate slots: a picture on Player 1 reaches the white seat and nothing else** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
@@ -1418,7 +1439,7 @@ resignation, and rejection of a third player or a bad code.
 
 ### Bugs this found
 
-Twelve real bugs were caught and fixed. Three in Phase 1:
+Thirteen real bugs were caught and fixed. Three in Phase 1:
 
 1. **Every modal was an invisible full-screen click trap.** `.modal` sets
    `display: grid`, which silently overrides the `hidden` attribute (only
@@ -1542,6 +1563,24 @@ tell the rest of the app about:
    half-notices. Fixed by counting from the FEN's own full-move counter for
    the modes that persist by position, which is exact and needs nothing
    stored.
+
+And one from putting the picture picker in the friends panel, which is the
+same lesson as (4) wearing different clothes — a cache that is empty until a
+round trip lands, read as though it were empty because there is nothing there:
+
+13. **Opening the friends panel wiped your profile picture.** The obvious way
+   to keep two controls onto one picture in step is to render both of them
+   from the hub, which owns the profile. But the hub loads its copy inside
+   `#connect`, *after* awaiting Firebase — so before that round trip lands,
+   and for ever on a device that cannot reach it, `social.avatar` is null.
+   Rendering that null painted "no picture" over both pickers the instant the
+   panel opened, and the picture was still in storage the whole time, so it
+   came back on the next reload and went again on the next open. Fixed by
+   leaving storage as the one source the pickers read: it is what the hub
+   itself loads from, so there is nothing for them to be out of step with.
+   The test that catches it aborts every remote Firebase request and then
+   checks the picture is still there — which it is not, against the version
+   without this fix.
 
 ### Manual checklist
 
