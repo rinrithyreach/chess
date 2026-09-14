@@ -24,6 +24,7 @@ import {
   STATUS,
   TERMINAL_STATUSES,
   GAME_MODE,
+  FEN_ONLY_MODES,
   log,
   warn,
 } from './config.js';
@@ -325,6 +326,13 @@ function validateGameRecord(record) {
     }
     return { ok: true };
   }
+
+  // Elemental Chess cannot be replayed. Its powers take pieces off the board
+  // and move a king to a square no move reaches, so the PGN records a game
+  // that diverged from the real one the first time anybody used a power — and
+  // the session restores these by FEN for exactly that reason. The position
+  // has already been validated above, which is the whole of what is needed.
+  if (FEN_ONLY_MODES.includes(game.mode)) return { ok: true };
 
   // For local games the PGN is the authoritative restore path, so prove it
   // replays cleanly and agrees with the stored FEN.

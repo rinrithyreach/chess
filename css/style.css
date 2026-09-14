@@ -2781,3 +2781,154 @@ body.is-modal-open {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Elemental Chess
+   ========================================================================== */
+
+/*
+  The rules card on the New Game form.
+
+  Seven rows, read once before the first game and skimmed thereafter, so it is
+  built for reading rather than for tapping: no controls in it, and a glyph
+  column wide enough that the emoji line up whatever they are.
+*/
+.elemental-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.elements {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.element {
+  display: grid;
+  grid-template-columns: 1.7rem 1fr;
+  align-items: center;
+  gap: 0.1rem 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.element__glyph {
+  grid-row: span 2;
+  font-size: 1.15rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.element__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.element__name {
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.element__desc {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.elements__note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+/*
+  The power bar, on the game screen.
+
+  Between the status and the controls, because it is about the piece you have
+  just picked up and belongs with "whose turn and what now" rather than with
+  the row of things you can always do. It keeps its height whatever it is
+  saying — a bar that grew a button would shove the whole panel down every
+  time a rook was selected.
+*/
+.powerbar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 52px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.powerbar__glyph {
+  flex: none;
+  width: 1.9rem;
+  font-size: 1.3rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.powerbar__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.powerbar__name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.powerbar__hint {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  /* One line, always: the hints are short, and a bar that reflows to two
+     lines moves the button out from under a thumb already on its way. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Nothing selected, or nothing to offer. Present, and plainly inactive. */
+.powerbar[data-state="idle"] {
+  opacity: 0.7;
+}
+
+/* A power is ready to use. */
+.powerbar[data-state="ready"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/*
+  Aiming. The loudest the bar ever gets, because the board is now in a mode:
+  the next tap fires a power instead of moving a piece, and the bar is the
+  only thing on screen saying so.
+*/
+.powerbar[data-state="aiming"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .powerbar[data-state="aiming"] {
+    animation: none;
+  }
+}

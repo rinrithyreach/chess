@@ -69,12 +69,50 @@ function renderPieceContent(pieceEl, piece) {
   pieceEl.textContent = PIECE_GLYPHS[piece.type] ?? '';
 }
 
+/**
+ * The elemental marks.
+ *
+ * Read off the element and effect ids rather than imported from elemental.js,
+ * because this board renders a description it is handed and is not otherwise
+ * a client of the variant — and because these are the small corner glyphs,
+ * which want to stay a rendering decision belonging to the board.
+ *
+ * Emoji here rather than the text presentation the pieces use: these are meant
+ * to be in colour, and are small enough that shape alone would not tell fire
+ * from water.
+ */
+const ELEMENT_GLYPHS = {
+  fire: '🔥',
+  water: '💧',
+  lightning: '⚡',
+  ice: '❄️',
+  nature: '🌿',
+  shadow: '🌑',
+  light: '✨',
+};
+
+const EFFECT_GLYPHS = {
+  frozen: '🧊',
+  shield: '🛡️',
+  vines: '🌿',
+};
+
 export class Board {
   #root;
   #squares = new Map();
   #orientation = 'white';
   #onSquareActivate = () => {};
   #lastRendered = new Map();
+
+  /**
+   * Was the last render an elemental one?
+   *
+   * Only so the pass that CLEARS the layer still happens. Without it, leaving
+   * an elemental game for an ordinary one would leave 32 element glyphs on the
+   * board — the new game has no elemental block, so nothing would ever run to
+   * take them off again.
+   */
+  #hadElemental = false;
   #animationsEnabled = true;
   #showCoordinates = true;
   #focusedSquare = 'e1';
@@ -164,9 +202,29 @@ export class Board {
       piece.className = 'piece';
       piece.setAttribute('aria-hidden', 'true');
 
-      el.append(rankLabel, fileLabel, piece);
+      // The elemental layer: a corner glyph for the element or the effect,
+      // and a full-square wash for the effect's colour.
+      //
+      // Two real elements rather than two pseudo-elements, because ::before
+      // and ::after on a square are both already spoken for — selected, in
+      // check, legal destination, capture ring — and an effect has to be able
+      // to show UNDERNEATH all of them rather than instead of whichever one
+      // the cascade happened to resolve last.
+      //
+      // Built for all 64 squares up front and left empty in every game that is
+      // not Elemental Chess: two empty spans a square, and this board's "build
+      // once, mutate thereafter" rule stays intact.
+      const aura = document.createElement('span');
+      aura.className = 'square__aura';
+      aura.setAttribute('aria-hidden', 'true');
+
+      const mark = document.createElement('span');
+      mark.className = 'square__mark';
+      mark.setAttribute('aria-hidden', 'true');
+
+      el.append(rankLabel, fileLabel, aura, piece, mark);
       this.#root.append(el);
-      this.#squares.set(square, { el, piece, fileLabel, rankLabel });
+      this.#squares.set(square, { el, piece, fileLabel, rankLabel, aura, mark });
     });
 
     this.#applyOrientation();
@@ -257,16 +315,38 @@ export class Board {
     const targets = new Map((view?.legalTargets ?? []).map((m) => [m.to, m]));
     const lastMove = state.lastMove;
 
+    // Elemental Chess, or nothing at all. Both boards read the description the
+    // session builds rather than working the elements out for themselves, so
+    // the flat board and the WebGL one cannot disagree about which bishop is
+    // which.
+    const elemental = state.elemental ?? null;
+    const aiming = view?.aiming ?? null;
+    const aimTargets = new Set(aiming?.targets ?? []);
+
+    // Five of the six modes have no elemental layer, and this board repaints
+    // on every clock tick and every move. Skipping the whole pass once it has
+    // been cleared keeps them paying nothing for it — the one render after an
+    // elemental game ends still runs, which is the render that clears it.
+    const paintElemental = Boolean(elemental) || this.#hadElemental;
+    this.#hadElemental = Boolean(elemental);
+
     this.#squares.forEach((entry, square) => {
       const piece = board.get(square) ?? null;
       this.#renderPiece(entry, piece, square);
+      if (paintElemental) this.#renderElemental(entry, square, elemental);
 
       const target = targets.get(square);
       const el = entry.el;
 
+      // While a power is being aimed the legal-move highlights are wrong —
+      // the next tap is not going to be a move — so the board shows what the
+      // power can reach instead, and only that.
+      el.classList.toggle('is-aim', aimTargets.has(square));
+      el.classList.toggle('is-aiming-from', Boolean(aiming) && square === aiming.from);
+
       el.classList.toggle('is-selected', square === selected);
-      el.classList.toggle('is-legal', Boolean(target) && !target.isCapture);
-      el.classList.toggle('is-capture', Boolean(target) && target.isCapture);
+      el.classList.toggle('is-legal', !aiming && Boolean(target) && !target.isCapture);
+      el.classList.toggle('is-capture', !aiming && Boolean(target) && target.isCapture);
       el.classList.toggle(
         'is-last-move',
         Boolean(lastMove) && (square === lastMove.from || square === lastMove.to),
@@ -276,7 +356,10 @@ export class Board {
       el.classList.toggle('is-last-from', Boolean(lastMove) && square === lastMove.from);
       el.classList.toggle('is-check', square === state.checkSquare);
 
-      el.setAttribute('aria-label', describeSquare(square, piece, target));
+      el.setAttribute('aria-label', describeSquare(square, piece, target, elemental && {
+        ...elemental.pieces?.[square],
+        effect: elemental.marks?.[square] ?? null,
+      }));
     });
 
     if (move) this.#animateMove(move, capturedGhost);
@@ -284,6 +367,46 @@ export class Board {
     // Consumed by this render whether or not it carried the drag's move, so a
     // drop that turned out to be illegal cannot suppress a later animation.
     this.#draggedMove = null;
+  }
+
+  /**
+   * The elemental layer on one square: what the piece is, whether it still
+   * has its power, and what is standing on the square.
+   *
+   * An effect outranks the element, because an effect is temporary and
+   * therefore the thing that has just changed — and the element can always be
+   * read back off the piece, which cannot become a different one.
+   */
+  #renderElemental(entry, square, elemental) {
+    const { el, mark, aura } = entry;
+    if (!mark || !aura) return;
+
+    if (!elemental) {
+      if (mark.textContent) mark.textContent = '';
+      aura.removeAttribute('data-effect');
+      el.removeAttribute('data-element');
+      el.classList.remove('is-charged');
+      return;
+    }
+
+    const effect = elemental.marks?.[square] ?? null;
+    const piece = elemental.pieces?.[square] ?? null;
+
+    if (effect) aura.dataset.effect = effect;
+    else aura.removeAttribute('data-effect');
+
+    if (piece) el.dataset.element = piece.element;
+    else el.removeAttribute('data-element');
+
+    // A charge is shown by lighting the element's own glyph rather than by
+    // adding a second mark beside it. An element never changes and a charge is
+    // spent exactly once, so one glyph in two states says everything there is
+    // to say — and says it without needing another few pixels on a square that
+    // is already carrying a piece, a coordinate and up to two highlights.
+    el.classList.toggle('is-charged', Boolean(piece?.charged));
+
+    const glyph = effect ? EFFECT_GLYPHS[effect] : (piece ? ELEMENT_GLYPHS[piece.element] : '');
+    if (mark.textContent !== glyph) mark.textContent = glyph ?? '';
   }
 
   #renderPiece(entry, piece, square) {

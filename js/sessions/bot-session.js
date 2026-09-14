@@ -41,9 +41,30 @@ import {
  * of game it is: a Speed Chess game against the bot is still Speed Chess, and
  * has a clock to prove it.
  */
-const BOT_MODES = [GAME_MODE.TOURNAMENT, GAME_MODE.SPEED];
+const BOT_MODES = [GAME_MODE.TOURNAMENT, GAME_MODE.SPEED, GAME_MODE.ELEMENTAL];
 
-export class BotSession extends LocalSession {
+/**
+ * Piece worth, for the one decision made without the search: which move to
+ * fall back on when a variant's rules refuse the one it chose. Kept local and
+ * deliberately crude — it is a tie-break between moves that are all already
+ * legal, not an evaluation.
+ */
+const FALLBACK_WORTH = { p: 100, n: 320, b: 330, r: 500, q: 900 };
+
+/**
+ * The bot, as a layer over any other session.
+ *
+ * A mixin rather than a plain class, because the bot now has two things to sit
+ * on: ordinary chess, and Elemental Chess. The class body below is identical
+ * either way — what differs is only what `super` reaches.
+ *
+ * The bot always goes on the OUTSIDE. Its submitMove calls down through
+ * whatever it wraps, so by the time it asks itself whether to reply, the layer
+ * beneath has finished with the move — including, in the elemental game, the
+ * fire and lightning a capture sets off. Stacked the other way round, the bot
+ * would be handed a position one burn out of date.
+ */
+export const withBot = (Base) => class extends Base {
   /** The colour the human plays. The bot takes the other one. */
   #humanColor = WHITE;
 
@@ -208,11 +229,18 @@ export class BotSession extends LocalSession {
 
   async #play() {
     try {
+      // Powers first, and only in a game that has any: a teleport moves the
+      // king, so searching before spending them would be searching a position
+      // the bot is about to change out from under itself. A no-op everywhere
+      // else, because nothing else defines the hook.
+      await this.botUsePower?.();
+      if (this.#stopped) return;
+
       const state = this.getState();
       const fen = state.fen;
       const started = Date.now();
 
-      const move = await this.#think(fen, this.#budget());
+      const move = this.#vet(await this.#think(fen, this.#budget()));
 
       // The game can end, restart or be left while the search runs.
       if (this.#stopped) return;
@@ -257,6 +285,33 @@ export class BotSession extends LocalSession {
    * There the search runs on the main thread instead, which briefly costs
    * smoothness but never costs a move.
    */
+  /**
+   * The searched move, or the best one the rules underneath will actually
+   * accept.
+   *
+   * The search plays chess. In Elemental Chess it can therefore come back with
+   * a move that a freeze, a shield or a patch of vines forbids, having never
+   * been told any of them exist. Rather than teach a move generator about ice,
+   * the answer is vetted afterwards and swapped for the best allowed
+   * alternative when it has to be — losing the bot some of its strength on the
+   * turns where effects are on the board, which is a handful of turns a game,
+   * and never losing it a move.
+   *
+   * `isMoveAllowed` only exists on the elemental layer, so in an ordinary game
+   * this hands back exactly what it was given.
+   */
+  #vet(move) {
+    if (!move) return move;
+    if (this.isMoveAllowed?.(move.from, move.to) !== false) return move;
+
+    const allowed = this.getAllLegalMoves();
+    if (!allowed.length) return null;
+    const worth = (type) => FALLBACK_WORTH[type] ?? 0;
+    const best = [...allowed].sort((a, b) => worth(b.captured) - worth(a.captured))[0];
+    log('Bot move blocked by an effect; playing', best.san, 'instead');
+    return best;
+  }
+
   /**
    * What the bot may spend on this move.
    *
@@ -338,7 +393,10 @@ export class BotSession extends LocalSession {
       worker.postMessage({ id, fen, ...this.#strength, timeBudgetMs });
     });
   }
-}
+};
+
+/** Player versus computer, at ordinary chess. */
+export const BotSession = withBot(LocalSession);
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

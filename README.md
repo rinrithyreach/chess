@@ -75,10 +75,10 @@ ends says a move happened; it does not say which way, and which way is the
 thing you want when you look up and someone has moved. Both boards draw the
 same ring in the same gold at the same radius.
 
-**Five game modes** — *Local Two Player* (share one device), *Player vs Bot*,
-*Online Multiplayer*, *Speed Chess* and *Tournament*. Each is a session
-provider and nothing else: the board, the UI and the controller are identical
-in all of them.
+**Six game modes** — *Local Two Player* (share one device), *Player vs Bot*,
+*Online Multiplayer*, *Speed Chess*, *Tournament* and *Elemental Chess*. Each
+is a session provider and nothing else: the board, the UI and the controller
+are identical in all of them.
 
 **The bot** — negamax with alpha-beta, ordered moves, a quiescence search and
 piece-square tables, searching under a time budget rather than to a fixed
@@ -157,6 +157,79 @@ thinking for it — the position right, the opponent quietly swapped. The bot's
 seat is named after the rung, so the player card, the PGN headers and the
 game-over dialog all say who you actually played without any of them knowing
 a ladder exists.
+
+**Elemental Chess** — the one variant, playable against the bot or against
+someone sharing your device. Every piece carries an element, and every element
+grants one power that the piece may use **once in the whole match**:
+
+| | Piece | Power | When |
+|---|---|---|---|
+| 🔥 Fire | Pawn | **Burn** — every enemy piece on the eight squares around it is destroyed | by itself, when that pawn captures |
+| 💧 Water | Dark-squared bishop | **Water Shield** — a friendly piece it can see cannot be captured for a turn | your turn |
+| ⚡ Lightning | Knight | **Chain Attack** — the strike arcs to the most valuable enemy a knight's move away | by itself, when that knight captures |
+| ❄️ Ice | Rook | **Freeze** — an enemy piece in its line cannot move for a turn | your turn |
+| 🌿 Nature | Queen | **Vines** — an empty square it can see cannot be entered or crossed for a turn | your turn |
+| 🌑 Shadow | King | **Teleport** — to any empty square where it would be safe, once a match | your turn |
+| ✨ Light | Light-squared bishop | **Cleanse** — clears every effect on the board; while charged, holds the enemy king's teleport shut | your turn |
+
+Six piece types, seven elements, and the bishops are what makes that work: a
+bishop never leaves the colour of squares it started on, so the pair splits
+permanently into one Water bishop and one Light bishop a side.
+
+**Powers are free.** Using one does not cost the turn — fire a power and then
+move as normal. What limits them is that there are sixteen charges a side for
+the whole game, they cannot be replenished, and only one standalone power may
+be used per turn. The element is a pure function of the piece and its square,
+so nothing is tracked per piece except the charge, and a promoted piece simply
+arrives as whatever it has become, loaded.
+
+Three rules keep it chess underneath:
+
+**A king is never burned, frozen, shielded or struck.** Not only for balance.
+chess.js refuses a position with a king missing, and a frozen king in check is
+a player with no legal reply and no rule to say what that means. Keeping kings
+out of every effect is what leaves checkmate, stalemate and the draws exactly
+as chess defines them.
+
+**Fire and lightning will not burn away your own defence.** Removing an enemy
+piece can open a line that was pointing at *your* king all along — and the
+turn has already passed, so there would be no move left to answer it with. The
+blast is all-or-nothing: if it would leave you in check it simply does not
+happen, and a toast says why, because the evidence otherwise is a piece that
+is inexplicably still standing there.
+
+**Effects break rather than strand anybody.** Freeze, vines and shields only
+ever *subtract* moves, and subtracting can take the last one away — leaving a
+player who is neither mated nor stalemated with nothing they are allowed to
+do. Chess has no word for that and this does not invent one: if filtering
+would empty a player's move list, the effects working against them are
+cleared instead. So freezing can never stand in for checkmate, and the board
+a player is handed is always one they can play from.
+
+Vines block movement, not sight: a check passes straight through them.
+
+The rules live in `js/elemental.js` as pure functions over a FEN — no engine,
+no DOM, no session — and the state lives in `sessions/elemental-session.js`,
+which is a **mixin** rather than a class so that the variant and the bot can
+be stacked: `withBot(withElemental(LocalSession))`. The bot goes on the
+outside, so a capture's fire has finished before the bot is handed the
+position to think about.
+
+The bot plays ordinary chess and its powers are chosen by hand-written
+heuristics on top — slip the king away when in check, shield a rook or better
+that is hanging, freeze the best thing a rook can see, cleanse when there is
+something worth washing off. It uses them sensibly rather than brilliantly.
+When an effect forbids the move its search came back with, the move is vetted
+and swapped for the best one the rules will accept, which costs it some
+strength on the handful of turns where effects are on the board and never
+costs it a move.
+
+A power that changes the board — fire, lightning, a teleport — does it by
+rewriting the FEN and reloading it, because chess.js has no way to say "this
+piece is simply gone". Reloading clears the move history, so these games are
+saved and restored by **FEN plus their charges and effects**, and storage.js
+skips the PGN cross-check it runs on everything else. Undo is already
+unavailable app-wide, which is what makes that affordable.
 
 Rematch is swapped out for the next rung in tournament games. On a ladder the
 next game is never "the same again" — it is the next rung, this one once
@@ -615,6 +688,7 @@ chess-game/
 │   ├── firebase-client.js        One app, one sign-in, shared by the two things that connect
 │   ├── social.js                 Friend codes, requests, friends, presence
 │   ├── chess-engine.js           Defensive wrapper around chess.js
+│   ├── elemental.js              Elemental Chess rules, as pure functions over a FEN
 │   ├── game-controller.js        Orchestration, selection, autosave
 │   ├── board-shared.js           Square list, FEN parsing, labels — used by BOTH boards
 │   ├── board.js                  Flat DOM board: rendering and interaction
@@ -626,7 +700,9 @@ chess-game/
 │   ├── sound.js                  Web Audio effects
 │   ├── sessions/
 │   │   ├── local-session.js      Provider — two players, one device
-│   │   ├── bot-session.js        Provider — one player, one computer
+│   │   ├── bot-session.js        The bot, as a mixin over any base provider
+│   │   ├── elemental-session.js  Elemental Chess, as a mixin over any base
+│   │   ├── elemental-bot-session.js  Those two, stacked
 │   │   └── firebase-session.js   Phase 2 provider — two devices
 │   └── vendor/
 │       ├── chess.js              chess.js 1.4.0 ESM build (vendored)
@@ -1288,7 +1364,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, the tournament ladder **30**, Speed Chess **57** (35 for the clock, 22 for playing the bot on it), and chat, emotes, friends and presence **110**, with a further **15** run against the deployed site and the real Firebase project rather than a stand-in. The groups were run separately, so
+Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, the tournament ladder **30**, Speed Chess **57** (35 for the clock, 22 for playing the bot on it), chat, emotes, friends and presence **110**, and Elemental Chess **223**, with a further **15** run against the deployed site and the real Firebase project rather than a stand-in. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -1316,6 +1392,7 @@ the totals are reported separately rather than as one number:
 | **Tournament ladder (Chromium)** | **30** | **The form (five rungs named, round 1 next, the rest locked, the button naming the opponent), then a real climb driven through the app: a mate wins round 1, the run advances and is written to storage, the dialog offers round 2 by name and Rematch is gone, the next game is the next rung with the same player, and a resignation drops the run to the bottom while leaving the record standing. A saved round-4 game resumes against the Master rather than the Novice. A stored round of 99, of -3, and of "Champion" all land on a rung that exists. Player vs Bot is checked to be untouched — still `bot`, still named Bot, no rung attached. And the rungs are proved to be different OPPONENTS rather than different labels by timing their replies: Novice 465ms against Champion 3078ms, either side of the bot's 450ms think floor** |
 | **Speed Chess (Chromium)** | **35** | **The form (four controls, each named as the game it is, one chosen, spelled out for a screen reader), then the clock itself: full balances at the start, neither side running, and an idle clock that does not move over a real second of waiting. White's first move starts BLACK's clock and costs White nothing; the increment is paid to whoever moved; the lit readout is the right player's card, checked both ways round, because the cards are laid out by orientation rather than colour and a count would not catch a swapped mapping. A flag falls on its own with nobody touching the board — the game ends `finished`, winner Black, reason `timeout`, "White ran out of time" — and the frozen board then refuses another move. A reload resumes with the stored balances and the clock running again rather than frozen. A plain local game still has no clock and shows none. Caught a real bug: the readout was painted from the controller's snapshot, which is only replaced when the session publishes, so between two moves it stood still** |
 | **Speed Chess vs the bot (Chromium)** | **22** | **The opponent choice (the bot by default, no second name box for it, the box coming back for a friend), then a real game: the mode stays `speed` with a bot in the other seat, the bot answers and hands the clock back, and its thinking comes off ITS clock — measured on 5 + 0 where no increment muddies the arithmetic, and separately on 3 + 2 where a bot thinking for under two seconds correctly ends up AHEAD. Left under a second it still produces a move instead of flagging mid-search, and inside the time it had. A saved game records that a bot was in it and resumes with one — checked by playing a move and watching it reply, not just by reading the record. Two people on one device still get a game where nothing answers for Black** |
+| **Elemental Chess (Chromium)** | **223** | **The variant end to end, on both boards. The form: the mode, its opponent picker shared with Speed Chess, and all seven elements on the rules card. Then the elements themselves, which are a pure function of piece and square — c1 Water and f1 Light for White, c8 Light and f8 Water for Black, so each side gets one of each. Thirty-two charges handed out and drawn on the board. Freeze: the rook sees down an open file and not through a piece, aiming highlights exactly what it can reach and suppresses the move dots while it does, the ice lands, the rook is spent, it is STILL your move, a second standalone power that turn is refused, the frozen piece offers no destinations and says why when asked directly, and the ice expires as your next turn begins. Fire: a pawn takes and three enemy pieces around it burn while its own pawn beside them does not, and a king beside the blast survives. Lightning: the arc picks the rook over the pawn, by value. Shadow: a charged enemy LIGHT bishop holds the teleport shut and the bar says so, a dark-squared one does not, and the real thing slips a checked king to a safe square — none of them on the file it was being checked down — for free, losing castling rights on the way. Water, Nature and Light: a shielded rook cannot be captured and is not even offered, vines block landing on a square AND sliding across it while a square short of them is still fine, and Cleanse fires with no target and clears the board. The bookkeeping around the three awkward moves: castling carries the rook’s charge to f1, en passant kills the charge of a pawn taken from a third square, and a promotion arrives loaded. A save and a reload bring back the position, the spent pieces, the effects and the ply they expire against. The bot freezes the most valuable thing its rook can see, spends the charge, and still moves afterwards; and it reaches for its king’s teleport when that is the way out of check — which is how the first version of that test was found to be wrong rather than the code. Two rules that keep the position legal get their own checks: a burn that would open a line onto your OWN king does not happen at all and costs no charge (the same capture with the bishop removed burns normally), and effects that would leave a player with no legal move break instead of stranding them. Restart and Rematch hand out fresh charges, clear the effects and put the ply back to zero — without which a rematch inherits the previous game’s spent pieces, invisibly, until somebody taps one. And the Continue dialog counts from the position rather than the move list, because a burn clears chess.js’ history and a game seven half-moves deep was offering to resume “0 moves played”. Both were found by these tests. Plus the a11y labels, the toasts, the layer tearing down cleanly when the next game is an ordinary one, the bar fitting and keeping a real tap target at 320, 390 and 768 wide, and a regression pass over all five older modes. Zero console errors** |
 | **The deployed site (Chromium ×2 + real project)** | **15** | **The published URL on a phone viewport, the real SDK from the CDN, the real rules: two anonymous accounts claim two friend codes, one adds the other by code, the request arrives with the right name, accepting writes both lists, then a real room with a real message and a real emote crossing between them, a move landing after the conversation, and presence moving to "in a game" on the friend's screen. It removes its own rooms, profiles, presence, friendships and handles afterwards, so the database is left as it was found. Caught a real bug: a friend whose presence had not arrived yet was being announced as offline** |
 | **Chat, emotes, friends, presence, invitations (Chromium ×2–3)** | **110** | **Fifteen of them read `firebase/database.rules.json` itself and assert what it says — that a message can only be written as yourself *or left exactly as it was*, that a colour must match the seat you hold, that a friends list is readable only by its owner, that somebody may add themselves to yours only while your request stands, that a request cannot be sent to yourself, that an invitation may only be written by somebody already on the list while withdrawing one is always allowed, and that the profile-picture rule is byte-for-byte the seat-picture rule. The rest drive two and three real browsers against a database that enforces that rule text. Two players talk: what you send lands on your own side and the other side, attributed to the seat, counted as unread while the sheet is shut and cleared when it opens. An emote arrives named and is drawn from the receiver's own list; with the sheet open it stays in the log on **both** devices, and only with the sheet shut does it pop on the card of whoever sent it. That pair replaced an assertion that checked for a bubble while the sheet was open — a bubble nobody could see, since the sheet is drawn over the cards, so it passed for as long as the bug existed and would have gone on passing. `<img src=x onerror=alert(1)>` arrives as characters and creates no element. **A move after a conversation is not refused** — the check the "unchanged" rule clauses exist for, and the one that would have broken every game after the first message. A log of 60 is shown 40 deep, oldest dropped, and sending into a full log trims the room rather than growing it. Blank, whitespace-only, over-long and unknown-emote sends are each refused for their own reason, and a second send in the same instant is refused for the cooldown. With the setting off the button is gone, both sends refuse, and nothing arrives on screen. Two devices claim two different friend codes, each handle points back at its claimer, a request crosses with the right name, accepting writes both lists and clears both cleanups, and removing clears both. Presence follows a game: starting one moves a friend to "In a game" on the other device without anybody reopening the panel. A reload reclaims the same code rather than a second one. Then the whole thing again against rules that know none of it: the game is still playable and the move still crosses, the message is refused with an explanation, and the friends panel says the rules need deploying rather than sitting empty. It also holds the mode list in place: the five modes in their intended order, and choosing any one of them marking that one and only that one — measured from computed styles after the transition has finished, because a row caught mid-fade looks selected and this project has been fooled by that twice. That check found a real bug: Online Multiplayer could not be highlighted at all, because the rule keyed on a class its label had never carried. Then invitations, on three browsers at once: a friend who is about can be asked, one who is not on the list cannot — and a third browser going round the client and writing straight at the database is refused by the rules, which is the check that matters, since the client is the half an attacker replaces. One tap hosts a room, stands in it, gets the panel out of the way, and writes an invitation naming that room, under the right name, carrying nothing else; the row for that friend then says "Invited" and will not send a second. Cancelling the room withdraws it rather than leaving it pointing at a room that has gone. Asked again, the other phone shows a count with the panel shut, the invitation named and offering both answers, and Join seats both players in that one room with no code typed anywhere — after which the invitation is deleted and the count is gone. An invitation seeded three minutes old is not offered at all, neither in the panel nor in the state behind it. And the only write refused in the whole run is the one that was supposed to be. Zero console errors** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
@@ -1341,7 +1418,7 @@ resignation, and rejection of a third player or a bad code.
 
 ### Bugs this found
 
-Six real bugs were caught and fixed. Three in Phase 1:
+Twelve real bugs were caught and fixed. Three in Phase 1:
 
 1. **Every modal was an invisible full-screen click trap.** `.modal` sets
    `display: grid`, which silently overrides the `hidden` attribute (only
@@ -1440,6 +1517,31 @@ And two from building that WebGL board:
    what the tests now measure. The general lesson is not "extrude deeper": it
    is that a piece has to be identifiable in the projection the camera
    actually produces, and for a board seen from above that is the plan view.
+
+And two from Elemental Chess, both of the same shape — a thing that resets
+itself and a thing that counts, neither of which the variant remembered to
+tell the rest of the app about:
+
+11. **A rematch inherited the previous game's spent charges.** Restart and
+   Rematch rebuild the position in `LocalSession`, which the elemental layer
+   sits above and which knows nothing about charges. So the pieces went back
+   to their squares and the bookkeeping did not: a rook that had spent its ice
+   an hour ago was still spent, effects laid in the game before were still
+   standing, and the ply they expire against never reset so they never
+   expired. Every bit of it invisible until somebody tapped a piece and was
+   told it had nothing left. Fixed by overriding `submitAction` to reset the
+   elemental state and re-charge the board for exactly those two actions —
+   and deliberately not for Undo, which is locked app-wide and would need a
+   history of every power ever used to roll back through.
+
+12. **A game seven moves deep offered to resume "0 moves played".** The
+   Continue dialog counts `state.moves`, which is chess.js' move list — and a
+   power that changes the board reloads the FEN, which clears that list. The
+   position was right, the count was of the moves since the last burn. It is
+   the small, plausible kind of wrong that nobody reports and everybody
+   half-notices. Fixed by counting from the FEN's own full-move counter for
+   the modes that persist by position, which is exact and needs nothing
+   stored.
 
 ### Manual checklist
 

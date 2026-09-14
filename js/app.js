@@ -328,7 +328,16 @@ async function boot() {
     // the same way — and BotSession reads the rung back out of the record,
     // which is what stops a resumed Champion game being finished off by the
     // Novice.
-    if (info?.mode === GAME_MODE.BOT || info?.mode === GAME_MODE.TOURNAMENT
+    // Elemental Chess first: a resumed game of it needs the variant back
+    // whether or not the bot was in it, and mounting a plain bot session
+    // would leave the board holding charges and effects that nothing knows
+    // how to read — a position that looks right and plays as ordinary chess.
+    if (info?.mode === GAME_MODE.ELEMENTAL) {
+      const Session = info.vsBot
+        ? (await import('./sessions/elemental-bot-session.js')).ElementalBotSession
+        : (await import('./sessions/elemental-session.js')).ElementalSession;
+      await controller.useSession(new Session());
+    } else if (info?.mode === GAME_MODE.BOT || info?.mode === GAME_MODE.TOURNAMENT
         || info?.vsBot) {
       const { BotSession } = await import('./sessions/bot-session.js');
       await controller.useSession(new BotSession());
@@ -621,6 +630,28 @@ async function boot() {
         return;
       }
 
+      // Elemental Chess. Two sessions again — a person on this device, or the
+      // bot — but the difference between them is a mixin rather than a
+      // separate game: both are the same variant, and the variant's rules are
+      // in one place whichever seat the opponent is in.
+      if (mode === GAME_MODE.ELEMENTAL) {
+        const vsBot = opponent !== 'human';
+        const Session = vsBot
+          ? (await import('./sessions/elemental-bot-session.js')).ElementalBotSession
+          : (await import('./sessions/elemental-session.js')).ElementalSession;
+
+        await controller.useSession(new Session());
+        await controller.newGame({
+          whiteName,
+          blackName: vsBot ? undefined : blackName,
+          whiteAvatar,
+          blackAvatar: vsBot ? null : blackAvatar,
+          mode: GAME_MODE.ELEMENTAL,
+        });
+        ui.showScreen('game');
+        return;
+      }
+
       if (mode === GAME_MODE.BOT) {
         // Imported lazily: the search and its tables are dead weight for
         // anyone who only ever plays another person.
@@ -847,6 +878,21 @@ async function boot() {
       ui.toast(copied ? 'Friend code copied' : 'Could not copy code',
         copied ? 'info' : 'error');
     },
+
+    /**
+     * Elemental Chess: aim the selected piece's power, or call it off.
+     *
+     * Both are one line because the controller owns the whole of it — which
+     * square is selected, what that piece can do, and whether a power is
+     * already being aimed. The button only has to say which of the two the
+     * player pressed.
+     */
+    onUsePower: async () => {
+      sound.unlock();
+      await controller.beginAiming();
+    },
+
+    onCancelPower: () => controller.cancelAiming(),
 
     onAcceptDraw: () => controller.acceptDraw(),
     onDeclineDraw: () => controller.declineDraw(),

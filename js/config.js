@@ -87,7 +87,22 @@ export const GAME_MODE = {
   ONLINE: 'online',
   TOURNAMENT: 'tournament',
   SPEED: 'speed',
+  // The one variant: chess with seven elements laid over it. Its rules live
+  // in elemental.js and its session in sessions/elemental-session.js, both of
+  // which are loaded only when a game of it is actually started.
+  ELEMENTAL: 'elemental',
 };
+
+/**
+ * Modes whose position cannot be rebuilt by replaying its own move list.
+ *
+ * Elemental Chess is the only one so far: its powers take pieces off the board
+ * and move a king to squares no move reaches, neither of which is a chess move
+ * and neither of which a PGN can record. Games in these modes are saved and
+ * restored by FEN, and storage.js skips the PGN cross-check it runs on
+ * everything else — see validateGameRecord.
+ */
+export const FEN_ONLY_MODES = [GAME_MODE.ELEMENTAL];
 
 /**
  * Roughly how long the bot may think, in ms.

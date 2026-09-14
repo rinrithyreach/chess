@@ -108,6 +108,29 @@ const HIGHLIGHT = {
 };
 
 /**
+ * Elemental Chess, in the only vocabulary this board has: flat coloured
+ * quads and rings.
+ *
+ * The DOM board says all of this with emoji in the corner of a square, which
+ * is not available here — a sprite per square would mean a texture atlas, a
+ * second material and a billboard update every frame, for information that a
+ * colour carries perfectly well. The colours are the ones in board.css, so a
+ * player who switches boards mid-game is not learning a second language:
+ * ice pale blue, water deeper blue, vines green.
+ *
+ * The charge is a ring rather than a wash, because a charged piece is usually
+ * also one you are about to move, and it has to be readable underneath the
+ * selection tint rather than instead of it.
+ */
+const ELEMENTAL_HIGHLIGHT = {
+  frozen: { color: 0x7ec8ff, opacity: 0.5 },
+  shield: { color: 0x56aaff, opacity: 0.5 },
+  vines: { color: 0x60be6e, opacity: 0.5 },
+  aim: { color: 0xe8b44c, opacity: 0.65 },
+  charged: { color: 0xffe0a0, opacity: 0.55 },
+};
+
+/**
  * The two piece finishes.
  *
  * Not the same material in two colours. A pale piece is boxwood: fairly matt,
@@ -1758,6 +1781,44 @@ export class Board3D {
     if (state.checkSquare) place(state.checkSquare, HIGHLIGHT.check, 0.006);
     if (view?.selected) place(view.selected, HIGHLIGHT.selected, 0.008);
 
+    // Elemental Chess, or nothing. Under the selection and the legal moves,
+    // because an effect is a property of the square that was already there
+    // before you picked anything up.
+    const elemental = state.elemental ?? null;
+    if (elemental) {
+      Object.entries(elemental.marks ?? {}).forEach(([square, kind]) => {
+        const spec = ELEMENTAL_HIGHLIGHT[kind];
+        if (!spec) return;
+        // A shield is on the piece, so it draws as a ring around it; ice and
+        // vines take the whole square, because that is what they are on.
+        const shield = kind === 'shield';
+        const marker = place(square, spec, 0.003, shield ? 'ring' : 'square');
+        // The ring geometry runs from 0.27 to 0.33 of a square; 2.7 takes it
+        // out to 0.73–0.89, a hoop standing round the piece rather than a
+        // washer sitting under it. Anything past 3.0 and it laps the square.
+        if (shield) marker.scale.setScalar(2.7);
+      });
+
+      Object.entries(elemental.pieces ?? {}).forEach(([square, piece]) => {
+        if (!piece.charged) return;
+        const marker = place(square, ELEMENTAL_HIGHLIGHT.charged, 0.007, 'ring');
+        marker.scale.setScalar(1.4);
+      });
+    }
+
+    // Aiming a power: the board is in a mode, and the move dots below are
+    // suppressed for it. The same reasoning as the flat board — a dot means
+    // "your piece can go here", which is not what the next tap is going to do.
+    const aiming = view?.aiming ?? null;
+    if (aiming) {
+      place(aiming.from, HIGHLIGHT.selected, 0.008);
+      (aiming.targets ?? []).forEach((square) => {
+        const marker = place(square, ELEMENTAL_HIGHLIGHT.aim, 0.011);
+        marker.scale.setScalar(0.5);
+      });
+      return;
+    }
+
     // Legal destinations: a small disc, a wide ring for a capture — the same
     // vocabulary the flat board uses, so the two read identically.
     (view?.legalTargets ?? []).forEach((target) => {
@@ -1779,15 +1840,19 @@ export class Board3D {
 
   #syncA11y(board, view, state) {
     const targets = new Map((view?.legalTargets ?? []).map((m) => [m.to, m]));
+    const elemental = state?.elemental ?? null;
     this.#a11ySquares.forEach((button, square) => {
       const piece = board.get(square) ?? null;
-      button.setAttribute('aria-label', describeSquare(square, piece, targets.get(square)));
+      button.setAttribute('aria-label', describeSquare(square, piece, targets.get(square),
+        elemental && {
+          ...elemental.pieces?.[square],
+          effect: elemental.marks?.[square] ?? null,
+        }));
       button.setAttribute(
         'aria-selected',
         String(square === view?.selected),
       );
     });
-    void state;
   }
 
   // -----------------------------------------------------------------------

@@ -38,6 +38,10 @@ import {
 } from './config.js';
 import { fileToAvatar, isAvatar } from './avatar.js';
 import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
+// Small, pure and free of any engine, so the rules card and the power bar can
+// be built from the same table the variant's rules are written against —
+// rather than from a second copy of them kept in step by hand.
+import { ELEMENTS, ELEMENT_ORDER, POWER_TRIGGER } from './elemental.js';
 
 /** A blank friend code, drawn the same way a blank room code is. */
 const FRIEND_CODE_BLANK = '-'.repeat(FRIEND_CODE_LENGTH);
@@ -232,7 +236,10 @@ export class UI {
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
       'theme-picker', 'bg-picker',
       'mode-tournament', 'tournament-fields', 'ladder', 'ladder-note', 'btn-ladder-next',
-      'mode-speed', 'speed-fields', 'time-picker', 'opponent-picker',
+      'mode-speed', 'speed-fields', 'time-picker',
+      'opponent-fields', 'opponent-picker', 'opponent-bot-hint',
+      'mode-elemental', 'elemental-fields', 'elements-list',
+      'powerbar', 'power-glyph', 'power-name', 'power-hint', 'btn-power',
       'top-clock', 'bottom-clock',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
@@ -467,6 +474,27 @@ export class UI {
       });
     }
 
+    // The elemental rules card. Built from the same table the rules
+    // themselves are written against, so an element cannot end up described
+    // here as one thing and implemented as another.
+    const elements = this.#dom['elements-list'];
+    if (elements) {
+      elements.innerHTML = '';
+      ELEMENT_ORDER.forEach((id) => {
+        const element = ELEMENTS[id];
+        const item = document.createElement('li');
+        item.className = 'element';
+        item.dataset.element = id;
+        item.innerHTML =
+          `<span class="element__glyph" aria-hidden="true">${element.emoji}</span>` +
+          '<span class="element__body">' +
+          `<span class="element__name">${element.piece} — ${element.power}</span>` +
+          `<span class="element__desc">${element.blurb}</span>` +
+          '</span>';
+        elements.append(item);
+      });
+    }
+
     // Background picker. Same shape as the board themes above, and for the
     // same reason: one list in config.js decides what exists, so a background
     // is a block of CSS and a row in that list, with no markup to add here.
@@ -519,21 +547,32 @@ export class UI {
     const bot = mode === GAME_MODE.BOT;
     const ladder = mode === GAME_MODE.TOURNAMENT;
     const speed = mode === GAME_MODE.SPEED;
+    const elemental = mode === GAME_MODE.ELEMENTAL;
 
     if (this.#dom['online-fields']) this.#dom['online-fields'].hidden = !online;
     if (this.#dom['tournament-fields']) this.#dom['tournament-fields'].hidden = !ladder;
     if (this.#dom['speed-fields']) this.#dom['speed-fields'].hidden = !speed;
+    if (this.#dom['elemental-fields']) this.#dom['elemental-fields'].hidden = !elemental;
+    // Two modes ask who you are playing, and they are the two that can be
+    // played either way round.
+    if (this.#dom['opponent-fields']) {
+      this.#dom['opponent-fields'].hidden = !(speed || elemental);
+    }
+    // The bot is only ever "on the clock too" in the game that has one.
+    if (this.#dom['opponent-bot-hint']) {
+      this.#dom['opponent-bot-hint'].textContent = speed ? 'On the clock too' : 'It has powers too';
+    }
     if (this.#dom['btn-start-game']) this.#dom['btn-start-game'].hidden = online;
 
     const nameFields = this.#dom['form-new-game']
       ?.querySelectorAll('.field:not(.field--modes)');
-    // Speed Chess asks for a second name only when a second person is
+    // Speed and Elemental ask for a second name only when a second person is
     // going to type one in.
-    const soloSpeed = speed && this.#selectedOpponent() === 'bot';
+    const soloVariant = (speed || elemental) && this.#selectedOpponent() === 'bot';
     nameFields?.forEach((field, index) => {
       if (index === 0) field.hidden = online;  // your own name
       else if (index === 1) {                  // the opponent's
-        field.hidden = online || bot || ladder || soloSpeed;
+        field.hidden = online || bot || ladder || soloVariant;
       }
     });
 
@@ -650,6 +689,7 @@ export class UI {
     this.#renderStatus(snapshot);
     this.#renderHistory(state);
     this.#renderControls(snapshot);
+    this.#renderPowerBar(snapshot);
     this.#chatOn = snapshot.settings?.chat !== false;
     this.#renderOnline(state);
     // Painted here as well as on every tick, so the readouts are right the
@@ -1089,6 +1129,79 @@ export class UI {
 
     // Keep the latest move in view.
     if (this.#historyExpanded) list.scrollTop = list.scrollHeight;
+  }
+
+  /**
+   * The elemental power bar.
+   *
+   * Four things it can be saying, and the order they are checked in is the
+   * order they matter: a power is being aimed, a power is ready, the piece you
+   * have picked up has one that goes off by itself, or nothing is selected.
+   *
+   * The bar exists at all only in a game that has an `elemental` block, so
+   * every other mode leaves this after one line.
+   */
+  #renderPowerBar(snapshot) {
+    const bar = this.#dom.powerbar;
+    if (!bar) return;
+
+    const { state, view } = snapshot;
+    const on = Boolean(state.elemental) && !state.isGameOver;
+    bar.hidden = !on;
+    if (!on) return;
+
+    const button = this.#dom['btn-power'];
+    const glyph = this.#dom['power-glyph'];
+    const name = this.#dom['power-name'];
+    const hint = this.#dom['power-hint'];
+
+    const say = (emoji, title, detail, action = null, mood = null) => {
+      if (glyph) glyph.textContent = emoji;
+      if (name) name.textContent = title;
+      if (hint) hint.textContent = detail;
+      if (button) {
+        button.hidden = !action;
+        if (action) button.textContent = action;
+      }
+      bar.dataset.state = mood ?? (action ? 'ready' : 'idle');
+    };
+
+    // Aiming. The bar becomes the way out of it, because the player is now in
+    // a mode, and a mode with no visible exit is a trap.
+    if (view?.aiming) {
+      const aimed = ELEMENTS[view.aiming.element];
+      say(aimed.emoji, view.aiming.name, 'Tap a highlighted square', 'Cancel', 'aiming');
+      return;
+    }
+
+    const power = this.#controller.getSelectedPower?.() ?? null;
+    if (!power) {
+      const spent = state.elemental.powerUsed;
+      say('🜁', 'Powers',
+        spent ? 'One a turn — make your move' : 'Select one of your pieces');
+      return;
+    }
+
+    const element = ELEMENTS[power.element];
+    if (power.blockedBy) {
+      say(element.emoji, power.info.power, 'Their Light bishop holds it shut');
+      return;
+    }
+    // Fire and lightning are not offered, they are announced: there is no
+    // button to press, only a capture to make.
+    if (power.info.trigger === POWER_TRIGGER.CAPTURE) {
+      say(element.emoji, power.info.power, 'Goes off when this piece captures');
+      return;
+    }
+    if (state.elemental.powerUsed) {
+      say(element.emoji, power.info.power, 'One power a turn — make your move');
+      return;
+    }
+    if (!power.ready) {
+      say(element.emoji, power.info.power, 'Nothing in reach');
+      return;
+    }
+    say(element.emoji, power.info.power, element.blurb, 'Use');
   }
 
   #renderControls({ state }) {
@@ -2139,6 +2252,17 @@ export class UI {
       this.#call('onSettingChange', { boardZoom: next });
       this.toast(`Board size: ${BOARD_ZOOM_LEVELS[next].label}`);
     });
+    // One button, two jobs, decided by what the bar is currently saying:
+    // start aiming a power, or stop aiming one. Both are the same gesture
+    // from the player's side — "this power" and "not this power" — so they
+    // share the control rather than putting a second one beside it that is
+    // hidden nine tenths of the time.
+    this.#dom['btn-power']?.addEventListener('click', () => {
+      this.#call(this.#dom.powerbar?.dataset.state === 'aiming'
+        ? 'onCancelPower'
+        : 'onUsePower');
+    });
+
     this.#dom['btn-restart']?.addEventListener('click', () => this.#call('onRestart'));
     this.#dom['btn-leave']?.addEventListener('click', () => this.#call('onLeaveGame'));
 
@@ -2245,7 +2369,16 @@ export class UI {
     });
 
     document.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || !this.#openModal) return;
+      if (event.key !== 'Escape') return;
+
+      // Aiming a power is a mode with nothing on screen dimmed, so Escape has
+      // to get out of it — and it has to do so before the modal handling
+      // below, because there is usually no modal open at the time.
+      if (!this.#openModal && this.#dom.powerbar?.dataset.state === 'aiming') {
+        this.#call('onCancelPower');
+        return;
+      }
+      if (!this.#openModal) return;
 
       // Dismissing a draw offer must actually answer it, otherwise the offer
       // would sit unanswered in the room with no way to raise it again.

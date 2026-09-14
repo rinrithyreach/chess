@@ -100,15 +100,44 @@ export function boardFromFen(fen) {
   return map;
 }
 
-/** The label a screen reader reads for one square. */
-export function describeSquare(square, piece, target) {
+/**
+ * What an effect is called out loud.
+ *
+ * Words rather than the emoji the board paints: a screen reader announcing
+ * "ice cube" would be describing the picture instead of the game.
+ */
+const EFFECT_WORDS = {
+  frozen: 'frozen',
+  shield: 'shielded',
+  vines: 'vines',
+};
+
+/**
+ * The label a screen reader reads for one square.
+ *
+ * `elemental` is the per-square description the session builds in Elemental
+ * Chess ({element, charged} plus any effect), and is absent in every other
+ * game — where this reads exactly as it always has. When it is there, the
+ * order is what a player needs in the order they need it: where, what, what
+ * it is, whether it can still do anything, and what is being done TO it.
+ */
+export function describeSquare(square, piece, target, elemental = null) {
   const who = piece
     ? `${piece.color === WHITE ? 'white' : 'black'} ${PIECE_NAMES[piece.type]}`
     : 'empty';
-  if (target) {
-    return `${square}, ${who}, ${target.isCapture ? 'capture' : 'move here'}`;
+
+  const extra = [];
+  if (elemental?.element) {
+    extra.push(elemental.element);
+    // Only the pieces that still have something say so. Announcing "spent" on
+    // every piece on the board by move thirty is noise, and the interesting
+    // half is the one that is still loaded.
+    if (elemental.charged) extra.push('charged');
   }
-  return `${square}, ${who}`;
+  if (elemental?.effect) extra.push(EFFECT_WORDS[elemental.effect] ?? elemental.effect);
+  if (target) extra.push(target.isCapture ? 'capture' : 'move here');
+
+  return [square, who, ...extra].join(', ');
 }
 
 /**

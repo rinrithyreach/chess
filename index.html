@@ -171,29 +171,30 @@
               <span class="mode__desc">Climb a ladder of five bots</span>
             </span>
           </label>
+          <label class="mode">
+            <input type="radio" name="mode" value="elemental" id="mode-elemental">
+            <span class="mode__body">
+              <span class="mode__name">Elemental Chess</span>
+              <span class="mode__desc">Every piece has one power to spend</span>
+            </span>
+          </label>
         </fieldset>
 
         <!--
-          The ladder. Rungs are built from GAUNTLET_ROUNDS in js/config.js, so
-          adding an opponent is a row in that list and nothing here.
+          Opponent. Shared by Speed Chess and Elemental Chess, which is why it
+          sits out here rather than inside either one's own block: both ask the
+          same question, and it decides the same thing for both — whether the
+          second name box above is any use.
         -->
-        <!-- Time controls come from TIME_CONTROLS in js/config.js. -->
-        <div class="speed-fields" id="speed-fields" hidden>
-          <!--
-            Opponent first, because it decides whether the second name box
-            above is any use. Only two, and neither is a list that grows, so
-            these are written out rather than built from config — but they
-            wear the time picker's classes, which are about the shape of the
-            control (a label over a name, in a box) rather than about time.
-          -->
+        <div class="opponent-fields" id="opponent-fields" hidden>
           <div class="setting setting--stack">
             <span class="setting__label" id="opponent-label">Opponent</span>
             <div class="time-picker" id="opponent-picker" role="radiogroup"
                  aria-labelledby="opponent-label">
               <button type="button" class="time-option is-active" data-opponent="bot"
-                      role="radio" aria-checked="true" aria-label="Play the bot, on the clock">
+                      role="radio" aria-checked="true" aria-label="Play the bot">
                 <span class="time-option__label">Bot</span>
-                <span class="time-option__name">On the clock too</span>
+                <span class="time-option__name" id="opponent-bot-hint">On the clock too</span>
               </button>
               <button type="button" class="time-option" data-opponent="human"
                       role="radio" aria-checked="false"
@@ -203,7 +204,32 @@
               </button>
             </div>
           </div>
+        </div>
 
+        <!--
+          The seven elements. Written out rather than built from ELEMENTS in
+          js/elemental.js, because this is the one place in the app that has to
+          read as prose before a game starts — and because the same table is
+          rendered from config into the power bar during the game, where being
+          generated is worth more than being readable in the source.
+        -->
+        <div class="elemental-fields" id="elemental-fields" hidden>
+          <div class="setting setting--stack">
+            <span class="setting__label" id="elements-label">The seven elements</span>
+            <ul class="elements" id="elements-list" aria-labelledby="elements-label"></ul>
+          </div>
+          <p class="elements__note">
+            Every piece has one charge, for the whole match. Powers are free —
+            use one and still make your move — but only one a turn.
+          </p>
+        </div>
+
+        <!--
+          The ladder. Rungs are built from GAUNTLET_ROUNDS in js/config.js, so
+          adding an opponent is a row in that list and nothing here.
+        -->
+        <!-- Time controls come from TIME_CONTROLS in js/config.js. -->
+        <div class="speed-fields" id="speed-fields" hidden>
           <div class="setting setting--stack">
             <span class="setting__label" id="time-label">Time control</span>
             <div class="time-picker" id="time-picker" role="radiogroup" aria-labelledby="time-label"></div>
@@ -443,6 +469,23 @@
         <div class="status" id="status" role="status" aria-live="polite">
           <span class="status__text" id="status-text">White's Turn</span>
           <span class="status__badge" id="status-badge" hidden>Check</span>
+        </div>
+
+        <!--
+          Elemental Chess only. Sits between the status and the controls
+          because it is about the piece you have just picked up, and reads as
+          part of the answer to "whose turn and what now" rather than as a
+          sixth control. Hidden outright in every other game.
+        -->
+        <div class="powerbar" id="powerbar" hidden>
+          <span class="powerbar__glyph" id="power-glyph" aria-hidden="true">🔥</span>
+          <span class="powerbar__body">
+            <span class="powerbar__name" id="power-name">Burn</span>
+            <span class="powerbar__hint" id="power-hint">Select a piece</span>
+          </span>
+          <button type="button" class="btn btn--primary btn--tiny" id="btn-power" hidden>
+            Use
+          </button>
         </div>
 
         <!-- Primary controls -->

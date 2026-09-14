@@ -600,6 +600,62 @@ export class LocalSession {
     return this.#engine.getLegalMoves(square);
   }
 
+  /**
+   * Every legal move in the position.
+   *
+   * Here for the variants: a rule that subtracts moves has to be able to ask
+   * what the whole set is before it can know whether it has taken the last
+   * one away. Nothing in the standard game needs it.
+   */
+  getAllLegalMoves() {
+    return this.#engine.getAllLegalMoves();
+  }
+
+  // -----------------------------------------------------------------------
+  // Hooks for variants
+  //
+  // Two methods that ordinary chess never calls, and that a variant cannot do
+  // without. Both are here rather than in a subclass because the engine is
+  // private to this class — which is the point of it being private, and the
+  // reason these are a small deliberate pair rather than a getter handing the
+  // engine out to anyone who asks.
+  // -----------------------------------------------------------------------
+
+  /**
+   * Replace the position without a move having been played.
+   *
+   * Elemental Chess needs this: a pawn's fire takes pieces off the board that
+   * nobody captured, and a king's teleport moves one to a square no move
+   * reaches. Neither is expressible as a chess move, so the board is rewritten
+   * as a FEN and reloaded.
+   *
+   * The cost, and it is a real one: loading a FEN clears the move history, so
+   * PGN and undo reach back only as far as the last call to this. Undo is
+   * already unavailable app-wide (LOCKED_CONTROLS), and a game that uses this
+   * is expected to persist itself by FEN rather than by replaying its PGN.
+   *
+   * The status is re-derived, so a burn that happens to deliver checkmate ends
+   * the game there and then rather than at whatever somebody tried next.
+   */
+  setPosition(fen) {
+    if (this.#destroyed) return { ok: false, error: 'Session destroyed' };
+    const loaded = this.#engine.loadFen(fen);
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+    if (!this.#isTerminal()) this.#refreshStatus();
+    return { ok: true, state: this.getState() };
+  }
+
+  /**
+   * Push the current state to subscribers.
+   *
+   * A variant changes things this class knows nothing about — charges,
+   * effects, whose power is spent — and has to be able to say so without
+   * pretending a move was made.
+   */
+  publishState() {
+    return this.#publish();
+  }
+
   /** Does this move need a promotion choice before it can be submitted? */
   requiresPromotion(from, to) {
     return this.#engine.requiresPromotion(from, to);
