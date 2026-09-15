@@ -1446,6 +1446,31 @@ body.is-modal-open {
   padding: 1rem;
 }
 
+/*
+  The two dialogs that are raised ON TOP of another dialog.
+
+  Every modal shares one z-index, so which of two overlapping ones is in
+  front comes down to which is written later in index.html — and the
+  confirmation is written second of nine, so all seven after it covered it.
+  The friends sheet is one of those seven. Pressing × on a friend put a
+  confirmation up behind an opaque sheet: nothing appeared to happen, the
+  × appeared broken, and the app was in fact waiting on an answer to a
+  question that could not be seen or reached. Escape or the sheet's own
+  backdrop were the only ways out, and both read as "give up".
+
+  A draw offer has the same shape — it arrives from the network, so it can
+  land while the chat sheet or the friends sheet is up — and is raised here
+  with it rather than left as the same bug waiting for the Draw button to
+  come back.
+
+  Kept below the toasts at 200: a toast is the app's smallest voice and has
+  to be readable over anything, a confirmation included.
+*/
+#modal-confirm,
+#modal-draw-offer {
+  z-index: 110;
+}
+
 .modal__backdrop {
   position: absolute;
   inset: 0;

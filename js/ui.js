@@ -155,6 +155,22 @@ export class UI {
   #controller;
   #dom = {};
   #openModal = null;
+
+  /**
+   * What was open underneath the confirmation.
+   *
+   * `#openModal` is one slot, which held for as long as dialogs never
+   * overlapped. A confirmation breaks that by design: it is always raised
+   * from on top of something — the friends sheet, the game menu, the
+   * settings — and opening it overwrote the name of whatever it covered.
+   * Settling it then set the slot to null, so the page scroll came back
+   * under a sheet that was still open and a later `closeModal()` with no
+   * argument had nothing to close.
+   *
+   * One deep rather than a stack, because one is the depth the app actually
+   * uses: nothing raises a confirmation from on top of a confirmation.
+   */
+  #confirmUnder = null;
   #lastFocused = null;
   #confirmResolver = null;
   /** What dismissing the confirmation resolves to — see confirm(). */
@@ -927,7 +943,7 @@ export class UI {
       });
     }
 
-    if (this.#openModal === 'chat') return;
+    if (this.isChatOpen()) return;
     const incoming = messages.filter((message) => !message.mine).length;
     if (!incoming) return;
     this.#unread += incoming;
@@ -962,9 +978,16 @@ export class UI {
     }, EMOTE_BUBBLE_MS);
   }
 
-  /** Is the sheet up? Decides whether an arrival is news or already on screen. */
+  /**
+   * Is the sheet up? Decides whether an arrival is news or already on screen.
+   *
+   * Asked of the sheet rather than of `#openModal`, because a confirmation
+   * raised over the chat takes that slot for as long as it is up — and a
+   * message arriving in that window is not news. You are looking straight
+   * at the log it lands in.
+   */
   isChatOpen() {
-    return this.#openModal === 'chat';
+    return this.#dom['modal-chat'] ? !this.#dom['modal-chat'].hidden : false;
   }
 
   #renderUnread() {
@@ -1537,7 +1560,12 @@ export class UI {
 
     modal.classList.remove('is-open');
     modal.hidden = true;
-    if (this.#openModal === name) this.#openModal = null;
+    // Escape comes through here rather than through #settleConfirm, so the
+    // thing underneath has to be handed back on this path too.
+    if (this.#openModal === name) {
+      this.#openModal = name === 'confirm' ? this.#confirmUnder : null;
+    }
+    if (name === 'confirm') this.#confirmUnder = null;
     if (!this.#openModal) document.body.classList.remove('is-modal-open');
 
     // A cancelled confirmation must still settle its promise. What a dismissal
@@ -1627,6 +1655,8 @@ export class UI {
       this.#confirmAltValue = altValue;
       this.#confirmDismiss = dismissValue;
       this.#confirmResolver = resolve;
+      // Remembered BEFORE the open, which is what overwrites it.
+      this.#confirmUnder = this.#openModal;
       this.openModal('confirm');
     });
   }
@@ -1642,7 +1672,8 @@ export class UI {
       modal.classList.remove('is-open');
       modal.hidden = true;
     }
-    if (this.#openModal === 'confirm') this.#openModal = null;
+    if (this.#openModal === 'confirm') this.#openModal = this.#confirmUnder;
+    this.#confirmUnder = null;
     if (!this.#openModal) document.body.classList.remove('is-modal-open');
     this.#lastFocused?.focus?.();
     this.#lastFocused = null;
@@ -2011,9 +2042,12 @@ export class UI {
     if (inviting) inviting.hidden = !available;
   }
 
-  /** Whether the friends sheet is the thing being looked at. */
+  /** Whether the friends sheet is the thing being looked at. Asked of the
+   *  sheet, for the reason isChatOpen is: a confirmation on top of it does
+   *  not close it, and a list that stops repainting while one is up comes
+   *  back stale. */
   isFriendsOpen() {
-    return this.#openModal === 'friends';
+    return this.#dom['modal-friends'] ? !this.#dom['modal-friends'].hidden : false;
   }
 
   /**
