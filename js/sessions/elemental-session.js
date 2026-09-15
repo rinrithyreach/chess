@@ -351,7 +351,7 @@ export const withElemental = (Base) => class extends Base {
     // is in check. Fire will not burn away your own defence.
     const after = removePieces(fen, targets);
     if (this.#kingAttacked(after, move.color)) {
-      return { element, withheld: true, targets: [] };
+      return { element, from: move.to, withheld: true, targets: [] };
     }
 
     const applied = this.setPosition(after);
@@ -363,7 +363,7 @@ export const withElemental = (Base) => class extends Base {
     this.#charges.delete(move.to);
     this.#charges = chargesAfterRemoval(this.#charges, targets);
     this.#effects = effectsAfterRemoval(this.#effects, targets);
-    return { element, withheld: false, targets };
+    return { element, from: move.to, withheld: false, targets };
   }
 
   // -----------------------------------------------------------------------
@@ -408,9 +408,18 @@ export const withElemental = (Base) => class extends Base {
   getArsenal() {
     const state = super.getState();
     if (!state || state.isGameOver) return [];
-    // Same gate as getPower: a device that cannot move this colour has no
-    // business being shown its powers, let alone offered them.
-    if (!this.#mayAct(state.turn)) return [];
+    // Deliberately NOT #mayAct, which getPower uses. #mayAct stands the seat
+    // check down while the bot is inside this session choosing and firing its
+    // own power, which getPower needs and this must not have: the panel is a
+    // view, it repaints on every state change, and one of the changes the bot
+    // publishes lands while that flag is still set. The panel would then draw
+    // the bot's hand — its counts, its readiness — on the player's screen for
+    // a frame or two and go blank again, which is both a leak and a flicker.
+    //
+    // Found by a test that had asserted the right thing for the wrong reason:
+    // it passed for months only because the bot never had a power ready this
+    // early, back when reach came off the caster's own lines.
+    if (!this.getControllableColors().includes(state.turn)) return [];
 
     return arsenal({
       fen: state.fen,

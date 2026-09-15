@@ -634,6 +634,575 @@
   }
 }
 
+/* ==========================================================================
+   Powers going off
+   ==========================================================================
+
+   A burst, per element, on the squares a power touched. Put there by
+   board.playPower() and taken away again on a timer — see board.js, which
+   also sets `--cast-ms` on each one so every keyframe below is timed against
+   the single duration in config.js rather than against a number copied here.
+
+   WHY THIS EXISTS AT ALL. Everything a power does, it does to the state, and
+   the board is handed the state afterwards with no record of how it got that
+   way. A piece that has just been burned off the board and a piece that has
+   just been captured leave behind exactly the same sixty-four squares. This
+   is the only thing that tells them apart, which is why a variant built
+   entirely out of fire and lightning had, until now, no fire and no lightning
+   in it.
+
+   WHAT THEY ARE MADE OF. Gradients and transforms, and nothing else. No
+   images, no filters animated per frame, no box-shadow transitions — a burst
+   can land on eight squares at once (a Fire pawn's capture) or on all
+   sixty-four (Cleanse), on a phone, in the middle of a move animation. Each
+   one is a single composited element plus at most two pseudo-elements, and
+   every keyframe moves only `transform` and `opacity`.
+
+   Each element gets a shape as well as a palette, because a palette on its
+   own is not much use to somebody who cannot tell the blues apart: ice is
+   angular and lingers, water is round and washes outward, lightning is a
+   single hard frame, fire flickers, nature unfurls, shadow implodes, light
+   sweeps.
+*/
+
+.square__cast {
+  position: absolute;
+  /* Wider than the square. A power is not a tidy event and the board's own
+     rounded clip is the only thing that should stop it. */
+  inset: -22%;
+  /* Above the piece (2) and above a piece mid-slide (5). A burst under the
+     piece it just destroyed is a burst nobody sees. */
+  z-index: 6;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.square__cast::before,
+.square__cast::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The Cleanse wave: sixty-three plain squares behind one full burst. */
+.square__cast[data-wave]::before,
+.square__cast[data-wave]::after {
+  display: none;
+}
+
+/*
+  And no compositing hint on those sixty-three.
+
+  will-change promotes an element to its own layer BEFORE it animates, which
+  is the right trade for one burst and the wrong one for sixty-four arriving
+  together on a phone — that is sixty-four layers asked for in a single frame,
+  to save a promotion that the animation is about to do anyway. The wave is
+  staggered, so they are promoted a ring at a time instead.
+*/
+.square__cast[data-wave] {
+  will-change: auto;
+}
+
+/* --- 🔥 Fire: a hot bloom that flickers and throws embers --- */
+
+.square__cast[data-element="fire"] {
+  background: radial-gradient(
+    circle at 50% 58%,
+    rgba(255, 249, 219, 0.95) 0%,
+    rgba(255, 199, 71, 0.92) 20%,
+    rgba(255, 112, 28, 0.78) 42%,
+    rgba(198, 44, 12, 0.38) 62%,
+    rgba(120, 22, 0, 0) 76%
+  );
+  animation: cast-fire var(--cast-ms, 900ms) ease-out both;
+}
+
+/* The lick. An irregular border-radius rather than a circle, because a flame
+   that is perfectly round is a ball. */
+.square__cast[data-element="fire"]::before {
+  inset: 16%;
+  border-radius: 46% 54% 40% 60% / 64% 58% 42% 36%;
+  background: radial-gradient(
+    circle at 50% 72%,
+    rgba(255, 240, 186, 0.92) 0%,
+    rgba(255, 146, 34, 0.55) 52%,
+    rgba(255, 92, 20, 0) 74%
+  );
+  animation: cast-fire-lick calc(var(--cast-ms, 900ms) * 0.92) ease-in-out both;
+}
+
+.square__cast[data-element="fire"]::after {
+  background:
+    radial-gradient(circle at 27% 31%, rgba(255, 216, 128, 0.95) 0 5%, transparent 6%),
+    radial-gradient(circle at 73% 27%, rgba(255, 176, 74, 0.9) 0 4%, transparent 5%),
+    radial-gradient(circle at 54% 15%, rgba(255, 243, 198, 0.9) 0 3.5%, transparent 4.5%),
+    radial-gradient(circle at 40% 20%, rgba(255, 196, 96, 0.85) 0 3%, transparent 4%);
+  animation: cast-embers var(--cast-ms, 900ms) ease-out both;
+}
+
+@keyframes cast-fire {
+  0% { opacity: 0; transform: scale(0.34); }
+  16% { opacity: 1; transform: scale(1.08); }
+  44% { opacity: 0.92; transform: scale(0.96); }
+  62% { opacity: 0.8; transform: scale(1.02); }
+  100% { opacity: 0; transform: scale(1.2); }
+}
+
+@keyframes cast-fire-lick {
+  0% { opacity: 0; transform: rotate(var(--cast-tilt, 0deg)) scale(0.5) translateY(6%); }
+  22% { opacity: 0.95; transform: rotate(var(--cast-tilt, 0deg)) scale(1.02) translateY(-2%); }
+  48% { opacity: 0.7; transform: rotate(var(--cast-tilt, 0deg)) scale(0.9) translateY(-6%); }
+  72% { opacity: 0.5; transform: rotate(var(--cast-tilt, 0deg)) scale(0.98) translateY(-10%); }
+  100% { opacity: 0; transform: rotate(var(--cast-tilt, 0deg)) scale(0.72) translateY(-18%); }
+}
+
+@keyframes cast-embers {
+  0% { opacity: 0; transform: rotate(var(--cast-tilt, 0deg)) scale(0.6) translateY(10%); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--cast-tilt, 0deg)) scale(1.35) translateY(-26%); }
+}
+
+/* --- 💧 Water: a ring washing outward, and a second behind it --- */
+
+.square__cast[data-element="water"] {
+  /* A thick ring rather than a hairline. The first version of this was a
+     three-percent band at 72% alpha, which by the time it had grown to the
+     edge of the square was a pale blue smudge two pixels wide on a phone —
+     technically present and effectively invisible. */
+  background: radial-gradient(
+    circle,
+    rgba(120, 204, 255, 0) 30%,
+    rgba(150, 220, 255, 0.95) 46%,
+    rgba(62, 152, 242, 0.75) 58%,
+    rgba(40, 120, 220, 0.25) 68%,
+    rgba(40, 120, 220, 0) 76%
+  );
+  animation: cast-ripple var(--cast-ms, 900ms) cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.square__cast[data-element="water"]::before {
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(214, 242, 255, 0) 34%,
+    rgba(214, 242, 255, 0.9) 50%,
+    rgba(140, 206, 255, 0.5) 62%,
+    rgba(140, 206, 255, 0) 72%
+  );
+  animation: cast-ripple calc(var(--cast-ms, 900ms) * 0.78) cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: calc(var(--cast-ms, 900ms) * 0.22);
+}
+
+/* The dome. A shield is on the PIECE, so the last thing left is a skin over
+   it rather than another ring leaving the square. */
+.square__cast[data-element="water"]::after {
+  inset: 22%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.92) 0 11%, transparent 26%),
+    radial-gradient(circle, rgba(110, 190, 255, 0.55) 44%, rgba(80, 160, 240, 0.22) 72%, transparent 84%);
+  box-shadow: inset 0 0 0 2px rgba(196, 232, 255, 0.75);
+  animation: cast-dome var(--cast-ms, 900ms) ease-out both;
+}
+
+@keyframes cast-ripple {
+  0% { opacity: 0; transform: scale(0.24); }
+  12% { opacity: 1; }
+  /* Holds its brightness most of the way out instead of fading from the
+     moment it appears, which is what made it disappear halfway. */
+  64% { opacity: 0.95; }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+@keyframes cast-dome {
+  0% { opacity: 0; transform: scale(0.5); }
+  30% { opacity: 1; transform: scale(1.04); }
+  70% { opacity: 0.85; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+/* --- ⚡ Lightning: one hard frame, and gone --- */
+
+.square__cast[data-element="lightning"] {
+  border-radius: 34%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(222, 214, 255, 0.92) 22%,
+    rgba(154, 118, 255, 0.62) 44%,
+    rgba(92, 56, 210, 0.2) 60%,
+    rgba(90, 60, 200, 0) 72%
+  );
+  /* Two thirds the length of the others, on purpose. Everything else on this
+     board blooms; lightning is over before you have finished seeing it, and a
+     slow one reads as a lamp rather than a strike. */
+  animation: cast-strike calc(var(--cast-ms, 900ms) * 0.62) ease-out both;
+}
+
+/* The bolt itself, cut out of a pale rectangle. */
+.square__cast[data-element="lightning"]::before {
+  /* Nearly the full height of the square and half its width. At the third of
+     a width this started out with, the zigzag had no room to zig and read as
+     a diagonal smear. */
+  inset: 2% 24%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 1),
+    rgba(246, 244, 255, 1) 45%,
+    rgba(214, 198, 255, 1)
+  );
+  clip-path: polygon(62% 0%, 22% 46%, 48% 46%, 30% 100%, 84% 42%, 56% 42%, 78% 0%);
+  /* Two shadows doing opposite jobs. The violet glow is the look; the dark
+     one is what keeps a white bolt visible on a light square, which is half
+     of them. Without it the strike disappears on exactly the squares a
+     knight spends most of its time on. */
+  filter:
+    drop-shadow(0 0 7px rgba(168, 128, 255, 1))
+    drop-shadow(0 0 2px rgba(46, 16, 96, 0.9));
+  animation: cast-bolt calc(var(--cast-ms, 900ms) * 0.58) steps(4, end) both;
+}
+
+.square__cast[data-element="lightning"]::after {
+  inset: -8%;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(226, 220, 255, 0.55);
+  animation: cast-strike calc(var(--cast-ms, 900ms) * 0.6) ease-out both;
+}
+
+/*
+  The flicker without the blackout.
+
+  The first version dipped to 55% a third of the way through, which is where
+  the eye arrives — so the strike was at its dimmest at the exact moment
+  anybody was looking at it. It still flickers, because a strike that fades
+  evenly is a torch being switched off, but it never drops below three
+  quarters while it is doing so.
+*/
+@keyframes cast-strike {
+  0% { opacity: 0; transform: scale(0.72); }
+  7% { opacity: 1; transform: scale(1.14); }
+  22% { opacity: 0.78; transform: scale(1); }
+  34% { opacity: 1; transform: scale(1.06); }
+  52% { opacity: 0.82; transform: scale(1.01); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+
+@keyframes cast-bolt {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  44% { opacity: 0.72; }
+  66% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* --- ❄️ Ice: angular, and slower to let go than anything else --- */
+
+.square__cast[data-element="ice"] {
+  background: radial-gradient(
+    circle,
+    rgba(240, 252, 255, 0.92) 0%,
+    rgba(158, 220, 255, 0.72) 28%,
+    rgba(88, 168, 234, 0.34) 54%,
+    rgba(60, 130, 200, 0) 72%
+  );
+  animation: cast-frost var(--cast-ms, 900ms) ease-out both;
+}
+
+/* Six spokes. Crystals are the one thing on this board that should not be
+   round, and a hexagram says "ice" at eighteen pixels where a blue circle
+   only says "blue". */
+.square__cast[data-element="ice"]::before {
+  inset: 12%;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.95),
+    rgba(176, 228, 255, 0.85) 60%,
+    rgba(120, 190, 240, 0.7)
+  );
+  clip-path: polygon(
+    50% 0%, 58% 34%, 92% 16%, 68% 46%, 100% 50%, 68% 56%,
+    92% 86%, 58% 66%, 50% 100%, 42% 66%, 8% 86%, 32% 56%,
+    0% 50%, 32% 46%, 8% 16%, 42% 34%
+  );
+  animation: cast-crystal var(--cast-ms, 900ms) cubic-bezier(0.18, 0.9, 0.3, 1) both;
+}
+
+.square__cast[data-element="ice"]::after {
+  inset: 20%;
+  border-radius: 12%;
+  box-shadow: inset 0 0 0 2px rgba(226, 246, 255, 0.7);
+  animation: cast-frost calc(var(--cast-ms, 900ms) * 1.05) ease-out both;
+}
+
+@keyframes cast-frost {
+  0% { opacity: 0; transform: scale(0.42); }
+  18% { opacity: 1; transform: scale(1.06); }
+  /* Ice hangs about. The piece it landed on is stuck for a whole turn, and a
+     power whose burst is gone in a third of a second reads as weaker than one
+     that leaves a rime behind. */
+  70% { opacity: 0.7; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+
+@keyframes cast-crystal {
+  0% { opacity: 0; transform: scale(0.24) rotate(-40deg); }
+  30% { opacity: 1; transform: scale(1.08) rotate(6deg); }
+  62% { opacity: 0.86; transform: scale(0.98) rotate(0deg); }
+  100% { opacity: 0; transform: scale(1.04) rotate(4deg); }
+}
+
+/* --- 🌿 Nature: something growing, so it unfurls rather than bursts --- */
+
+.square__cast[data-element="nature"] {
+  background: radial-gradient(
+    circle,
+    rgba(206, 246, 190, 0.85) 0%,
+    rgba(108, 202, 118, 0.7) 32%,
+    rgba(46, 140, 70, 0.32) 58%,
+    rgba(30, 100, 50, 0) 74%
+  );
+  animation: cast-grow var(--cast-ms, 900ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Tendrils: four arms out of a conic sweep, turning as they lengthen. */
+.square__cast[data-element="nature"]::before {
+  inset: 10%;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(122, 214, 128, 0.9) 0 7%, transparent 7% 25%,
+    rgba(96, 194, 110, 0.9) 25% 32%, transparent 32% 50%,
+    rgba(146, 226, 148, 0.9) 50% 57%, transparent 57% 75%,
+    rgba(80, 176, 96, 0.9) 75% 82%, transparent 82% 100%
+  );
+  animation: cast-tendril var(--cast-ms, 900ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.square__cast[data-element="nature"]::after {
+  background:
+    radial-gradient(ellipse 14% 8% at 24% 34%, rgba(186, 240, 178, 0.95) 0 100%, transparent),
+    radial-gradient(ellipse 8% 14% at 74% 30%, rgba(150, 224, 152, 0.95) 0 100%, transparent),
+    radial-gradient(ellipse 13% 8% at 70% 72%, rgba(176, 236, 170, 0.9) 0 100%, transparent),
+    radial-gradient(ellipse 8% 13% at 30% 70%, rgba(132, 210, 140, 0.9) 0 100%, transparent);
+  animation: cast-leaves var(--cast-ms, 900ms) ease-out both;
+}
+
+@keyframes cast-grow {
+  0% { opacity: 0; transform: scale(0.2); }
+  40% { opacity: 1; transform: scale(1.04); }
+  74% { opacity: 0.8; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+
+@keyframes cast-tendril {
+  0% { opacity: 0; transform: scale(0.14) rotate(calc(var(--cast-tilt, 0deg) - 70deg)); }
+  45% { opacity: 0.95; transform: scale(1.02) rotate(calc(var(--cast-tilt, 0deg) + 10deg)); }
+  100% { opacity: 0; transform: scale(1.14) rotate(calc(var(--cast-tilt, 0deg) + 26deg)); }
+}
+
+@keyframes cast-leaves {
+  0% { opacity: 0; transform: scale(0.35) rotate(-18deg); }
+  45% { opacity: 1; transform: scale(1.02) rotate(4deg); }
+  100% { opacity: 0; transform: scale(1.12) rotate(12deg); }
+}
+
+/* --- 🌑 Shadow: the only one that goes inward --- */
+
+.square__cast[data-element="shadow"] {
+  background: radial-gradient(
+    circle,
+    rgba(12, 8, 26, 0.88) 0%,
+    rgba(58, 32, 104, 0.7) 34%,
+    rgba(122, 82, 190, 0.34) 56%,
+    rgba(80, 50, 150, 0) 72%
+  );
+  /* Collapses instead of blooming. A king that teleports has not exploded, it
+     has stopped being there — and the same burst plays at the far end, where
+     it runs the other way round and something arrives. */
+  animation: cast-implode var(--cast-ms, 900ms) cubic-bezier(0.5, 0, 0.2, 1) both;
+}
+
+.square__cast[data-element="shadow"]::before {
+  inset: 14%;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(178, 142, 255, 0.6);
+  background: radial-gradient(circle, rgba(8, 4, 18, 0.7) 30%, transparent 70%);
+  animation: cast-implode calc(var(--cast-ms, 900ms) * 0.82) cubic-bezier(0.5, 0, 0.2, 1) both;
+}
+
+.square__cast[data-element="shadow"]::after {
+  /* Wisps, not wedges. The hard conic stops this began with painted two
+     solid triangles — which is a pinwheel, and a pinwheel is a cheerful
+     thing for a king disappearing into the dark. Soft stops and a radial
+     mask fade both ends of each arm instead. */
+  background: conic-gradient(
+    from 210deg,
+    rgba(168, 128, 248, 0) 0deg,
+    rgba(168, 128, 248, 0.6) 22deg,
+    rgba(168, 128, 248, 0) 58deg,
+    transparent 58deg 176deg,
+    rgba(124, 88, 214, 0) 176deg,
+    rgba(124, 88, 214, 0.55) 200deg,
+    rgba(124, 88, 214, 0) 238deg,
+    transparent 238deg 360deg
+  );
+  border-radius: 50%;
+  -webkit-mask-image: radial-gradient(circle, transparent 18%, #000 40%, #000 62%, transparent 78%);
+  mask-image: radial-gradient(circle, transparent 18%, #000 40%, #000 62%, transparent 78%);
+  animation: cast-swirl var(--cast-ms, 900ms) ease-in-out both;
+}
+
+@keyframes cast-implode {
+  0% { opacity: 0; transform: scale(1.3); }
+  22% { opacity: 1; transform: scale(1); }
+  66% { opacity: 0.9; transform: scale(0.52); }
+  100% { opacity: 0; transform: scale(0.18); }
+}
+
+@keyframes cast-swirl {
+  0% { opacity: 0; transform: scale(1.2) rotate(0deg); }
+  25% { opacity: 0.9; }
+  100% { opacity: 0; transform: scale(0.3) rotate(220deg); }
+}
+
+/* --- ✨ Light: a clean sweep, and the one that crosses the whole board --- */
+
+.square__cast[data-element="light"] {
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 250, 0.95) 0%,
+    rgba(255, 238, 190, 0.78) 26%,
+    rgba(255, 214, 120, 0.34) 50%,
+    rgba(255, 200, 90, 0) 70%
+  );
+  animation: cast-shine var(--cast-ms, 900ms) ease-out both;
+}
+
+.square__cast[data-element="light"]::before {
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 252, 232, 0.8) 0deg 7deg,
+    transparent 7deg 30deg
+  );
+  animation: cast-rays var(--cast-ms, 900ms) ease-out both;
+}
+
+.square__cast[data-element="light"]::after {
+  inset: 26%;
+  border-radius: 50%;
+  background: rgba(255, 255, 244, 0.9);
+  animation: cast-shine calc(var(--cast-ms, 900ms) * 0.7) ease-out both;
+}
+
+@keyframes cast-shine {
+  0% { opacity: 0; transform: scale(0.3); }
+  16% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.3); }
+}
+
+@keyframes cast-rays {
+  0% { opacity: 0; transform: scale(0.25) rotate(calc(var(--cast-tilt, 0deg) - 24deg)); }
+  30% { opacity: 0.85; }
+  100% { opacity: 0; transform: scale(1.35) rotate(calc(var(--cast-tilt, 0deg) + 40deg)); }
+}
+
+/* ==========================================================================
+   Effects that are standing on the board, rather than going off
+   ==========================================================================
+
+   Frozen, shielded and vined squares were a flat tint each, and flat is the
+   wrong reading: all three are things happening TO a square FOR A TURN, and a
+   still image says they have already finished. So each gets a texture of its
+   own over the tint, and a small amount of movement.
+
+   Small on purpose. This sits under a piece the player is trying to read, for
+   two plies at a time, and it has to survive being looked at for that long
+   without becoming the thing being looked at. Nothing here is faster than two
+   and a half seconds a cycle, and none of it changes position.
+*/
+
+.square__aura[data-effect] {
+  animation: effect-settle 320ms ease-out both;
+}
+
+@keyframes effect-settle {
+  from { opacity: 0; transform: scale(0.72); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* One spare layer each, for the texture that goes over the tint. The aura's
+   own background is the tint and is already spoken for. */
+.square__aura[data-effect="frozen"]::before,
+.square__aura[data-effect="vines"]::before,
+.square__aura[data-effect="shield"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Frost creeping in from the four corners, breathing. Two layers together —
+   tint and rime — are what make the square read as frozen rather than blue. */
+.square__aura[data-effect="frozen"]::before {
+  background:
+    linear-gradient(135deg, rgba(232, 250, 255, 0.85) 0 9%, transparent 9%),
+    linear-gradient(225deg, rgba(232, 250, 255, 0.85) 0 9%, transparent 9%),
+    linear-gradient(45deg, rgba(232, 250, 255, 0.85) 0 9%, transparent 9%),
+    linear-gradient(315deg, rgba(232, 250, 255, 0.85) 0 9%, transparent 9%);
+  animation: frost-breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes frost-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* A shield is a bubble, and a bubble is never quite still. */
+.square__aura[data-effect="shield"]::before {
+  inset: 18%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.5) 0 10%, transparent 24%);
+  box-shadow: inset 0 0 0 1.5px rgba(160, 214, 255, 0.7);
+  animation: shield-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes shield-breathe {
+  0%, 100% { opacity: 0.7; transform: scale(0.97); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
+/* Vines: leaves over the green, leaning the way something growing leans. */
+.square__aura[data-effect="vines"]::before {
+  background:
+    radial-gradient(ellipse 16% 9% at 26% 32%, rgba(206, 248, 196, 0.8) 0 100%, transparent),
+    radial-gradient(ellipse 9% 16% at 72% 28%, rgba(176, 236, 172, 0.75) 0 100%, transparent),
+    radial-gradient(ellipse 15% 9% at 70% 70%, rgba(198, 244, 190, 0.7) 0 100%, transparent),
+    radial-gradient(ellipse 9% 15% at 28% 72%, rgba(164, 230, 164, 0.7) 0 100%, transparent);
+  animation: vine-sway 4.2s ease-in-out infinite;
+  transform-origin: 50% 70%;
+}
+
+@keyframes vine-sway {
+  0%, 100% { transform: rotate(-3deg) scale(0.98); }
+  50% { transform: rotate(3deg) scale(1.02); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+    The bursts are already skipped in board.js, which never creates them — so
+    what is left here is only the three standing effects, which are not
+    animations the player asked for but a board that will not sit still.
+  */
+  .square__aura[data-effect],
+  .square__aura[data-effect]::before {
+    animation: none;
+  }
+}
+
 /*
   Below this the mark is a smudge rather than a glyph, so it goes — and the
   file coordinate it was standing on top of comes back, because the corner is

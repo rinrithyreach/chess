@@ -60,6 +60,25 @@ function buildSquareList() {
 
 export const ALL_SQUARES = buildSquareList();
 
+/**
+ * How many squares apart two squares are, counting a diagonal step as one.
+ *
+ * Chebyshev rather than Euclidean, because what it is used for is the Cleanse
+ * wave: each square goes off a fixed step later than the ring inside it, and
+ * on a grid the ring inside it is the one a king could step to. Euclidean
+ * would make the diagonals lag, which turns an expanding square of light into
+ * an expanding cross.
+ *
+ * Here rather than in either board, because both of them draw that wave.
+ */
+export function squareDistance(a, b) {
+  if (!a || !b) return 0;
+  return Math.max(
+    Math.abs(FILES.indexOf(a[0]) - FILES.indexOf(b[0])),
+    Math.abs(RANKS.indexOf(a[1]) - RANKS.indexOf(b[1])),
+  );
+}
+
 /** Light or dark, computed from the coordinate rather than the array index. */
 export function squareShade(square) {
   const fileIndex = FILES.indexOf(square[0]);

@@ -105,25 +105,6 @@ export const GAME_MODE = {
 export const FEN_ONLY_MODES = [GAME_MODE.ELEMENTAL];
 
 /**
- * The two taps that firing an elemental power can take.
- *
- * Reaching a power from the piece — select the rook, press Use — only ever
- * needs one: the caster is whatever is already in your hand. Reaching it from
- * the powers panel can need two, because "Freeze" with both rooks still
- * charged does not say WHICH rook, and picking one for the player would be
- * choosing the half of the decision that actually matters.
- *
- * So a cast stage comes first when, and only when, there is a genuine choice
- * of caster. Both stages are the same gesture — tap one of the highlighted
- * squares — which is why they share one piece of view state rather than
- * getting a mode each.
- */
-export const AIM_STAGE = {
-  CAST: 'cast',
-  AIM: 'aim',
-};
-
-/**
  * Roughly how long the bot may think, in ms.
  *
  * A time budget rather than a fixed depth, because depth is a guess about
@@ -390,6 +371,36 @@ export const CHAT_COOLDOWN_MS = 700;
  * until the timer caught up.
  */
 export const EMOTE_BUBBLE_MS = 5000;
+
+/**
+ * How long a power's burst plays on the board, in ms.
+ *
+ * Long enough to read as a thing that happened rather than a dropped frame,
+ * short enough that it is over before the player's next tap lands — the turn
+ * does not pass when a power fires, so the very next thing they do is usually
+ * move, and a burst still going when the piece starts sliding is two
+ * animations arguing about the same square.
+ *
+ * Written once, here, and read by both boards. The flat one puts it on each
+ * burst as `--cast-ms` and the stylesheet times every keyframe against that,
+ * so the pieces that finish early do it by taking a stated fraction of this
+ * rather than by carrying a second number to be kept in step by hand; the
+ * WebGL one divides by it directly.
+ */
+export const POWER_CAST_MS = 900;
+
+/**
+ * How much later each square of the Cleanse wave goes off, per square of
+ * distance from the bishop that cast it, in ms.
+ *
+ * Cleanse is the one power that touches the whole board, and sixty-four
+ * squares flashing together reads as a rendering fault rather than as an
+ * event. Staggering them by distance turns it into something travelling
+ * outwards from the piece that caused it, which is both prettier and more
+ * honest about where it came from. Seven squares is the furthest corner, so
+ * the wave is over roughly a third of a second after it starts.
+ */
+export const POWER_WAVE_STEP_MS = 46;
 
 // -------------------------------------------------------------------------
 // Friends, and who is about

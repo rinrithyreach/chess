@@ -33,7 +33,6 @@ import {
   SELECTABLE_UI_STYLES,
   DEFAULT_UI_STYLE,
   LOCKED_CONTROLS,
-  AIM_STAGE,
   isControlLocked,
   TOAST_MS,
   warn,
@@ -1267,13 +1266,7 @@ export class UI {
     // a mode, and a mode with no visible exit is a trap.
     if (view?.aiming) {
       const aimed = ELEMENTS[view.aiming.element];
-      // Which of the two taps this is. "Tap a highlighted square" is true of
-      // both and useless for telling them apart, and the difference matters:
-      // one of them costs a charge and the other does not.
-      const asking = view.aiming.stage === AIM_STAGE.CAST
-        ? 'Which piece should use it?'
-        : 'Tap a highlighted square';
-      say(aimed.emoji, view.aiming.name, asking, 'Cancel', 'aiming');
+      say(aimed.emoji, view.aiming.name, 'Tap a highlighted square', 'Cancel', 'aiming');
       return;
     }
 

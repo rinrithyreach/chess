@@ -475,6 +475,17 @@ async function boot() {
     ui.toast(`${who}: ${said}`);
   });
 
+  /**
+   * An elemental power went off.
+   *
+   * Straight to the board, because a power is the one thing in the game whose
+   * effect cannot be read back out of the state that follows it: a piece that
+   * has just burned and a piece that has just been captured leave the same
+   * board behind. Optional on purpose — a renderer that has nothing to say
+   * about powers is a renderer that draws a correct board without them.
+   */
+  controller.on(EVENT.POWER, (payload) => board.playPower?.(payload));
+
   controller.on(EVENT.TOAST, ({ message, tone }) => ui.toast(message, tone));
 
   controller.on(EVENT.DRAW_OFFER, async ({ from, to, remote }) => {

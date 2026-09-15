@@ -20,12 +20,15 @@ import {
   ANIMATION_EASING,
   CAPTURE_FADE_RATIO,
   CAPTURE_FADE_DELAY,
+  POWER_CAST_MS,
+  POWER_WAVE_STEP_MS,
   WHITE,
 } from './config.js';
 import {
   ALL_SQUARES,
   boardFromFen,
   describeSquare,
+  squareDistance,
   squareShade,
   prefersReducedMotion,
 } from './board-shared.js';
@@ -97,6 +100,31 @@ const EFFECT_GLYPHS = {
   vines: '🌿',
 };
 
+/**
+ * Grace between a burst's last keyframe and the element being removed, in ms.
+ *
+ * Not a look, a safety margin: an animation that has not been given a frame
+ * yet — a backgrounded tab, a slow first paint — would otherwise be cut off
+ * before it ever started.
+ */
+const CAST_CLEANUP_GRACE_MS = 320;
+
+/**
+ * A fixed, per-square angle for a burst to lean at.
+ *
+ * A Fire pawn's capture can put the same burst on eight touching squares at
+ * once, and eight identical copies of anything read as a texture rather than
+ * as eight fires. Leaning each one differently breaks that up.
+ *
+ * Derived from the square's name rather than drawn at random, so the same
+ * power in the same position looks the same every time — which matters for
+ * exactly one reason: a random one could not be screenshotted and compared.
+ */
+function castTilt(square) {
+  const seed = (FILES.indexOf(square[0]) * 5 + RANKS.indexOf(square[1]) * 3) % 7;
+  return (seed - 3) * 11;
+}
+
 export class Board {
   #root;
   #squares = new Map();
@@ -114,6 +142,16 @@ export class Board {
    */
   #hadElemental = false;
   #animationsEnabled = true;
+
+  /**
+   * Timers due to take a power burst back off the board.
+   *
+   * Held so dispose() can cancel them. Without it, switching to the 3D board
+   * while a power is playing leaves a timer holding a reference to a square
+   * in a renderer that has already been torn down — and it fires into the
+   * detached tree a moment later.
+   */
+  #casts = new Set();
   #showCoordinates = true;
   #focusedSquare = 'e1';
 
@@ -164,6 +202,8 @@ export class Board {
     this.#lastRendered.clear();
     this.#running.forEach((animation) => animation.cancel());
     this.#running.clear();
+    this.#casts.forEach((timer) => window.clearTimeout(timer));
+    this.#casts.clear();
   }
 
   /** Register the tap/click handler. The controller decides what it means. */
@@ -286,6 +326,96 @@ export class Board {
 
   canZoom() {
     return false;
+  }
+
+  /**
+   * Play a power going off.
+   *
+   * Everything a power does to the board it does through the state — a frozen
+   * piece is frozen in the next snapshot, a burned one is simply gone — and
+   * the state arrives with no history, so by the time the board is asked to
+   * repaint there is nothing left to say WHICH of the changes was the power.
+   * A piece vanishing between two renders looks identical whether it was
+   * captured, burned or struck by lightning.
+   *
+   * This is the missing half: a one-off burst, keyed to the element, on the
+   * squares the power actually touched. It is decoration and is treated as
+   * such — the board is already correct without it, and it is skipped
+   * wholesale when animations are off or the reader has asked for less
+   * motion.
+   *
+   * @param {object} payload {element, from, targets, sweep} — see EVENT.POWER.
+   */
+  playPower({ element, from = null, targets = [], sweep = false } = {}) {
+    if (!element || !this.#squares.size) return;
+    if (!this.#animationsEnabled || prefersReducedMotion()) return;
+
+    // The caster burns too. A power with two ends — a king's teleport, a
+    // lightning arc — is one event in two places, and showing only the far
+    // end leaves the player working out for themselves which of their pieces
+    // just spent itself.
+    const hit = new Set(targets.filter(Boolean));
+    if (from) hit.add(from);
+
+    if (sweep) {
+      // Every square but the one it started on gets the plain version: this
+      // is sixty-four elements going off at once on whatever phone is to
+      // hand, and the full burst carries two animated pseudo-elements each.
+      // The bishop's own square keeps them, because that is where the eye is.
+      this.#squares.forEach((entry, square) => {
+        this.#burst(
+          square,
+          element,
+          squareDistance(from, square) * POWER_WAVE_STEP_MS,
+          square !== from,
+        );
+      });
+      return;
+    }
+
+    hit.forEach((square) => this.#burst(square, element, 0));
+  }
+
+  /**
+   * One burst on one square.
+   *
+   * A real element rather than a class on the square, for the same reason the
+   * effect wash is one: a square can be selected, in check, a legal
+   * destination and on fire at the same time, and ::before and ::after are
+   * both already spoken for. It is also what makes the burst removable — the
+   * square it was on outlives it.
+   */
+  #burst(square, element, delay = 0, wave = false) {
+    const entry = this.#squares.get(square);
+    if (!entry) return;
+
+    // Never two on one square. A Fire pawn's capture can put a burn on the
+    // square it just landed on in the same frame as the move animation, and
+    // a burst begun while the tab was in the background can still be sitting
+    // here when the player comes back to it.
+    entry.el.querySelectorAll('.square__cast').forEach((stale) => stale.remove());
+
+    const cast = document.createElement('span');
+    cast.className = 'square__cast';
+    cast.dataset.element = element;
+    if (wave) cast.dataset.wave = '';
+    cast.setAttribute('aria-hidden', 'true');
+    // The stylesheet times every keyframe against this, including the ones on
+    // the burst's own pseudo-elements — which inherit it from here.
+    cast.style.setProperty('--cast-ms', `${POWER_CAST_MS}ms`);
+    cast.style.setProperty('--cast-tilt', `${castTilt(square)}deg`);
+    if (delay) cast.style.animationDelay = `${delay}ms`;
+    entry.el.append(cast);
+
+    // Removed on a timer rather than on animationend, which is not one event
+    // but several: the burst animates, and so do its two pseudo-elements, at
+    // deliberately different lengths. The first of them to finish would take
+    // the other two off the board with it.
+    const done = window.setTimeout(() => {
+      cast.remove();
+      this.#casts.delete(done);
+    }, POWER_CAST_MS + delay + CAST_CLEANUP_GRACE_MS);
+    this.#casts.add(done);
   }
 
   // -----------------------------------------------------------------------

@@ -18,7 +18,6 @@ import {
   FEN_ONLY_MODES,
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
-  AIM_STAGE,
   DEFAULT_GAUNTLET,
   CLOCK_TICK_MS,
   GAUNTLET_LENGTH,
@@ -671,7 +670,7 @@ export class GameController {
    * a player cannot possibly work out from looking at the board, since the
    * evidence is a piece that is still standing there.
    */
-  #announcePower({ element, withheld, targets }) {
+  #announcePower({ element, from, withheld, targets }) {
     const info = ELEMENTS[element];
     if (!info) return;
 
@@ -684,7 +683,7 @@ export class GameController {
     const count = targets.length;
     this.#toast(`${info.emoji} ${info.power} — ${count} ${count === 1 ? 'piece' : 'pieces'} destroyed`);
     sound.play(SOUND.BLAST);
-    this.#emit(EVENT.POWER, { element, targets });
+    this.#emit(EVENT.POWER, { element, from, targets, sweep: false });
   }
 
   /** The power offered by the piece on a square, or null. */
@@ -748,8 +747,13 @@ export class GameController {
    * have done had the player tapped that rook themselves, and the tap after
    * this one is the same tap either way.
    *
-   * The one thing it will not do is pick the caster when picking the caster is
-   * the decision. Two charged rooks are two quite different freezes.
+   * It picks the caster itself, which it could not always do. Reach used to
+   * come off the caster's own rays, so two charged rooks were two quite
+   * different freezes and choosing between them was the interesting half of
+   * the decision; there was a whole stage of aiming devoted to asking. Powers
+   * now reach the whole board, every rook offers the identical freeze, and
+   * asking which one should cast it would be asking the player to break a tie
+   * that does not exist.
    */
   async castPower(element) {
     const row = this.getArsenal().find((entry) => entry.element === element);
@@ -778,22 +782,11 @@ export class GameController {
       return { ok: false, error: 'No targets' };
     }
 
-    // Only one piece could cast it, so there is no choice to offer and asking
-    // for one would be ceremony.
-    if (row.ready.length === 1) {
-      this.#select(row.ready[0]);
-      return this.beginAiming();
-    }
-
-    this.#view.aiming = {
-      stage: AIM_STAGE.CAST,
-      element,
-      from: null,
-      name: row.info.power,
-      targets: [...row.ready],
-    };
-    this.#emitChange();
-    return { ok: true };
+    // Selecting the caster rather than merely remembering it, so the board
+    // looks exactly as it would have done had the player tapped that piece —
+    // and so cancelling out of the aim leaves them holding something sensible.
+    this.#select(row.ready[0]);
+    return this.beginAiming();
   }
 
   /**
@@ -818,7 +811,6 @@ export class GameController {
     if (!power.targets.length) return this.usePower(power.square, null);
 
     this.#view.aiming = {
-      stage: AIM_STAGE.AIM,
       element: power.element,
       from: power.square,
       name: power.info.power,
@@ -840,14 +832,6 @@ export class GameController {
     const aiming = this.#view.aiming;
     if (!aiming.targets.includes(square)) {
       this.cancelAiming();
-      return;
-    }
-    // The cast stage is asking who, not what at. Answering it hands straight
-    // over to the ordinary aim rather than firing, so the player gets the same
-    // two taps whichever end they came in from.
-    if (aiming.stage === AIM_STAGE.CAST) {
-      this.#select(square);
-      await this.beginAiming();
       return;
     }
     await this.usePower(aiming.from, square);
@@ -881,7 +865,17 @@ export class GameController {
       // piece can do — vines in its way, or its own king teleporting out of a
       // pin — and a stale highlight is a move that will be refused.
       if (this.#view.selected) this.#select(this.#view.selected);
-      this.#emit(EVENT.POWER, { element: result.used?.element, targets: [] });
+      // What the board needs to draw it: which element, where it came from,
+      // and what it landed on. Cleanse is the only power with nothing to point
+      // at, because what it does is not to a square but to the whole board —
+      // so the whole board is what answers, and that is what `sweep` says.
+      const used = result.used ?? {};
+      this.#emit(EVENT.POWER, {
+        element: used.element ?? null,
+        from: used.from ?? null,
+        targets: used.target ? [used.target] : [],
+        sweep: Boolean(used.element) && !used.target,
+      });
       this.#emitChange();
       return result;
     } finally {

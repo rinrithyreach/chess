@@ -3,11 +3,28 @@
  * The rules of Elemental Chess, as pure functions over a FEN.
  *
  * Every piece on the board carries an element, and every element carries one
- * power that the piece may use ONCE in the whole match. Powers are free: using
- * one does not cost the turn, so a player may fire a power and then move as
- * normal. What limits them is that there are only ever sixteen charges a side,
- * they cannot be replenished, and only one standalone power may be used per
- * turn.
+ * power that the piece may use ONCE in the whole match.
+ *
+ * Powers are free in two senses. Using one does not cost the turn, so a player
+ * may fire a power and then move as normal. And a power may be pointed
+ * anywhere it makes sense — freeze any enemy piece, shield any piece of your
+ * own, grow vines on any empty square — rather than only along the lines its
+ * caster happens to be looking down.
+ *
+ * That second sense used to be the other way round, and it was wrong. Reach
+ * was worked out from the caster's rays, so at the opening bell five of the
+ * seven powers had nothing to aim at: both rooks were walled in behind their
+ * own pawns, the queen could not see an empty square, and a player who opened
+ * the panel to see what they had was told, correctly and uselessly, that
+ * almost none of it could be used. A resource you cannot spend is not a
+ * decision, and the sightlines were adding a second layer of chess on top of
+ * the one already being played rather than a layer of the variant.
+ *
+ * What limits powers instead is the thing that was always doing the real
+ * work: there are only ever sixteen charges a side, one per piece, they cannot
+ * be replenished, and only one standalone power may be used per turn. Ice is
+ * still two freezes a game and no more, and losing a rook still costs you one
+ * of them — so the pieces carrying the powers are still worth protecting.
  *
  * ---------------------------------------------------------------------------
  * WHY THIS MODULE IS PURE
@@ -37,7 +54,7 @@
  */
 
 import { FILES, RANKS } from './config.js';
-import { boardFromFen, squareShade } from './board-shared.js';
+import { ALL_SQUARES, boardFromFen, squareShade } from './board-shared.js';
 
 /** The seven elements. */
 export const ELEMENT = {
@@ -108,10 +125,11 @@ export const ELEMENTS = {
     power: 'Water Shield',
     trigger: POWER_TRIGGER.TURN,
     aim: POWER_AIM.FRIEND,
-    blurb: 'Shields a friendly piece it can see for one turn.',
+    blurb: 'Shields any one of your pieces for a turn.',
     detail:
-      'Pick itself or the first friendly piece along any of its diagonals. '
-      + 'That piece cannot be captured until your next turn comes round.',
+      'Pick any piece of your own, itself included, anywhere on the board. '
+      + 'That piece cannot be captured until your next turn comes round. '
+      + 'Kings cannot be shielded.',
   },
   [ELEMENT.LIGHTNING]: {
     id: ELEMENT.LIGHTNING,
@@ -135,10 +153,10 @@ export const ELEMENTS = {
     power: 'Freeze',
     trigger: POWER_TRIGGER.TURN,
     aim: POWER_AIM.ENEMY,
-    blurb: 'Freezes an enemy piece it can see for one turn.',
+    blurb: 'Freezes any one enemy piece for a turn.',
     detail:
-      'Pick the first enemy piece along any of its rank or file. That piece '
-      + 'cannot move on their next turn. Kings cannot be frozen.',
+      'Pick any enemy piece anywhere on the board. It cannot move on their '
+      + 'next turn. Kings cannot be frozen.',
   },
   [ELEMENT.NATURE]: {
     id: ELEMENT.NATURE,
@@ -148,12 +166,12 @@ export const ELEMENTS = {
     power: 'Vines',
     trigger: POWER_TRIGGER.TURN,
     aim: POWER_AIM.EMPTY,
-    blurb: 'Grows vines on an empty square it can see.',
+    blurb: 'Grows vines on any empty square.',
     detail:
-      'Pick any empty square the queen can reach. Until your next turn '
-      + 'nothing may land on it or slide across it — including your own '
-      + 'pieces. Vines block movement, not sight: a check still passes '
-      + 'straight through them.',
+      'Pick any empty square on the board. Until your next turn nothing may '
+      + 'land on it or slide across it — including your own pieces. Vines '
+      + 'block movement, not sight: a check still passes straight through '
+      + 'them.',
   },
   [ELEMENT.SHADOW]: {
     id: ELEMENT.SHADOW,
@@ -241,31 +259,10 @@ function squareAt(file, rank) {
   return `${FILES[file]}${RANKS[rank]}`;
 }
 
-const ROOK_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-const BISHOP_DIRS = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
-const QUEEN_DIRS = [...ROOK_DIRS, ...BISHOP_DIRS];
 const KNIGHT_HOPS = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]];
-const NEIGHBOURS = QUEEN_DIRS;
 
-/**
- * Walk one direction from a square until something stops the walk.
- * Returns the empty squares crossed and the first piece met, if any.
- */
-function castRay(from, [df, dr], board) {
-  const empties = [];
-  let file = fileOf(from) + df;
-  let rank = rankOf(from) + dr;
-
-  while (true) {
-    const square = squareAt(file, rank);
-    if (!square) return { empties, blocker: null };
-    const piece = board.get(square);
-    if (piece) return { empties, blocker: { square, piece } };
-    empties.push(square);
-    file += df;
-    rank += dr;
-  }
-}
+/** The eight squares around one — the shape a Fire pawn's capture burns. */
+const NEIGHBOURS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 /** Every square a piece would jump to from here, on or off the board. */
 function hopsFrom(square, hops) {
@@ -523,35 +520,40 @@ export function moveAllowed(move, effects, ply) {
 /**
  * The squares a power may be pointed at.
  *
- * Sight is worked out geometrically — walk the rays, take the first piece on
- * each — rather than by reading the piece's legal moves. A pinned rook can
- * still see down its file, and a rook is not blinded by its own king being in
- * check; legal moves would say otherwise on both counts, and a power that
- * quietly stopped working in a pin would be a bug nobody could explain.
+ * Three of the four are the whole board, filtered only by what the power is
+ * for: an enemy to freeze, a piece of your own to shield, an empty square to
+ * grow vines on. Kings are excluded from the first two by the rule at the top
+ * of this file, which is the only exclusion any of them carries.
+ *
+ * The caster's square is therefore not read at all except by Teleport, and
+ * that is the point rather than an oversight — see the header. It also means
+ * every charged rook offers exactly the same freeze, so "which rook casts it"
+ * stopped being a question worth asking the player and the panel fires from
+ * whichever one is to hand.
+ *
+ * Teleport is the one power whose reach is genuinely a computation, because
+ * the only squares a king may appear on are the ones that leave the position
+ * legal for both sides. It gets its own function below.
  */
 export function powerTargets({ element, square, fen, color, charges, isQuiet }) {
   const board = boardFromFen(fen);
+  const pieces = (keep) => {
+    const found = [];
+    board.forEach((piece, at) => { if (keep(piece)) found.push(at); });
+    return found;
+  };
 
   switch (element) {
     case ELEMENT.ICE:
-      // The first piece down each rank and file, if it is a takeable enemy.
-      return ROOK_DIRS
-        .map((dir) => castRay(square, dir, board).blocker)
-        .filter((hit) => hit && hit.piece.color !== color && hit.piece.type !== 'k')
-        .map((hit) => hit.square);
+      return pieces((piece) => piece.color !== color && piece.type !== 'k');
 
-    case ELEMENT.WATER: {
-      // Itself, plus the first friend down each diagonal.
-      const friends = BISHOP_DIRS
-        .map((dir) => castRay(square, dir, board).blocker)
-        .filter((hit) => hit && hit.piece.color === color && hit.piece.type !== 'k')
-        .map((hit) => hit.square);
-      return [square, ...friends];
-    }
+    case ELEMENT.WATER:
+      // Its own square is in here already: the bishop is one of your pieces,
+      // and shielding itself is a perfectly ordinary thing to want.
+      return pieces((piece) => piece.color === color && piece.type !== 'k');
 
     case ELEMENT.NATURE:
-      // Every empty square the queen could reach.
-      return QUEEN_DIRS.flatMap((dir) => castRay(square, dir, board).empties);
+      return ALL_SQUARES.filter((at) => !board.has(at));
 
     case ELEMENT.SHADOW:
       return teleportTargets({ square, fen, color, board, charges, isQuiet });
