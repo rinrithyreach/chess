@@ -2872,6 +2872,87 @@ body.is-modal-open {
   min-height: 42px;
 }
 
+/* --------------------------------------------------------------- supers --
+
+   The one control in the app that has to say its price before it is pressed.
+   A second line rather than a third button on the first: that row already
+   holds a glyph, two lines of text, Use and All powers, and at 320px there is
+   no room left for another word.
+
+   Separated from the row above by a rule rather than by space alone, because
+   it is not a continuation of it — the line above is a power that is free and
+   this one is a power that costs the turn, and they should not read as two
+   halves of one offer.
+   -------------------------------------------------------------------- */
+
+/* The second power on each row of the rules card. Indented under the first
+   and quieter than it, because it is the same element doing the same thing at
+   a price — a sub-clause, not a second entry. */
+.element__super {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  margin-top: 0.3rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+}
+
+.element__supername {
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.element__superdesc {
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.powerbar__super {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 42px;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.powerbar__superglyph {
+  flex: none;
+  width: 1.5rem;
+  color: var(--accent);
+  font-size: 1.1rem;
+  line-height: 1;
+  text-align: center;
+}
+
+/* The element's own colour on the mark, so the line beside the bar says which
+   of the seven this super belongs to without a second name for it. */
+.powerbar__super[data-element="fire"] .powerbar__superglyph { color: #ff9a4d; }
+.powerbar__super[data-element="water"] .powerbar__superglyph { color: #5fd0ff; }
+.powerbar__super[data-element="lightning"] .powerbar__superglyph { color: #c9a6ff; }
+.powerbar__super[data-element="ice"] .powerbar__superglyph { color: #9fe4ff; }
+.powerbar__super[data-element="nature"] .powerbar__superglyph { color: #8fe08a; }
+.powerbar__super[data-element="shadow"] .powerbar__superglyph { color: #a99bd6; }
+.powerbar__super[data-element="light"] .powerbar__superglyph { color: #ffe9a3; }
+
+/* Not a second primary button. The free power beside it is the ordinary
+   thing to do and keeps the gold; this one is outlined, so the pair reads as
+   "the usual, or the expensive one" rather than as two equal offers. */
+.btn--super {
+  flex: none;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.btn--super:hover {
+  background: var(--accent-soft);
+}
+
 .powerbar__toggle {
   flex: none;
   gap: 0.3rem;

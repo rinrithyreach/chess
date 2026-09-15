@@ -889,6 +889,13 @@ async function boot() {
       await controller.castPower(element);
     },
 
+    // The super of whatever is already in hand. No element argument: the bar
+    // is the only way in, and the bar is only ever about the selected piece.
+    onCastSuper: async () => {
+      sound.unlock();
+      await controller.beginSuperAiming();
+    },
+
     onAcceptDraw: () => controller.acceptDraw(),
     onDeclineDraw: () => controller.declineDraw(),
 

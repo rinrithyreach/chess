@@ -224,6 +224,8 @@
           <p class="elements__note">
             Every piece has one charge, for the whole match. Powers are free —
             use one and still make your move — but only one a turn.
+            <strong>✦ Supers cost your whole move</strong>, so you fire one
+            instead of playing. Not while your king is in check.
           </p>
         </div>
 
@@ -520,6 +522,23 @@
             >
               All powers
               <span class="powerbar__caret" aria-hidden="true">⌄</span>
+            </button>
+          </div>
+          <!--
+            The super. A second line rather than a third button on the first:
+            the row above already holds a glyph, two lines of text, Use and
+            All powers, and at 320px there is no room for another word — and
+            this is the one control in the app that needs to say its price
+            before it is pressed.
+          -->
+          <div class="powerbar__super" id="powerbar-super" hidden>
+            <span class="powerbar__superglyph" aria-hidden="true">✦</span>
+            <span class="powerbar__body">
+              <span class="powerbar__name" id="super-name">Firestorm</span>
+              <span class="powerbar__hint" id="super-hint">Costs your move</span>
+            </span>
+            <button type="button" class="btn btn--super btn--tiny" id="btn-super">
+              Super
             </button>
           </div>
           <!-- Filled from ELEMENTS by #renderPowers — seven rows, always. -->

@@ -49,6 +49,15 @@ import {
   powerAt,
   relocateKing,
   removePieces,
+  SUPERS,
+  superAt,
+  superTargets,
+  firestormSquares,
+  stormSquares,
+  deepFreezeSquares,
+  overgrowthSquares,
+  tidalSquares,
+  swapPieces,
   startingCharges,
   withTurn,
 } from '../elemental.js';
@@ -454,6 +463,35 @@ export const withElemental = (Base) => class extends Base {
   }
 
   /**
+   * The same question about the piece's SUPER.
+   *
+   * A separate method rather than a flag on getPower, because the two are
+   * asked at different moments and by different things: the bar asks both
+   * about the piece in hand, but the board asks getPower about every square
+   * while it decides what to highlight, and the bot asks it while it thinks.
+   * Folding them together would make every one of those calls compute a
+   * Firestorm they had no use for.
+   *
+   * Null once your king is in check. A super is your whole turn, and passing
+   * the turn in check leaves a king that can simply be taken — so it is not
+   * offered rather than being offered and refused.
+   */
+  getSuper(square) {
+    const state = super.getState();
+    if (!state || state.isGameOver) return null;
+    if (!this.#mayAct(state.turn)) return null;
+    if (state.isCheck) return null;
+
+    return superAt({
+      square,
+      fen: state.fen,
+      color: state.turn,
+      charges: this.#charges,
+      isQuiet: (fen) => this.#isQuiet(fen),
+    });
+  }
+
+  /**
    * Every power this side still holds, spent ones included.
    *
    * The panel's question rather than the power bar's: the bar is only ever
@@ -546,6 +584,176 @@ export const withElemental = (Base) => class extends Base {
       },
       state: this.publishState(),
     };
+  }
+
+  /**
+   * Use a super. Returns the same shape usePower does.
+   *
+   * The one thing in the variant that costs a move. Everything an ordinary
+   * power does happens first — the charge is spent, the board changes — and
+   * then the turn is handed over without a move having been played, by
+   * rewriting the side to move into the FEN and reloading it. That is the
+   * whole of the price, and it is why a super can be as loud as it likes.
+   *
+   * Refused in check, before anything is spent. Passing the turn there leaves
+   * a king that can simply be taken, which is not a position chess has a word
+   * for — and refusing it here rather than letting it produce an illegal
+   * board is the difference between a rule and a crash.
+   */
+  async useSuper({ from, target } = {}) {
+    const state = super.getState();
+    if (!state) return { ok: false, error: 'No game' };
+    if (state.isGameOver) return { ok: false, error: 'The game is over' };
+    if (!this.#mayAct(state.turn)) return { ok: false, error: 'Not your turn' };
+    if (state.isCheck) {
+      return { ok: false, error: 'You cannot give up your move while in check' };
+    }
+    if (this.#powerPly === this.#ply) {
+      return { ok: false, error: 'One power a turn — make your move' };
+    }
+
+    const power = this.getSuper(from);
+    if (!power) return { ok: false, error: 'Nothing to use there' };
+    if (power.blockedBy === ELEMENT.LIGHT) {
+      return { ok: false, error: 'A charged Light bishop holds the shadows shut' };
+    }
+    if (!power.ready) {
+      return { ok: false, error: `${power.info.power} has nothing to aim at` };
+    }
+    if (power.info.aim !== POWER_AIM.NONE && !power.targets.includes(target)) {
+      return { ok: false, error: 'Not a square that power can reach' };
+    }
+
+    const applied = this.#applySuper(power, target, state);
+    if (!applied.ok) return applied;
+
+    // Every caster it used, not only the one it was called from: a Firestorm
+    // is several pawns going up together and each of them is spent.
+    (applied.spent ?? [from]).forEach((square) => this.#charges.delete(square));
+
+    // And now the price. The ply advances exactly as a move would advance it,
+    // so effects laid this turn expire on the same cadence they always do,
+    // and the side to move is swapped in the FEN. #powerPly is set to the ply
+    // BEFORE the advance, which is the turn that has just been spent.
+    this.#powerPly = this.#ply;
+    this.#ply += 1;
+
+    const handed = this.setPosition(withTurn(super.getState().fen, this.#otherColor(state.turn)));
+    if (!handed.ok) {
+      warn('Handing over the turn after a super produced an invalid position', handed.error);
+      return { ok: false, error: 'That power did not work' };
+    }
+
+    // Nothing is pruned here on purpose. An effect laid this turn carries
+    // `until = ply + EFFECT_PLIES`, and the ply has just advanced by one
+    // without a move, so activeEffects() keeps it for exactly the opponent's
+    // single reply and drops it as the caster's next turn begins. That is the
+    // same cadence an ordinary power gets — the difference is only that there
+    // is no "rest of your turn" left to cover, because you gave it away.
+    this.#thawIfStranded();
+
+    const destroyed = applied.destroyed ?? [];
+    log('Super used:', power.info.power, from, '->', target ?? '(no target)');
+    return {
+      ok: true,
+      used: {
+        element: power.element,
+        from,
+        target,
+        isSuper: true,
+        name: power.info.power,
+        targets: applied.touched ?? (destroyed.length
+          ? destroyed.map((piece) => piece.square)
+          : [target].filter(Boolean)),
+        destroyed,
+      },
+      state: this.publishState(),
+    };
+  }
+
+  #otherColor(color) {
+    return color === WHITE ? BLACK : WHITE;
+  }
+
+  /**
+   * What each super does to the board.
+   *
+   * Returns `touched` — every square the power reached, for the animation —
+   * and optionally `spent`, when the power costs more charges than the one it
+   * was called from.
+   */
+  #applySuper(power, target, state) {
+    const color = state.turn;
+    const until = this.#ply + EFFECT_PLIES;
+    const fen = state.fen;
+
+    switch (power.element) {
+      case ELEMENT.FIRE: {
+        const storm = firestormSquares(fen, color, this.#charges);
+        const gone = this.#destroy(storm.squares, color, fen);
+        if (!gone.ok) return gone;
+        return { ...gone, touched: storm.squares, spent: storm.casters };
+      }
+
+      case ELEMENT.LIGHTNING: {
+        const struck = stormSquares(target, fen, color);
+        const gone = this.#destroy(struck, color, fen);
+        if (!gone.ok) return gone;
+        return { ...gone, touched: struck };
+      }
+
+      case ELEMENT.ICE: {
+        const frozen = deepFreezeSquares(target, fen, color);
+        frozen.forEach((square) => this.#effects.push({
+          kind: EFFECT.FROZEN, square, color: this.#otherColor(color), until,
+        }));
+        return { ok: true, touched: frozen };
+      }
+
+      case ELEMENT.WATER: {
+        const covered = tidalSquares(fen, color);
+        covered.forEach((square) => this.#effects.push({
+          kind: EFFECT.SHIELD, square, color, until,
+        }));
+        return { ok: true, touched: covered };
+      }
+
+      case ELEMENT.NATURE: {
+        const grown = overgrowthSquares(target, fen);
+        grown.forEach((square) => this.#effects.push({
+          kind: EFFECT.VINES, square, color, until,
+        }));
+        return { ok: true, touched: grown };
+      }
+
+      case ELEMENT.SHADOW: {
+        const swapped = swapPieces(fen, power.square, target);
+        const applied = this.setPosition(swapped);
+        if (!applied.ok) return { ok: false, error: 'The king cannot go there' };
+        if (this.#kingAttacked(swapped, color)) {
+          this.setPosition(fen);
+          return { ok: false, reason: 'king', error: 'That would leave your king in check' };
+        }
+        // The piece that came the other way keeps its charge, which has moved
+        // with it. The king's own is about to be spent either way.
+        if (this.#charges.has(target)) {
+          this.#charges.delete(target);
+          this.#charges.add(power.square);
+        }
+        return { ok: true, touched: [power.square, target] };
+      }
+
+      case ELEMENT.LIGHT: {
+        this.#effects = [];
+        // The only way a charge ever comes back. Added after the cleanse so a
+        // piece that was frozen is both thawed and reloaded by one power.
+        this.#charges.add(target);
+        return { ok: true, touched: [target] };
+      }
+
+      default:
+        return { ok: false, error: 'That power cannot be aimed' };
+    }
   }
 
   #applyPower(power, target, state) {

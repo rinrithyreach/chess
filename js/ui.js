@@ -40,7 +40,7 @@ import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
 // Small, pure and free of any engine, so the rules card and the power bar can
 // be built from the same table the variant's rules are written against —
 // rather than from a second copy of them kept in step by hand.
-import { ELEMENTS, ELEMENT_ORDER } from './elemental.js';
+import { ELEMENTS, ELEMENT_ORDER, SUPERS } from './elemental.js';
 
 /**
  * The second line of a row in the powers panel: who holds it, and why you can
@@ -287,6 +287,7 @@ export class UI {
       'opponent-fields', 'opponent-picker', 'opponent-bot-hint',
       'mode-elemental', 'elemental-fields', 'elements-list',
       'powerbar', 'power-glyph', 'power-name', 'power-hint', 'btn-power',
+      'powerbar-super', 'super-name', 'super-hint', 'btn-super',
       'btn-powers-toggle', 'powers-list',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
@@ -534,11 +535,23 @@ export class UI {
         const item = document.createElement('li');
         item.className = 'element';
         item.dataset.element = id;
+        // The super goes on the card as well as in the bar. The bar can only
+        // tell you about a piece you have already picked up, and the card is
+        // where the variant is learned — a second power per element that is
+        // only ever discovered by selecting the right piece is a feature most
+        // players would never find.
+        const over = SUPERS[id];
         item.innerHTML =
           `<span class="element__glyph" aria-hidden="true">${element.emoji}</span>` +
           '<span class="element__body">' +
           `<span class="element__name">${element.piece} — ${element.power}</span>` +
           `<span class="element__desc">${element.blurb}</span>` +
+          (over
+            ? '<span class="element__super">'
+              + `<span class="element__supername">✦ ${over.power}</span>`
+              + `<span class="element__superdesc">${over.blurb}</span>`
+              + '</span>'
+            : '') +
           '</span>';
         elements.append(item);
       });
@@ -1231,6 +1244,13 @@ export class UI {
       bar.dataset.state = mood ?? (action ? 'ready' : 'idle');
     };
 
+    // The super line, decided before the bar's own state is: while a power
+    // is being aimed there is exactly one thing to do, and offering a second
+    // button beside "Cancel" would be offering a way deeper into a mode the
+    // player is trying to leave.
+    this.#renderSuperRow(view?.aiming ? null : this.#controller.getSelectedSuper?.() ?? null,
+      state.elemental?.powerUsed);
+
     // Aiming. The bar becomes the way out of it, because the player is now in
     // a mode, and a mode with no visible exit is a trap.
     if (view?.aiming) {
@@ -1276,6 +1296,32 @@ export class UI {
       return;
     }
     say(element.emoji, power.info.power, element.blurb, 'Use');
+  }
+
+  /**
+   * The super line under the bar.
+   *
+   * Shown only when there is one to fire — a line that is always there and
+   * usually refuses is worse than one that appears when it means something,
+   * and this is a bar that has to fit four other controls at 320px.
+   *
+   * The hint is the price, every time, because the price is the whole of what
+   * makes a super a decision. "Costs your move" is three words and is the
+   * only thing a player needs to know before pressing it.
+   */
+  #renderSuperRow(power, powerUsed) {
+    const row = this.#dom['powerbar-super'];
+    if (!row) return;
+
+    const ready = Boolean(power) && power.ready && !power.blockedBy && !powerUsed;
+    row.hidden = !ready;
+    if (!ready) return;
+
+    const name = this.#dom['super-name'];
+    const hint = this.#dom['super-hint'];
+    if (name) name.textContent = power.info.power;
+    if (hint) hint.textContent = 'Costs your move';
+    row.dataset.element = power.element;
   }
 
   /**
@@ -2392,6 +2438,10 @@ export class UI {
     // from the player's side — "this power" and "not this power" — so they
     // share the control rather than putting a second one beside it that is
     // hidden nine tenths of the time.
+    this.#dom['btn-super']?.addEventListener('click', () => {
+      this.#call('onCastSuper');
+    });
+
     this.#dom['btn-power']?.addEventListener('click', () => {
       this.#call(this.#dom.powerbar?.dataset.state === 'aiming'
         ? 'onCancelPower'

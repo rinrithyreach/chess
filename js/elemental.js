@@ -222,6 +222,114 @@ export const ELEMENT_ORDER = [
   ELEMENT.LIGHT,
 ];
 
+/**
+ * The seven supers: one per element, and the only thing in the variant that
+ * costs a move.
+ *
+ * Every ordinary power is free — fire it and still play your turn — which is
+ * what stops the powers being a second game bolted on beside the chess. A
+ * super inverts exactly that one rule and nothing else: it spends the charge
+ * the ordinary power would have spent, AND it is your whole turn. You fire it
+ * instead of moving.
+ *
+ * That is the entire price, and it is deliberately enormous. Giving up a move
+ * in a game of chess is the most expensive thing a player can do, so a super
+ * can be as loud as it likes without becoming the obvious choice: the question
+ * is never "is this good" but "is this better than the move I am not making".
+ * It also needs no new economy — no cooldowns, no second currency, no counter
+ * to keep on screen — and it scales to all seven elements evenly, which two
+ * charges of the same element would not: four of the seven have only one piece
+ * to draw a charge from.
+ *
+ * A super cannot be fired while your own king is in check. Passing the turn
+ * there would hand the opponent a king they could simply take, which is not a
+ * position chess has a word for.
+ *
+ * `aim` reads exactly as it does for an ordinary power. Three of them aim at
+ * nothing and fire the moment they are chosen, because what they do is already
+ * decided by the board.
+ */
+export const SUPERS = {
+  [ELEMENT.FIRE]: {
+    element: ELEMENT.FIRE,
+    power: 'Firestorm',
+    aim: POWER_AIM.NONE,
+    blurb: 'Every pawn of yours that is in contact goes up at once.',
+    detail:
+      'Every Fire pawn of yours still holding its charge with an enemy piece '
+      + 'beside it erupts together, and everything around each of them burns. '
+      + 'All of those pawns are spent. Kings do not burn.',
+  },
+  [ELEMENT.WATER]: {
+    element: ELEMENT.WATER,
+    power: 'Tidal Guard',
+    aim: POWER_AIM.NONE,
+    blurb: 'Nothing of yours can be taken for a turn.',
+    detail:
+      'Every piece you have is shielded until your next turn comes round, '
+      + 'not just the one. Kings cannot be shielded, so yours is the one '
+      + 'piece the tide does not cover.',
+  },
+  [ELEMENT.LIGHTNING]: {
+    element: ELEMENT.LIGHTNING,
+    power: 'Thunderstorm',
+    aim: POWER_AIM.ENEMY,
+    blurb: 'The bolt keeps going: three pieces, not two.',
+    detail:
+      'Pick an enemy a knight\u2019s move from one of your Lightning knights. It '
+      + 'is destroyed, and the bolt arcs on twice more \u2014 each time to the most '
+      + 'valuable enemy a knight\u2019s move from where it just struck. Kings are '
+      + 'not struck.',
+  },
+  [ELEMENT.ICE]: {
+    element: ELEMENT.ICE,
+    power: 'Deep Freeze',
+    aim: POWER_AIM.ENEMY,
+    blurb: 'Freezes a piece and everything standing around it.',
+    detail:
+      'Pick any enemy piece anywhere. It and every enemy piece on the eight '
+      + 'squares around it are frozen until your next turn. Kings cannot be '
+      + 'frozen, and a king standing in the middle of it is simply skipped.',
+  },
+  [ELEMENT.NATURE]: {
+    element: ELEMENT.NATURE,
+    power: 'Overgrowth',
+    aim: POWER_AIM.EMPTY,
+    blurb: 'A thicket, not a square \u2014 three by three.',
+    detail:
+      'Pick any empty square. It and every empty square around it grow vines '
+      + 'until your next turn: nothing may land on them or slide across them, '
+      + 'including your own pieces. Vines block movement, not sight.',
+  },
+  [ELEMENT.SHADOW]: {
+    element: ELEMENT.SHADOW,
+    power: 'Shadow Swap',
+    aim: POWER_AIM.FRIEND,
+    blurb: 'Your king changes places with one of your own pieces.',
+    detail:
+      'Pick any piece of your own, anywhere on the board. It and your king '
+      + 'swap squares \u2014 one power, two pieces moved \u2014 provided the king would '
+      + 'not be in check where it lands. It counts as having moved, so '
+      + 'castling is gone afterwards. A charged enemy Light bishop holds the '
+      + 'shadows shut and stops this too.',
+  },
+  [ELEMENT.LIGHT]: {
+    element: ELEMENT.LIGHT,
+    power: 'Dawn',
+    aim: POWER_AIM.FRIEND,
+    blurb: 'Clears the board, and gives a spent piece its charge back.',
+    detail:
+      'Every effect on the board is washed away, whoever laid it, and the '
+      + 'piece you point at gets its power back. It is the only way a charge '
+      + 'ever returns \u2014 point it at something that has already fired.',
+  },
+};
+
+/** Is there a super for this element? All seven have one; this is the guard. */
+export function superFor(element) {
+  return SUPERS[element] ?? null;
+}
+
 /** The three things a power can leave lying on the board. */
 export const EFFECT = {
   FROZEN: 'frozen',
@@ -852,6 +960,30 @@ export function relocateKing(fen, from, to) {
 }
 
 /**
+ * Swap two pieces, mid-turn.
+ *
+ * Used by one power only — Shadow Swap — and written as a general swap rather
+ * than as "move the king and put the other thing where it was", because those
+ * are the same operation and only one of them is easy to read.
+ *
+ * Castling rights are pruned from the result rather than reasoned about: the
+ * king has moved, and pruneCastling reads the board it is given, so moving it
+ * is enough to drop both. The side to move is left alone here — flipping it is
+ * what a super costs, and that is the session's decision to make, not this
+ * function's.
+ */
+export function swapPieces(fen, a, b) {
+  const parsed = readFen(fen);
+  const first = parsed.cells.get(a);
+  const second = parsed.cells.get(b);
+  if (!first || !second) return fen;
+  parsed.cells.set(a, second);
+  parsed.cells.set(b, first);
+  parsed.castling = pruneCastling(parsed.castling, parsed.cells);
+  return writeFen(parsed);
+}
+
+/**
  * The same position, with the other side to move.
  *
  * Only ever used to ask a question: "is THIS colour's king attacked?" An
@@ -867,6 +999,265 @@ export function withTurn(fen, color) {
   return parts.join(' ');
 }
 
+// ---------------------------------------------------------------------------
+// The supers
+//
+// Each one is the ordinary power asked to do the same thing over a wider
+// piece of board, so each is written as "which squares does this touch" and
+// nothing else. The session decides what touching means — destroy, freeze,
+// shield, grow — exactly as it already does for the ordinary seven.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every square a Firestorm burns, and every pawn it spends.
+ *
+ * Not one pawn’s ring but all of them at once: every charged Fire pawn with
+ * something to burn erupts together. `casters` is returned beside `squares`
+ * because the cost is the interesting half — a Firestorm that catches four
+ * pieces may spend four pawns doing it, and a player about to press the
+ * button is entitled to know that before they do.
+ *
+ * A pawn with nothing beside it does not erupt and is not spent. Firestorm is
+ * a bigger Burn, not a way of setting light to your own front rank.
+ */
+export function firestormSquares(fen, color, charges) {
+  const board = boardFromFen(fen);
+  const casters = [];
+  const squares = new Set();
+
+  board.forEach((piece, square) => {
+    if (piece.color !== color || piece.type !== 'p') return;
+    if (!charges.has(square)) return;
+    if (elementAt(piece, square) !== ELEMENT.FIRE) return;
+    const caught = burnSquares(square, fen, color);
+    if (!caught.length) return;
+    casters.push(square);
+    caught.forEach((at) => squares.add(at));
+  });
+
+  return { casters, squares: [...squares].sort() };
+}
+
+/**
+ * The three squares a Thunderstorm strikes, in the order it strikes them.
+ *
+ * The bolt cannot double back: each hop is chosen from a board that already
+ * has the previous victims taken off it, which is what stops a pair of
+ * knights’-move neighbours bouncing it between them and returning two
+ * squares for three hops.
+ */
+export function stormSquares(struck, fen, color) {
+  if (!struck) return [];
+  const hit = [struck];
+  let where = struck;
+  for (let hop = 0; hop < 2; hop += 1) {
+    const onward = arcTarget(where, removePieces(fen, hit), color);
+    if (!onward) break;
+    hit.push(onward);
+    where = onward;
+  }
+  return hit;
+}
+
+/** A Deep Freeze: the piece aimed at, and every enemy piece touching it. */
+export function deepFreezeSquares(target, fen, color) {
+  if (!target) return [];
+  const board = boardFromFen(fen);
+  const around = hopsFrom(target, NEIGHBOURS).filter((square) => {
+    const piece = board.get(square);
+    return piece && piece.color !== color && piece.type !== 'k';
+  });
+  return [target, ...around].sort();
+}
+
+/** An Overgrowth: the square aimed at, and every empty square touching it. */
+export function overgrowthSquares(target, fen) {
+  if (!target) return [];
+  const board = boardFromFen(fen);
+  const around = hopsFrom(target, NEIGHBOURS).filter((square) => !board.has(square));
+  return [target, ...around].sort();
+}
+
+/** Everything a Tidal Guard covers: all your pieces bar the king. */
+export function tidalSquares(fen, color) {
+  const board = boardFromFen(fen);
+  const covered = [];
+  board.forEach((piece, square) => {
+    if (piece.color === color && piece.type !== 'k') covered.push(square);
+  });
+  return covered.sort();
+}
+
+/**
+ * Where a super may be pointed. Same contract as powerTargets().
+ *
+ * The three that aim at nothing return [] and are `ready` on their own
+ * terms, worked out in superAt() below — there is no square to offer.
+ */
+export function superTargets({ element, square, fen, color, charges }) {
+  const board = boardFromFen(fen);
+
+  switch (element) {
+    // A knight’s move from this knight, exactly as Chain Attack is. The
+    // reach is the piece’s shape either way; what the super buys is how far
+    // the bolt travels afterwards, not where it may start.
+    case ELEMENT.LIGHTNING:
+      return hopsFrom(square, KNIGHT_HOPS).filter((at) => {
+        const piece = board.get(at);
+        return piece && piece.color !== color && piece.type !== 'k';
+      });
+
+    case ELEMENT.ICE: {
+      const found = [];
+      board.forEach((piece, at) => {
+        if (piece.color !== color && piece.type !== 'k') found.push(at);
+      });
+      return found;
+    }
+
+    case ELEMENT.NATURE:
+      return ALL_SQUARES.filter((at) => !board.has(at));
+
+    // Any piece of your own but the king, and only where the king would be
+    // safe standing on it. Checked here rather than left to the session, so
+    // a square that cannot be swapped to is never offered in the first
+    // place — the legality check in the session is the backstop, not the
+    // explanation.
+    case ELEMENT.SHADOW:
+      return swapTargets({ square, fen, color });
+
+    // Something that has already fired. Dawn on a loaded piece would be a
+    // turn spent giving somebody a charge they already had.
+    case ELEMENT.LIGHT: {
+      const spent = [];
+      board.forEach((piece, at) => {
+        if (piece.color !== color) return;
+        if (charges.has(at)) return;
+        if (!elementAt(piece, at)) return;
+        spent.push(at);
+      });
+      return spent;
+    }
+
+    default:
+      return [];
+  }
+}
+
+/**
+ * Your own pieces the king could change places with.
+ *
+ * Every piece but the king itself, kept only where the king would not be in
+ * check after the swap. The piece coming the other way is placed first, so a
+ * rook that was shielding the king from a1 is gone from a1 when the question
+ * is asked — which is the position the swap actually produces.
+ */
+export function swapTargets({ square, fen, color }) {
+  const board = boardFromFen(fen);
+  const mine = [];
+  board.forEach((piece, at) => {
+    if (piece.color === color && piece.type !== 'k') mine.push(at);
+  });
+  return mine.filter((at) => !kingExposedBySwap(fen, square, at, color));
+}
+
+/** Would swapping these two leave this colour’s king attacked? */
+function kingExposedBySwap(fen, kingSquare, other, color) {
+  const swapped = swapPieces(fen, kingSquare, other);
+  return attacked(swapped, other, color);
+}
+
+/**
+ * Is the piece on `square` attacked by the side that is not `color`?
+ *
+ * Worked out without an engine, by walking the board outward from the square
+ * — this module imports nothing but constants on purpose, and pulling chess.js
+ * in here to answer one question would cost that. Pawns, knights, kings and
+ * the sliders each get their own pass; between them that is every way a piece
+ * can be attacked.
+ */
+function attacked(fen, square, color) {
+  const board = boardFromFen(fen);
+  const them = color === 'w' ? 'b' : 'w';
+  const at = (df, dr) => squareAt(fileOf(square) + df, rankOf(square) + dr);
+  const isThem = (target, type) => {
+    const piece = target && board.get(target);
+    return Boolean(piece) && piece.color === them && piece.type === type;
+  };
+
+  // Pawns capture forwards, so a white king is attacked from the rank above.
+  const forward = color === 'w' ? 1 : -1;
+  if (isThem(at(-1, forward), 'p') || isThem(at(1, forward), 'p')) return true;
+
+  if (KNIGHT_HOPS.some(([df, dr]) => isThem(at(df, dr), 'n'))) return true;
+  if (NEIGHBOURS.some(([df, dr]) => isThem(at(df, dr), 'k'))) return true;
+
+  const rays = [
+    [[1, 0], [-1, 0], [0, 1], [0, -1], 'r'],
+    [[1, 1], [1, -1], [-1, 1], [-1, -1], 'b'],
+  ];
+  for (const ray of rays) {
+    const kind = ray[ray.length - 1];
+    for (const [df, dr] of ray.slice(0, -1)) {
+      for (let step = 1; step < 8; step += 1) {
+        const where = at(df * step, dr * step);
+        if (!where) break;
+        const piece = board.get(where);
+        if (!piece) continue;
+        if (piece.color === them && (piece.type === kind || piece.type === 'q')) return true;
+        break;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * What this piece’s super could do right now, or null if it has none to do.
+ *
+ * The same shape powerAt() returns, so every caller that already knows how to
+ * read a power can read a super without learning a second shape.
+ */
+export function superAt({ square, fen, color, charges, isQuiet }) {
+  const board = boardFromFen(fen);
+  const piece = board.get(square);
+  if (!piece || piece.color !== color) return null;
+  if (!charges.has(square)) return null;
+
+  const element = elementAt(piece, square);
+  const info = SUPERS[element];
+  if (!info) return null;
+
+  const blockedBy = element === ELEMENT.SHADOW && !canTeleport({ fen, color, charges })
+    ? ELEMENT.LIGHT
+    : null;
+
+  if (info.aim === POWER_AIM.NONE) {
+    // Nothing to point at, so readiness is whether it would do anything.
+    // Firestorm with no pawn in contact and Dawn with nothing spent are both
+    // buttons that would cost a move and change nothing.
+    // Fire asks whether THIS pawn is one of the ones about to erupt, not
+    // merely whether some pawn is. A Firestorm offered from a pawn standing
+    // alone in the centre would spend it for nothing and read as the power
+    // having misfired.
+    const ready = element === ELEMENT.FIRE
+      ? firestormSquares(fen, color, charges).casters.includes(square)
+      : tidalSquares(fen, color).length > 0;
+    return { element, info, square, ready, targets: [], blockedBy, isSuper: true };
+  }
+
+  const targets = superTargets({ element, square, fen, color, charges });
+  return {
+    element,
+    info,
+    square,
+    ready: targets.length > 0 && !blockedBy,
+    targets,
+    blockedBy,
+    isSuper: true,
+    isQuiet,
+  };
+}
 // ---------------------------------------------------------------------------
 // Reading the state back out, for the views
 // ---------------------------------------------------------------------------

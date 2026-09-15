@@ -657,6 +657,19 @@ export class GameController {
   }
 
   /**
+   * The SUPER the currently selected piece is offering, or null.
+   *
+   * Null in every mode but Elemental, and null while your king is in check —
+   * the session decides that, because "may I give up my move" is a rule of
+   * the variant rather than a question about the view.
+   */
+  getSelectedSuper() {
+    const square = this.#view.selected;
+    if (!square) return null;
+    return this.#session.getSuper?.(square) ?? null;
+  }
+
+  /**
    * Change the name on your own seat, mid-game.
    *
    * Inert in every mode but online: no other session defines setSeatName,
@@ -781,6 +794,52 @@ export class GameController {
     return { ok: true };
   }
 
+  /**
+   * Start aiming the selected piece's SUPER.
+   *
+   * The same two steps beginAiming takes, and deliberately a separate method
+   * rather than a flag on it: the two are reached from different buttons and
+   * refuse for different reasons, and a shared one would spend its length
+   * asking which it was.
+   */
+  async beginSuperAiming() {
+    const power = this.getSelectedSuper();
+    if (!power) {
+      this.#toast(
+        this.#state?.isCheck
+          ? 'You cannot give up your move while in check'
+          : 'No super there',
+        'warn',
+      );
+      return { ok: false, error: 'No super' };
+    }
+    if (power.blockedBy) {
+      this.#toast('A charged Light bishop holds the shadows shut', 'warn');
+      return { ok: false, error: 'Blocked' };
+    }
+    if (this.#state?.elemental?.powerUsed) {
+      this.#toast('One power a turn — make your move', 'warn');
+      return { ok: false, error: 'Already used' };
+    }
+    if (!power.ready) {
+      this.#toast(`${power.info.power} has nothing to aim at`, 'warn');
+      return { ok: false, error: 'No targets' };
+    }
+    if (!power.targets.length) {
+      return this.usePower(power.square, null, { isSuper: true });
+    }
+
+    this.#view.aiming = {
+      element: power.element,
+      from: power.square,
+      name: power.info.power,
+      targets: power.targets,
+      isSuper: true,
+    };
+    this.#emitChange();
+    return { ok: true };
+  }
+
   /** Stop aiming, keeping the piece selected so the player can just move it. */
   cancelAiming() {
     if (!this.#view.aiming) return;
@@ -795,7 +854,7 @@ export class GameController {
       this.cancelAiming();
       return;
     }
-    await this.usePower(aiming.from, square);
+    await this.usePower(aiming.from, square, { isSuper: Boolean(aiming.isSuper) });
   }
 
   /**
@@ -805,13 +864,19 @@ export class GameController {
    * is very often the piece you then want to move, and clearing it would make
    * the player tap it again for no reason.
    */
-  async usePower(from, target) {
+  async usePower(from, target, { isSuper = false } = {}) {
     if (this.#processing) return { ok: false, error: 'Busy' };
     if (!this.#session.usePower) return { ok: false, error: 'Not this game' };
+    if (isSuper && !this.#session.useSuper) return { ok: false, error: 'Not this game' };
 
     this.#processing = true;
     try {
-      const result = await this.#session.usePower({ from, target });
+      // One method for both, because everything after the call is identical:
+      // the same sound, the same refreshed selection, the same event for the
+      // board to animate. Only the price differs, and the session charges it.
+      const result = isSuper
+        ? await this.#session.useSuper({ from, target })
+        : await this.#session.usePower({ from, target });
       this.#view.aiming = null;
 
       if (!result.ok) {
@@ -840,20 +905,42 @@ export class GameController {
         element: used.element ?? null,
         from: used.from ?? null,
         targets: used.targets ?? [],
+        // Drawn louder, and worth telling apart: a super reaches further and
+        // costs the turn, so the board is entitled to make more of it.
+        isSuper: Boolean(used.isSuper),
+        name: used.name ?? null,
         // The subset whose piece is now gone, which the board draws quite
         // differently — a frozen queen and a burned one leave the same trace
         // in the state that follows, and only one of them comes apart.
         destroyed,
-        sweep: Boolean(used.element) && !used.target,
+        // Cleanse is the only power whose effect has no squares at all —
+        // what it does is not TO a square but to the whole board — so the
+        // whole board is what answers, and that is what `sweep` says.
+        //
+        // Asked of the SQUARES rather than of the aim. Firestorm and Tidal
+        // Guard are aimed at nothing either, and the first version of this
+        // read `!used.target`: a Firestorm that took two pawns set light to
+        // all sixty-four squares.
+        sweep: Boolean(used.element) && !(used.targets ?? []).length,
       });
 
       if (destroyed.length) {
         const info = ELEMENTS[used.element];
         const count = destroyed.length;
+        // The super's own name, when it was one. "Burn — 2 pieces destroyed"
+        // after a Firestorm names the wrong power, and the two do visibly
+        // different things.
+        const what = used.name ?? info?.power ?? 'That power';
         this.#toast(
-          `${info?.emoji ?? ''} ${info?.power ?? 'That power'} — `
+          `${info?.emoji ?? ''} ${what} — `
           + `${count} ${count === 1 ? 'piece' : 'pieces'} destroyed`,
         );
+      } else if (used.isSuper) {
+        // A super that destroys nothing still cost the whole turn, which is
+        // worth saying out loud: the board changes in ways that are easy to
+        // miss and the turn has just gone.
+        const info = ELEMENTS[used.element];
+        this.#toast(`${info?.emoji ?? ''} ${used.name ?? 'Super'} — your move is spent`);
       }
       this.#emitChange();
       return result;
