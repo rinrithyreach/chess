@@ -5,11 +5,22 @@
  * Every piece on the board carries an element, and every element carries one
  * power that the piece may use ONCE in the whole match.
  *
+ * All seven are chosen and aimed by the player. Two of them — Fire and
+ * Lightning — ALSO go off by themselves, free and unasked, when their piece
+ * captures; nothing else about them is different.
+ *
  * Powers are free in two senses. Using one does not cost the turn, so a player
  * may fire a power and then move as normal. And a power may be pointed
  * anywhere it makes sense — freeze any enemy piece, shield any piece of your
  * own, grow vines on any empty square — rather than only along the lines its
  * caster happens to be looking down.
+ *
+ * The exception is the two that DESTROY, and it is the only one in the file.
+ * A power that removes material from any square on the board for the price of
+ * one turn is not a power, it is a win button, so fire and lightning keep the
+ * shape of the piece that owns them: the eight squares around the pawn, and a
+ * knight's move from the knight. Walking the piece into position first is the
+ * cost, and it is paid in the currency the game is already played in.
  *
  * That second sense used to be the other way round, and it was wrong. Reach
  * was worked out from the caster's rays, so at the opening bell five of the
@@ -68,23 +79,20 @@ export const ELEMENT = {
 };
 
 /**
- * How a power is fired.
- *
- * `turn` powers are chosen and aimed by the player on their own turn, before
- * they move. `capture` powers are not chosen at all: they go off by themselves
- * when the piece that owns them takes something, because a choice you would
- * always make is not a choice, and a mid-move prompt would have to interrupt a
- * move that has already been played.
- */
-export const POWER_TRIGGER = {
-  TURN: 'turn',
-  CAPTURE: 'capture',
-};
-
-/**
- * What a `turn` power needs aimed at it.
+ * What a power needs aimed at it.
  *
  * `none` fires the moment it is chosen — there is nothing to point it at.
+ *
+ * All seven are chosen and aimed by the player on their own turn. Two of them
+ * — Fire and Lightning, marked `onCapture` in the table below — ALSO go off
+ * by themselves when their piece takes something, for free and without being
+ * asked, because a choice you would always make is not a choice and a mid-move
+ * prompt would have to interrupt a move that has already been played.
+ *
+ * Those two used to be capture-only, which made two of the seven rows in the
+ * powers panel permanently unpressable: loaded, explained, and impossible to
+ * do anything with. Being given something you may not use is worse than not
+ * having it, and worse than either is being shown it in a list of buttons.
  */
 export const POWER_AIM = {
   ENEMY: 'enemy',
@@ -109,13 +117,14 @@ export const ELEMENTS = {
     name: 'Fire',
     piece: 'Pawn',
     power: 'Burn',
-    trigger: POWER_TRIGGER.CAPTURE,
-    aim: POWER_AIM.NONE,
-    blurb: 'When it captures, every enemy piece around it burns.',
+    onCapture: true,
+    aim: POWER_AIM.ENEMY,
+    blurb: 'Sets light to everything around one of your pawns.',
     detail:
-      'A Fire pawn that takes a piece sets light to all eight squares around '
-      + 'the one it lands on. Every enemy piece standing there is destroyed. '
-      + 'Kings do not burn.',
+      'Pick an enemy piece standing next to one of your Fire pawns. That '
+      + 'pawn goes up, and every enemy piece on the eight squares around it '
+      + 'is destroyed — not only the one you pointed at. It also happens by '
+      + 'itself, free, whenever a Fire pawn captures. Kings do not burn.',
   },
   [ELEMENT.WATER]: {
     id: ELEMENT.WATER,
@@ -123,7 +132,6 @@ export const ELEMENTS = {
     name: 'Water',
     piece: 'Dark-squared bishop',
     power: 'Water Shield',
-    trigger: POWER_TRIGGER.TURN,
     aim: POWER_AIM.FRIEND,
     blurb: 'Shields any one of your pieces for a turn.',
     detail:
@@ -137,13 +145,15 @@ export const ELEMENTS = {
     name: 'Lightning',
     piece: 'Knight',
     power: 'Chain Attack',
-    trigger: POWER_TRIGGER.CAPTURE,
-    aim: POWER_AIM.NONE,
-    blurb: 'When it captures, the strike arcs to a second enemy.',
+    onCapture: true,
+    aim: POWER_AIM.ENEMY,
+    blurb: 'Strikes an enemy a knight’s move away, then arcs on.',
     detail:
-      'After a Lightning knight takes a piece, the strike jumps to the most '
-      + 'valuable enemy piece a knight’s move from where it landed, and '
-      + 'destroys that too. Kings are not struck.',
+      'Pick an enemy piece a knight’s move from one of your Lightning '
+      + 'knights. It is destroyed, and the strike arcs on to the most '
+      + 'valuable enemy a knight’s move from THAT square, which is destroyed '
+      + 'too. It also happens by itself, free, whenever a Lightning knight '
+      + 'captures. Kings are not struck.',
   },
   [ELEMENT.ICE]: {
     id: ELEMENT.ICE,
@@ -151,7 +161,6 @@ export const ELEMENTS = {
     name: 'Ice',
     piece: 'Rook',
     power: 'Freeze',
-    trigger: POWER_TRIGGER.TURN,
     aim: POWER_AIM.ENEMY,
     blurb: 'Freezes any one enemy piece for a turn.',
     detail:
@@ -164,7 +173,6 @@ export const ELEMENTS = {
     name: 'Nature',
     piece: 'Queen',
     power: 'Vines',
-    trigger: POWER_TRIGGER.TURN,
     aim: POWER_AIM.EMPTY,
     blurb: 'Grows vines on any empty square.',
     detail:
@@ -179,7 +187,6 @@ export const ELEMENTS = {
     name: 'Shadow',
     piece: 'King',
     power: 'Teleport',
-    trigger: POWER_TRIGGER.TURN,
     aim: POWER_AIM.EMPTY,
     blurb: 'Slips away to any empty square where it would be safe.',
     detail:
@@ -194,7 +201,6 @@ export const ELEMENTS = {
     name: 'Light',
     piece: 'Light-squared bishop',
     power: 'Cleanse',
-    trigger: POWER_TRIGGER.TURN,
     aim: POWER_AIM.NONE,
     blurb: 'Clears every effect on the board — and holds the enemy king.',
     detail:
@@ -520,20 +526,25 @@ export function moveAllowed(move, effects, ply) {
 /**
  * The squares a power may be pointed at.
  *
- * Three of the four are the whole board, filtered only by what the power is
- * for: an enemy to freeze, a piece of your own to shield, an empty square to
- * grow vines on. Kings are excluded from the first two by the rule at the top
- * of this file, which is the only exclusion any of them carries.
+ * Three of them are the whole board, filtered only by what the power is for:
+ * an enemy to freeze, a piece of your own to shield, an empty square to grow
+ * vines on. Kings are excluded from the first two by the rule at the top of
+ * this file, which is the only exclusion any of them carries. For those three
+ * the caster's square is not read at all, which is the point rather than an
+ * oversight — every charged rook offers exactly the same freeze, so "which
+ * rook casts it" is not a question worth asking the player.
  *
- * The caster's square is therefore not read at all except by Teleport, and
- * that is the point rather than an oversight — see the header. It also means
- * every charged rook offers exactly the same freeze, so "which rook casts it"
- * stopped being a question worth asking the player and the panel fires from
- * whichever one is to hand.
+ * FIRE AND LIGHTNING ARE THE EXCEPTION, and deliberately. They are the two
+ * that destroy, and a power that removes material from anywhere on the board
+ * for the price of one turn is not a power, it is a win button. So they keep
+ * the shape of the piece that owns them: fire reaches the eight squares around
+ * its pawn, lightning reaches a knight's move from its knight. You have to
+ * have walked the piece into position first, which is the cost, and it is paid
+ * in the currency the game is already played in.
  *
- * Teleport is the one power whose reach is genuinely a computation, because
- * the only squares a king may appear on are the ones that leave the position
- * legal for both sides. It gets its own function below.
+ * Teleport is the one whose reach is genuinely a computation, because the only
+ * squares a king may appear on are the ones that leave the position legal for
+ * both sides. It gets its own function below.
  */
 export function powerTargets({ element, square, fen, color, charges, isQuiet }) {
   const board = boardFromFen(fen);
@@ -542,6 +553,12 @@ export function powerTargets({ element, square, fen, color, charges, isQuiet }) 
     board.forEach((piece, at) => { if (keep(piece)) found.push(at); });
     return found;
   };
+
+  // Enemies this piece could destroy, at the hops its own shape allows.
+  const reachable = (hops) => hopsFrom(square, hops).filter((at) => {
+    const piece = board.get(at);
+    return piece && piece.color !== color && piece.type !== 'k';
+  });
 
   switch (element) {
     case ELEMENT.ICE:
@@ -558,9 +575,61 @@ export function powerTargets({ element, square, fen, color, charges, isQuiet }) 
     case ELEMENT.SHADOW:
       return teleportTargets({ square, fen, color, board, charges, isQuiet });
 
+    // The aimed square is only where you point. Burn takes the whole ring
+    // around the pawn either way — see burnSquares, which is what actually
+    // decides, and which the capture trigger calls too.
+    case ELEMENT.FIRE:
+      return reachable(NEIGHBOURS);
+
+    case ELEMENT.LIGHTNING:
+      return reachable(KNIGHT_HOPS);
+
     default:
       return [];
   }
+}
+
+/**
+ * Everything a power would destroy if it were cast at this square, and what
+ * that is worth.
+ *
+ * Only the two destroying powers have an answer; everything else returns
+ * nothing, because freezing a queen does not remove her and pretending it is
+ * worth 900 would have the bot trading a charge for a delay.
+ *
+ * Used twice: to sort the casters a panel might fire from, so that choosing
+ * "Burn" with four pawns in contact picks the one that burns the most, and by
+ * the bot, which has no other way to tell a good burn from a pointless one.
+ */
+export function castDamage({ element, square, target, fen, color }) {
+  if (element !== ELEMENT.FIRE && element !== ELEMENT.LIGHTNING) {
+    return { squares: [], worth: 0 };
+  }
+
+  const squares = element === ELEMENT.FIRE
+    ? burnSquares(square, fen, color)
+    : arcSquares(target, fen, color);
+
+  const board = boardFromFen(fen);
+  const worth = squares.reduce(
+    (sum, at) => sum + (PIECE_WORTH[board.get(at)?.type] ?? 0),
+    0,
+  );
+  return { squares, worth };
+}
+
+/**
+ * The struck square and wherever the bolt arcs on to from it.
+ *
+ * The arc is measured from the SQUARE THAT WAS HIT rather than from the
+ * knight, which is what makes it a chain rather than a second shot: the bolt
+ * goes where it has just been, and a knight with one enemy in range still only
+ * gets one kill out of it.
+ */
+export function arcSquares(struck, fen, color) {
+  if (!struck) return [];
+  const onward = arcTarget(struck, fen, color);
+  return onward ? [struck, onward] : [struck];
 }
 
 /**
@@ -836,9 +905,7 @@ export function describeBoard({ fen, charges, effects, ply }) {
  *
  * Answers one question for three callers — the power bar, the board's
  * targeting, and the bot — so "can this piece do something" is decided in one
- * place. A capture-triggered power is deliberately reported too, with
- * `ready: false`, because the bar still has something worth saying about a
- * Fire pawn: that it is loaded, and what will happen if it takes.
+ * place.
  */
 export function powerAt({ square, fen, color, charges, isQuiet }) {
   const board = boardFromFen(fen);
@@ -849,10 +916,6 @@ export function powerAt({ square, fen, color, charges, isQuiet }) {
   const element = elementAt(piece, square);
   const info = ELEMENTS[element];
   if (!info) return null;
-
-  if (info.trigger === POWER_TRIGGER.CAPTURE) {
-    return { element, info, square, ready: false, targets: [] };
-  }
 
   if (info.aim === POWER_AIM.NONE) {
     return { element, info, square, ready: true, targets: [] };
@@ -883,10 +946,15 @@ export function powerAt({ square, fen, color, charges, isQuiet }) {
  * for the whole match, so a power running out leaves a gap where it was
  * instead of letting the rest shuffle up under the player's thumb.
  *
- * `ready` is the subset of `squares` that could fire right now, and it is
- * empty for the capture-triggered powers by construction: Fire and Lightning
- * are never offered, only announced, and a Use button beside a loaded Fire
- * pawn would be a button that does nothing when pressed.
+ * `ready` is the subset of `squares` that could fire right now, best first.
+ *
+ * "Best" only means anything for the two that destroy, and for them it means
+ * a great deal: four pawns in contact with the enemy are four quite different
+ * burns, and the panel fires from ready[0] without asking. Sorting here rather
+ * than choosing there keeps the judgement beside PIECE_WORTH, which is the
+ * only thing in the app entitled to say what a piece is worth to this variant.
+ * For the other five every caster is interchangeable and the order is board
+ * order, which is as good as any.
  */
 export function arsenal({ fen, color, charges, isQuiet }) {
   const board = boardFromFen(fen);
@@ -902,11 +970,14 @@ export function arsenal({ fen, color, charges, isQuiet }) {
     const info = ELEMENTS[element];
     const squares = held.get(element) ?? [];
 
-    const ready = info.trigger === POWER_TRIGGER.TURN
-      ? squares.filter(
-        (square) => powerAt({ square, fen, color, charges, isQuiet })?.ready,
-      )
-      : [];
+    const ready = squares
+      .filter((square) => powerAt({ square, fen, color, charges, isQuiet })?.ready)
+      .map((square) => ({
+        square,
+        worth: castDamage({ element, square, fen, color }).worth,
+      }))
+      .sort((a, b) => (b.worth - a.worth) || a.square.localeCompare(b.square))
+      .map((entry) => entry.square);
 
     // Said out loud rather than left as an empty `ready`, because "nothing in
     // reach" and "their Light bishop is holding this shut" are different

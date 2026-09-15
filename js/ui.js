@@ -42,26 +42,31 @@ import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
 // Small, pure and free of any engine, so the rules card and the power bar can
 // be built from the same table the variant's rules are written against —
 // rather than from a second copy of them kept in step by hand.
-import { ELEMENTS, ELEMENT_ORDER, POWER_TRIGGER } from './elemental.js';
+import { ELEMENTS, ELEMENT_ORDER } from './elemental.js';
 
 /**
  * The second line of a row in the powers panel: who holds it, and why you can
  * or cannot press it.
  *
- * One line and one function, because the seven answers are mutually exclusive
- * and the order they are tested in IS the explanation: "all spent" beats
- * "nothing in reach", which beats "one a turn". Spread across the render loop
- * as ternaries, that order stops being visible and starts being an accident.
+ * One line and one function, because the answers are mutually exclusive and
+ * the order they are tested in IS the explanation: "all spent" beats "nothing
+ * in reach", which beats "one a turn". Spread across the render loop as
+ * ternaries, that order stops being visible and starts being an accident.
+ *
+ * It has to stay SHORT. The row is one line with an ellipsis at 320px wide,
+ * and a line that reads "Pawn · ready, or when it cap…" is worse than a
+ * shorter one that finishes its sentence — which is why Fire and Lightning
+ * say only "on capture" when they have nothing in reach, and leave the rest
+ * of the story to the row's own description.
  */
 function powerLine(info, entry, { mine, used }) {
   if (!mine) return info.piece;
   if (!entry || !entry.squares.length) return `${info.piece} · all spent`;
-  // Fire and Lightning are never pressed, only announced. Saying so on the
-  // row is the whole reason they earn a place in a panel of buttons.
-  if (info.trigger === POWER_TRIGGER.CAPTURE) return `${info.piece} · on capture`;
   if (entry.blockedBy) return `${info.piece} · held shut`;
   if (used) return `${info.piece} · one power a turn`;
-  if (!entry.ready.length) return `${info.piece} · nothing in reach`;
+  if (!entry.ready.length) {
+    return `${info.piece} · ${info.onCapture ? 'on capture' : 'nothing in reach'}`;
+  }
   return `${info.piece} · ready`;
 }
 
@@ -1286,10 +1291,16 @@ export class UI {
       say(element.emoji, power.info.power, 'Their Light bishop holds it shut');
       return;
     }
-    // Fire and lightning are not offered, they are announced: there is no
-    // button to press, only a capture to make.
-    if (power.info.trigger === POWER_TRIGGER.CAPTURE) {
-      say(element.emoji, power.info.power, 'Goes off when this piece captures');
+    // Nothing in reach, on a power that also goes off by itself. Saying so
+    // matters: the piece is not idle, it is one square away from being
+    // frightening, and it may not need the charge at all to get there.
+    //
+    // Four words, because this line is one line with an ellipsis and there
+    // are only about twenty characters of it at 320px wide. "Fires free when
+    // this piece captures" was the first try and arrived as "Fires free when
+    // this piec…", which says less than nothing.
+    if (!power.ready && power.info.onCapture) {
+      say(element.emoji, power.info.power, 'Free on a capture');
       return;
     }
     if (state.elemental.powerUsed) {
@@ -1406,7 +1417,7 @@ export class UI {
 
       // Enabled whenever it is your turn, even when the power cannot fire —
       // the refusals say something worth hearing ("their Light bishop holds
-      // it shut", "goes off by itself when that piece captures") and a
+      // it shut", "needs that piece next to something") and a
       // disabled row cannot say anything at all on a screen with no hover.
       row.item.disabled = !mine;
       row.who.textContent = powerLine(info, entry, { mine, used });

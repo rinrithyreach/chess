@@ -1111,6 +1111,282 @@
 }
 
 /* ==========================================================================
+   The rest of a power going off
+   ==========================================================================
+
+   The burst above says WHERE. These four say the other things a power does,
+   and between them they are what turns a state change into an event:
+
+     .square__shock    a ring leaving the square, under everything else
+     .square__beam     a line from the piece that spent itself to what it hit
+     .piece--destroyed the piece coming apart, rather than ceasing to be
+     .board--knocked   the whole board taking the hit
+
+   Every one of them is put there by board.js and taken away on a timer, and
+   every one of them inherits `--cast-ms` from the element board.js set it on,
+   so there is still exactly one duration in this file's world and it lives in
+   config.js.
+
+   One palette, five uses. The element colours below are the same ones the
+   burst is built from and the same ones the 3D board uses, because a player
+   who switches boards or looks at a beam instead of a burst should not have
+   to learn the blues twice.
+*/
+
+.square__cast[data-element="fire"],
+.square__shock[data-element="fire"],
+.square__beam[data-element="fire"] { --cast-hue: 255, 128, 36; --cast-edge: 255, 226, 150; }
+
+.square__cast[data-element="water"],
+.square__shock[data-element="water"],
+.square__beam[data-element="water"] { --cast-hue: 76, 162, 255; --cast-edge: 214, 242, 255; }
+
+.square__cast[data-element="lightning"],
+.square__shock[data-element="lightning"],
+.square__beam[data-element="lightning"] { --cast-hue: 168, 128, 255; --cast-edge: 255, 255, 255; }
+
+.square__cast[data-element="ice"],
+.square__shock[data-element="ice"],
+.square__beam[data-element="ice"] { --cast-hue: 130, 206, 255; --cast-edge: 234, 250, 255; }
+
+.square__cast[data-element="nature"],
+.square__shock[data-element="nature"],
+.square__beam[data-element="nature"] { --cast-hue: 92, 198, 108; --cast-edge: 206, 246, 190; }
+
+.square__cast[data-element="shadow"],
+.square__shock[data-element="shadow"],
+.square__beam[data-element="shadow"] { --cast-hue: 122, 82, 200; --cast-edge: 190, 154, 255; }
+
+.square__cast[data-element="light"],
+.square__shock[data-element="light"],
+.square__beam[data-element="light"] { --cast-hue: 255, 208, 112; --cast-edge: 255, 252, 236; }
+
+/* --- The shockwave --- */
+
+.square__shock {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--cast-edge, 255, 255, 255), 0.9);
+  box-shadow: 0 0 10px rgba(var(--cast-hue, 255, 255, 255), 0.7);
+  pointer-events: none;
+  opacity: 0;
+  animation: cast-shock var(--cast-ms, 900ms) cubic-bezier(0.1, 0.8, 0.3, 1) both;
+}
+
+@keyframes cast-shock {
+  0% { opacity: 0; transform: scale(0.1); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.6); }
+}
+
+/* --- The beam ---
+
+   Anchored at the centre of the caster's square and turned to face the
+   target, so its length is a plain multiple of the square it starts in and
+   nothing has to know how big the board is. --beam-length and --beam-angle
+   are set per beam by board.js, which is the only thing that knows where two
+   squares are once Flip has had its say.
+*/
+
+.square__beam {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  width: var(--beam-length, 100%);
+  height: 10%;
+  /* The bar grows from the caster's centre outwards, which is why the origin
+     is the left edge rather than the middle: rotating about the middle would
+     swing half the beam backwards through the piece that fired it. */
+  transform-origin: 0 50%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--cast-edge, 255, 255, 255), 0.95) 0%,
+    rgba(var(--cast-hue, 255, 255, 255), 0.8) 45%,
+    rgba(var(--cast-hue, 255, 255, 255), 0) 100%
+  );
+  box-shadow: 0 0 12px rgba(var(--cast-hue, 255, 255, 255), 0.75);
+  pointer-events: none;
+  opacity: 0;
+  animation: cast-beam calc(var(--cast-ms, 900ms) * 0.6) ease-out both;
+}
+
+/* Travels out along its own length and then goes, rather than appearing whole
+   — a line that is simply there for a moment reads as a rule on the board,
+   and a line that arrives reads as something being fired. */
+@keyframes cast-beam {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--beam-angle, 0deg)) translateY(-50%) scaleX(0.02) scaleY(0.4);
+  }
+  22% {
+    opacity: 1;
+    transform: rotate(var(--beam-angle, 0deg)) translateY(-50%) scaleX(1) scaleY(1);
+  }
+  60% {
+    opacity: 0.8;
+    transform: rotate(var(--beam-angle, 0deg)) translateY(-50%) scaleX(1) scaleY(0.7);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--beam-angle, 0deg)) translateY(-50%) scaleX(1) scaleY(0.2);
+  }
+}
+
+/* Lightning's beam is a bolt rather than a bar: broken into segments, and
+   over almost before it has arrived. */
+.square__beam[data-element="lightning"] {
+  height: 14%;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 1) 0 6%,
+    rgba(198, 176, 255, 0.9) 6% 9%,
+    rgba(255, 255, 255, 0.15) 9% 11%
+  );
+  animation-duration: calc(var(--cast-ms, 900ms) * 0.4);
+}
+
+/* --- The piece coming apart --- */
+
+.piece--destroyed {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* Above the piece that is no longer there (2) and under the burst (6), so
+     it is seen through the fire rather than in front of it. */
+  z-index: 3;
+  pointer-events: none;
+}
+
+/*
+  Fire chars it.
+
+  Darkening and shrinking rather than fading: a piece that simply becomes
+  transparent has been deleted, and a piece that goes black, curls up and
+  lifts has been burned. The rotation is what sells it — nothing else on this
+  board turns, so a turning piece is unmistakably not a piece any more.
+*/
+.piece--destroyed[data-element="fire"] {
+  animation: destroyed-burn var(--cast-ms, 900ms) cubic-bezier(0.3, 0, 0.6, 1) both;
+}
+
+@keyframes destroyed-burn {
+  0% { opacity: 1; filter: none; transform: scale(1) rotate(0deg); }
+  25% {
+    opacity: 1;
+    filter: brightness(2.2) sepia(1) saturate(6) hue-rotate(-18deg);
+    transform: scale(1.08) rotate(-4deg);
+  }
+  60% {
+    opacity: 0.8;
+    filter: brightness(0.35) sepia(1) saturate(3) hue-rotate(-20deg);
+    transform: scale(0.8) rotate(9deg) translateY(-8%);
+  }
+  100% {
+    opacity: 0;
+    filter: brightness(0.15) sepia(1);
+    transform: scale(0.45) rotate(22deg) translateY(-34%);
+  }
+}
+
+/*
+  Lightning overexposes it.
+
+  White out, then nothing — the opposite shape to the burn, and the right one:
+  a strike does not consume a piece over the better part of a second, it
+  removes it between two frames and leaves the after-image.
+*/
+.piece--destroyed[data-element="lightning"] {
+  animation: destroyed-strike calc(var(--cast-ms, 900ms) * 0.55) ease-out both;
+}
+
+@keyframes destroyed-strike {
+  0% { opacity: 1; filter: none; transform: scale(1); }
+  18% { opacity: 1; filter: brightness(8) saturate(0); transform: scale(1.14); }
+  45% { opacity: 0.9; filter: brightness(8) saturate(0); transform: scale(1.02); }
+  100% { opacity: 0; filter: brightness(8) saturate(0); transform: scale(0.72); }
+}
+
+/* Any other element that ever destroys gets a plain, honest disappearance
+   rather than nothing at all. */
+.piece--destroyed:not([data-element="fire"]):not([data-element="lightning"]) {
+  animation: destroyed-plain calc(var(--cast-ms, 900ms) * 0.6) ease-out both;
+}
+
+@keyframes destroyed-plain {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.6); }
+}
+
+/* --- The knock ---
+
+   The whole board, moved a little, for a third of a second. It is the only
+   feedback in the app that reaches outside the element it belongs to, which
+   is exactly why it is reserved for the only thing that takes material off
+   the board without a move being played.
+*/
+
+.board--knocked {
+  animation: board-knock 300ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes board-knock {
+  0% { transform: translate3d(0, 0, 0); }
+  15% { transform: translate3d(-0.7%, 0.5%, 0); }
+  32% { transform: translate3d(0.6%, -0.45%, 0); }
+  52% { transform: translate3d(-0.42%, 0.3%, 0); }
+  74% { transform: translate3d(0.26%, -0.18%, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+/* --- Aiming, in the element's own colour ---
+
+   The gold below is the resting case and stays: it is what "this power can
+   reach here" looks like before anybody has said which power. Once the board
+   knows, it says so. Ice lights the board pale blue and fire orange, so the
+   squares you may point at look like the thing about to happen to them —
+   which is a better reminder of what you pressed than the word in the bar,
+   because it is where you are already looking.
+*/
+
+.board[data-aim="fire"] { --hl-aim: 255, 128, 36; }
+.board[data-aim="water"] { --hl-aim: 76, 162, 255; }
+.board[data-aim="lightning"] { --hl-aim: 168, 128, 255; }
+.board[data-aim="ice"] { --hl-aim: 130, 206, 255; }
+.board[data-aim="nature"] { --hl-aim: 92, 198, 108; }
+.board[data-aim="shadow"] { --hl-aim: 150, 110, 236; }
+.board[data-aim="light"] { --hl-aim: 255, 208, 112; }
+
+.board[data-aim] .square.is-aim::after {
+  background: rgba(var(--hl-aim), 0.34);
+  box-shadow:
+    inset 0 0 0 3px rgba(var(--hl-aim), 0.95),
+    0 0 12px rgba(var(--hl-aim), 0.45);
+}
+
+/* The caster, while it is aiming. It is the only piece on the board that is
+   doing something, and it was previously indistinguishable from a piece that
+   merely happened to be selected. */
+.board[data-aim] .square.is-aiming-from::before {
+  box-shadow: inset 0 0 0 3px rgba(var(--hl-aim), 0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+    board.js creates none of these when motion is reduced, so what is left is
+    only the knock — which is a class on the board rather than an element, and
+    so is the one that could still arrive.
+  */
+  .board--knocked {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
    Effects that are standing on the board, rather than going off
    ==========================================================================
 

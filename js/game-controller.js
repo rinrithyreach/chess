@@ -31,8 +31,9 @@ import {
 } from './config.js';
 import { isAvatar } from './avatar.js';
 // The element table, for naming a power in a toast and for telling the two
-// capture-triggered powers from the five that are chosen. Pure data, no engine.
-import { ELEMENTS, POWER_TRIGGER } from './elemental.js';
+// that also go off on a capture from the five that only ever wait to be aimed.
+// Pure data, no engine.
+import { ELEMENTS } from './elemental.js';
 import { LocalSession, SESSION_ACTION } from './sessions/local-session.js';
 import * as storage from './storage.js';
 import sound, { SOUND } from './sound.js';
@@ -670,7 +671,7 @@ export class GameController {
    * a player cannot possibly work out from looking at the board, since the
    * evidence is a piece that is still standing there.
    */
-  #announcePower({ element, from, withheld, targets }) {
+  #announcePower({ element, from, withheld, targets, destroyed = [] }) {
     const info = ELEMENTS[element];
     if (!info) return;
 
@@ -683,7 +684,7 @@ export class GameController {
     const count = targets.length;
     this.#toast(`${info.emoji} ${info.power} — ${count} ${count === 1 ? 'piece' : 'pieces'} destroyed`);
     sound.play(SOUND.BLAST);
-    this.#emit(EVENT.POWER, { element, from, targets, sweep: false });
+    this.#emit(EVENT.POWER, { element, from, targets, destroyed, sweep: false });
   }
 
   /** The power offered by the piece on a square, or null. */
@@ -763,12 +764,6 @@ export class GameController {
       this.#toast(`${row.info.emoji} ${row.info.power} — all spent`, 'warn');
       return { ok: false, error: 'Spent' };
     }
-    // Fire and Lightning have no button anywhere else either; saying why is
-    // better than a row that does nothing when pressed.
-    if (row.info.trigger === POWER_TRIGGER.CAPTURE) {
-      this.#toast(`${row.info.emoji} ${row.info.power} goes off by itself when that piece captures`);
-      return { ok: false, error: 'Not a chosen power' };
-    }
     if (this.#state?.elemental?.powerUsed) {
       this.#toast('One power a turn — make your move', 'warn');
       return { ok: false, error: 'Already used' };
@@ -778,7 +773,15 @@ export class GameController {
       return { ok: false, error: 'Blocked' };
     }
     if (!row.ready.length) {
-      this.#toast(`${row.info.power} has nothing to aim at`, 'warn');
+      // The two that go off on a capture are worth a different sentence: they
+      // have nothing to aim at THIS turn, but they are not idle — walking the
+      // piece into contact is the move, and it may not even need the charge.
+      this.#toast(
+        row.info.onCapture
+          ? `${row.info.emoji} ${row.info.power} needs that piece next to something — it also fires free on a capture`
+          : `${row.info.power} has nothing to aim at`,
+        'warn',
+      );
       return { ok: false, error: 'No targets' };
     }
 
@@ -859,7 +862,13 @@ export class GameController {
         return result;
       }
 
-      sound.play(SOUND.POWER);
+      const used = result.used ?? {};
+      const destroyed = used.destroyed ?? [];
+
+      // One noise, not two. A power that took pieces off the board is a blast
+      // and nothing else; playing the shimmer underneath it as well just
+      // muddies the one sound that was carrying the news.
+      sound.play(destroyed.length ? SOUND.BLAST : SOUND.POWER);
 
       // Re-read the destinations: the power may have changed what the selected
       // piece can do — vines in its way, or its own king teleporting out of a
@@ -869,13 +878,25 @@ export class GameController {
       // and what it landed on. Cleanse is the only power with nothing to point
       // at, because what it does is not to a square but to the whole board —
       // so the whole board is what answers, and that is what `sweep` says.
-      const used = result.used ?? {};
       this.#emit(EVENT.POWER, {
         element: used.element ?? null,
         from: used.from ?? null,
-        targets: used.target ? [used.target] : [],
+        targets: used.targets ?? [],
+        // The subset whose piece is now gone, which the board draws quite
+        // differently — a frozen queen and a burned one leave the same trace
+        // in the state that follows, and only one of them comes apart.
+        destroyed,
         sweep: Boolean(used.element) && !used.target,
       });
+
+      if (destroyed.length) {
+        const info = ELEMENTS[used.element];
+        const count = destroyed.length;
+        this.#toast(
+          `${info?.emoji ?? ''} ${info?.power ?? 'That power'} — `
+          + `${count} ${count === 1 ? 'piece' : 'pieces'} destroyed`,
+        );
+      }
       this.#emitChange();
       return result;
     } finally {

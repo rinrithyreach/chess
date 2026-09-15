@@ -30,12 +30,15 @@ import {
   EFFECT,
   EFFECT_PLIES,
   ELEMENT,
+  ELEMENTS,
   POWER_AIM,
   PIECE_WORTH,
   activeEffects,
+  arcSquares,
   arcTarget,
   arsenal,
   burnSquares,
+  castDamage,
   chargesAfterMove,
   chargesAfterRemoval,
   describeBoard,
@@ -334,36 +337,91 @@ export const withElemental = (Base) => class extends Base {
   #fireCapturePower(move) {
     const fen = super.getState().fen;
     const element = elementAt({ type: move.piece, color: move.color }, move.to);
+    if (!ELEMENTS[element]?.onCapture) return null;
 
-    let targets = [];
-    if (element === ELEMENT.FIRE) targets = burnSquares(move.to, fen, move.color);
-    else if (element === ELEMENT.LIGHTNING) {
-      const arc = arcTarget(move.to, fen, move.color);
-      targets = arc ? [arc] : [];
-    } else return null;
+    const targets = element === ELEMENT.FIRE
+      ? burnSquares(move.to, fen, move.color)
+      // ONE hop, not the chain. The knight has already destroyed something —
+      // it captured, which is how this was triggered — so the arc is the
+      // second piece and the pair costs one charge. Cast instead of captured,
+      // the knight takes nothing itself, so the chain runs twice from the
+      // square it struck and the pair still costs one charge. Both ways it is
+      // two pieces for one charge, which is the rule; they only differ in
+      // where the first of the two comes from.
+      : [arcTarget(move.to, fen, move.color)].filter(Boolean);
 
     if (!targets.length) return null;
 
+    const gone = this.#destroy(targets, move.color, fen);
     // All or nothing. Taking an enemy piece out of the way can open a line
     // that was pointing at YOUR king all along, and the turn has already
-    // passed — so there would be no move left to answer it with, and the
-    // position handed to the engine would be one where the side not to move
-    // is in check. Fire will not burn away your own defence.
+    // passed — so there would be no move left to answer it with. Fire will
+    // not burn away your own defence; it simply does not go off, and the
+    // charge is not spent either.
+    // `withheld` means one thing and one thing only: the blast was held back
+    // to protect your own king, which is worth a toast because the evidence
+    // is a piece that is inexplicably still standing there. A position the
+    // engine refused is not that, and saying it was would be a lie about a
+    // rule — it is warned about inside #destroy and reported as nothing
+    // happening, which from the player's side is true.
+    if (!gone.ok) {
+      return gone.reason === 'king'
+        ? { element, from: move.to, withheld: true, targets: [] }
+        : null;
+    }
+
+    this.#charges.delete(move.to);
+    return {
+      element, from: move.to, withheld: false, targets, destroyed: gone.destroyed,
+    };
+  }
+
+  /**
+   * Take pieces off the board, or refuse to.
+   *
+   * The one place a power removes material, shared by the capture trigger and
+   * by Burn and Chain Attack being cast on purpose — so the rule that keeps
+   * the position legal is written once and cannot apply to one of them and
+   * not the other.
+   *
+   * THE RULE. Removing an enemy piece can open a line that was pointing at
+   * your OWN king all along. On a capture the turn has already passed, so
+   * there would be no move left to answer it with; cast, it would hand the
+   * engine a position where the side not to move is in check. Neither is a
+   * position chess has a word for, so the removal does not happen at all.
+   */
+  #destroy(targets, color, fen = super.getState().fen) {
     const after = removePieces(fen, targets);
-    if (this.#kingAttacked(after, move.color)) {
-      return { element, from: move.to, withheld: true, targets: [] };
+    if (this.#kingAttacked(after, color)) {
+      return { ok: false, reason: 'king', error: 'That would open a line onto your own king' };
     }
 
     const applied = this.setPosition(after);
     if (!applied.ok) {
       warn('Elemental removal produced an invalid position', applied.error);
-      return null;
+      return { ok: false, reason: 'invalid', error: 'That power did not work' };
     }
 
-    this.#charges.delete(move.to);
     this.#charges = chargesAfterRemoval(this.#charges, targets);
     this.#effects = effectsAfterRemoval(this.#effects, targets);
-    return { element, from: move.to, withheld: false, targets };
+
+    // WHAT was destroyed, not only where. The board has to draw these pieces
+    // coming apart, and by the time it hears about the power they are gone
+    // from its own copy of the position — publishState() has already run,
+    // from inside this very call, and the repaint it caused took them off.
+    // Reading them off the board a moment earlier here costs nothing and
+    // removes the board's dependence on the order two events happen to be
+    // emitted in, which is exactly the kind of thing that works until
+    // somebody moves a line.
+    const before = boardFromFen(fen);
+    return {
+      ok: true,
+      destroyed: targets.map((square) => ({
+        square,
+        type: before.get(square)?.type ?? 'p',
+        color: before.get(square)?.color ?? (color === WHITE ? BLACK : WHITE),
+      })),
+    };
   }
 
   // -----------------------------------------------------------------------
@@ -467,8 +525,27 @@ export const withElemental = (Base) => class extends Base {
     this.#powerPly = this.#ply;
     this.#thawIfStranded();
 
+    // `targets` is every square the power landed on; `destroyed` is the
+    // subset whose piece is now gone, as {square, type, color} so the board
+    // can draw it burning without still having it. They are reported apart
+    // because the board has to tell them apart: a frozen queen and a burned
+    // one leave the same trace in the state that follows, and only one of
+    // them should be seen to come to pieces.
+    const destroyed = applied.destroyed ?? [];
     log('Power used:', power.info.power, from, '->', target ?? '(no target)');
-    return { ok: true, used: { element: power.element, from, target }, state: this.publishState() };
+    return {
+      ok: true,
+      used: {
+        element: power.element,
+        from,
+        target,
+        targets: destroyed.length
+          ? destroyed.map((piece) => piece.square)
+          : [target].filter(Boolean),
+        destroyed,
+      },
+      state: this.publishState(),
+    };
   }
 
   #applyPower(power, target, state) {
@@ -512,6 +589,17 @@ export const withElemental = (Base) => class extends Base {
         this.#charges.delete(power.square);
         return { ok: true };
       }
+
+      // The two that destroy. What the player pointed at decides almost
+      // nothing for Fire — the whole ring around the pawn goes either way, and
+      // the aimed square is only how you say WHICH pawn. For Lightning it
+      // decides everything: the bolt hits what you picked and arcs on from
+      // there.
+      case ELEMENT.FIRE:
+        return this.#destroy(burnSquares(power.square, state.fen, color), color, state.fen);
+
+      case ELEMENT.LIGHTNING:
+        return this.#destroy(arcSquares(target, state.fen, color), color, state.fen);
 
       default:
         return { ok: false, error: 'That power cannot be aimed' };
@@ -616,13 +704,23 @@ export const withElemental = (Base) => class extends Base {
     const worth = (square) => PIECE_WORTH[board.get(square)?.type] ?? 0;
 
     // Resolved once and looked up by element. getPower() on a king costs a
-    // probe per empty square, so asking for it inside four separate searches
-    // would be sixty FEN loads apiece for an answer that cannot have changed.
+    // probe per empty square, so asking for it inside separate searches would
+    // be sixty FEN loads apiece for an answer that cannot have changed.
+    //
+    // One entry per element, and for the two that destroy it is the caster
+    // that would destroy the most — four pawns in contact are four quite
+    // different burns, and taking whichever came first out of a Set would
+    // have the bot setting light to a pawn while a queen stood beside the
+    // pawn next door.
     const ready = new Map();
     this.#charges.forEach((square) => {
       if (board.get(square)?.color !== color) return;
       const power = this.getPower(square);
-      if (power?.ready && !ready.has(power.element)) ready.set(power.element, power);
+      if (!power?.ready) return;
+      const held = ready.get(power.element);
+      if (!held || this.#blastWorth(power, state, color) > this.#blastWorth(held, state, color)) {
+        ready.set(power.element, power);
+      }
     });
     if (!ready.size) return null;
 
@@ -633,7 +731,22 @@ export const withElemental = (Base) => class extends Base {
       return { from: shadow.square, target: this.#safestSquare(shadow.targets, state, color) };
     }
 
-    // 2. Something valuable is attacked and a bishop can put water over it.
+    // 2. Take something off the board. Permanent material beats everything
+    //    below it, all of which only ever delays something by a turn — and
+    //    unlike a capture there is nothing to recapture afterwards. A knight's
+    //    worth is the floor, so it does not spend a pawn's whole charge on a
+    //    pawn.
+    const blast = [ELEMENT.FIRE, ELEMENT.LIGHTNING]
+      .map((id) => ready.get(id))
+      .filter(Boolean)
+      .map((power) => ({ power, best: this.#bestBlast(power, state, color) }))
+      .filter((entry) => entry.best)
+      .sort((a, b) => b.best.worth - a.best.worth)[0];
+    if (blast && blast.best.worth >= PIECE_WORTH.n) {
+      return { from: blast.power.square, target: blast.best.target };
+    }
+
+    // 3. Something valuable is attacked and a bishop can put water over it.
     //    Not worth a charge for a pawn; a rook or better is worth it.
     const water = ready.get(ELEMENT.WATER);
     if (water) {
@@ -646,7 +759,7 @@ export const withElemental = (Base) => class extends Base {
       }
     }
 
-    // 3. Ice on whatever of theirs is worth the most, once it is worth more
+    // 4. Ice on whatever of theirs is worth the most, once it is worth more
     //    than the charge being spent on it.
     const ice = ready.get(ELEMENT.ICE);
     if (ice) {
@@ -656,7 +769,7 @@ export const withElemental = (Base) => class extends Base {
       }
     }
 
-    // 4. Light, but only once there is something to wash off — cleansing an
+    // 5. Light, but only once there is something to wash off — cleansing an
     //    empty board would throw away the hold it has on their king for
     //    nothing at all.
     const light = ready.get(ELEMENT.LIGHT);
@@ -668,6 +781,34 @@ export const withElemental = (Base) => class extends Base {
     if (light && binding) return { from: light.square };
 
     return null;
+  }
+
+  /**
+   * The best thing a destroying power could be pointed at, and what it takes.
+   *
+   * Fire's answer does not depend on where you point it — the whole ring
+   * around the pawn goes up either way, and the aimed square is only how the
+   * player says WHICH pawn — so one probe settles it. Lightning's does depend
+   * on it, because the bolt arcs onward from the square it struck, and two
+   * enemies in range of the same knight can be worth very different chains.
+   */
+  #bestBlast(power, state, color) {
+    if (!power?.targets?.length) return null;
+    const candidates = power.element === ELEMENT.FIRE ? [power.targets[0]] : power.targets;
+
+    let best = null;
+    candidates.forEach((target) => {
+      const { worth } = castDamage({
+        element: power.element, square: power.square, target, fen: state.fen, color,
+      });
+      if (!best || worth > best.worth) best = { target, worth };
+    });
+    return best;
+  }
+
+  /** What that power is worth as a blast, or nought if it does not destroy. */
+  #blastWorth(power, state, color) {
+    return this.#bestBlast(power, state, color)?.worth ?? 0;
   }
 
   /** Squares of `color` that the opponent can capture right now. */

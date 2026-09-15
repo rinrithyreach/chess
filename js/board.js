@@ -110,6 +110,15 @@ const EFFECT_GLYPHS = {
 const CAST_CLEANUP_GRACE_MS = 320;
 
 /**
+ * How long the board is knocked out of true when a power destroys, in ms.
+ *
+ * Short. This moves the whole page, which is a thing to do once in a while
+ * and never twice in a row — and it is the only feedback in the app that
+ * reaches outside the element it belongs to, so it has to earn the trip.
+ */
+const KNOCK_MS = 300;
+
+/**
  * A fixed, per-square angle for a burst to lean at.
  *
  * A Fire pawn's capture can put the same burst on eight touching squares at
@@ -346,7 +355,7 @@ export class Board {
    *
    * @param {object} payload {element, from, targets, sweep} — see EVENT.POWER.
    */
-  playPower({ element, from = null, targets = [], sweep = false } = {}) {
+  playPower({ element, from = null, targets = [], destroyed = [], sweep = false } = {}) {
     if (!element || !this.#squares.size) return;
     if (!this.#animationsEnabled || prefersReducedMotion()) return;
 
@@ -373,7 +382,153 @@ export class Board {
       return;
     }
 
-    hit.forEach((square) => this.#burst(square, element, 0));
+    // Beams are cleared here rather than in #beam, because one cast draws
+    // several of them into the SAME square — the caster's — and a burn on
+    // eight squares would otherwise be eight beams each deleting the seven
+    // before it. This is the only moment at which they are all stale
+    // together.
+    //
+    // It is also why they cannot be cleared by #burst, which is the bug this
+    // replaces: the caster's own burst ran after the beams had been drawn
+    // into its square and swept every one of them away, so the first version
+    // of this drew beams that were never once painted.
+    if (from) {
+      this.#squares.get(from)?.el.querySelectorAll('.square__beam')
+        .forEach((stale) => stale.remove());
+    }
+
+    // Pieces that are about to stop existing, photographed BEFORE the repaint
+    // that erases them — the same trick captures use, and available for the
+    // same reason: EVENT.POWER is emitted before EVENT.CHANGE, so the board
+    // still shows the position the power has just changed.
+    destroyed.forEach((piece) => this.#shatter(piece, element));
+
+    hit.forEach((square) => {
+      this.#burst(square, element, 0);
+      // A line from the piece that spent itself to each thing it reached.
+      // Without it a burn on three squares is three fires with no author, and
+      // the pawn that caused them is the one piece on the board with nothing
+      // happening to it.
+      if (from && square !== from) this.#beam(from, square, element);
+    });
+
+    // A blast is the only thing in the game that removes material without a
+    // move, so it gets the only thing on the board that is not on the board:
+    // a knock. Kept small and short — this is the whole page moving, and a
+    // big one is a gimmick the second time it happens.
+    if (destroyed.length) this.#knock();
+  }
+
+  /**
+   * Where a square sits on screen, in rows and columns of the CURRENT
+   * orientation.
+   *
+   * Not the same as its file and rank. Flip reorders the DOM rather than
+   * rotating it — see #applyOrientation, which is deliberate and keeps the
+   * coordinates upright — so a1 is bottom-left for White and top-right for
+   * Black while still being a1. Anything drawn BETWEEN two squares has to ask
+   * where they are rather than where they are called.
+   */
+  #visualCell(square) {
+    const ordered = this.#orientation === 'white' ? ALL_SQUARES : [...ALL_SQUARES].reverse();
+    const index = ordered.indexOf(square);
+    return index < 0 ? null : { row: Math.floor(index / 8), col: index % 8 };
+  }
+
+  /**
+   * A line from the caster to one of the squares it reached.
+   *
+   * Drawn inside the caster's square rather than over the board, so it needs
+   * no overlay, no positioning against the board's own box, and no second
+   * thought when the board is resized: one square wide is 100%, and every
+   * length here is in squares. It leaves its own square freely — nothing
+   * clips it until the board's rounded edge, which is the right place for it
+   * to stop.
+   */
+  #beam(from, to, element) {
+    const entry = this.#squares.get(from);
+    const a = this.#visualCell(from);
+    const b = this.#visualCell(to);
+    if (!entry || !a || !b) return;
+
+    const dx = b.col - a.col;
+    const dy = b.row - a.row;
+    const length = Math.hypot(dx, dy);
+    if (!length) return;
+
+    const beam = document.createElement('span');
+    beam.className = 'square__beam';
+    beam.dataset.element = element;
+    beam.setAttribute('aria-hidden', 'true');
+    beam.style.setProperty('--cast-ms', `${POWER_CAST_MS}ms`);
+    beam.style.setProperty('--beam-length', `${length * 100}%`);
+    beam.style.setProperty('--beam-angle', `${(Math.atan2(dy, dx) * 180) / Math.PI}deg`);
+    entry.el.append(beam);
+
+    this.#sweepUp(beam, POWER_CAST_MS);
+  }
+
+  /**
+   * A piece coming apart, rather than simply ceasing to be.
+   *
+   * BUILT RATHER THAN CLONED, which is the difference between this and
+   * #detachCaptured — and the whole of why the first version of it drew
+   * nothing at all. A capture is animated from a photograph of the live
+   * square, taken before the repaint erases it. That works because the board
+   * is told about the move before the position changes. A power is not: the
+   * session publishes its new state from inside usePower(), so the repaint
+   * that removes these pieces has already happened by the time the event
+   * saying they were destroyed arrives, and there is nothing left to clone.
+   *
+   * So the session sends what it destroyed — {square, type, color} — and this
+   * builds it back. Slightly more code, and it no longer depends on the order
+   * two events happen to be emitted in.
+   */
+  #shatter({ square, type, color }, element) {
+    const entry = this.#squares.get(square);
+    if (!entry) return;
+
+    entry.el.querySelectorAll('.piece--destroyed').forEach((stale) => stale.remove());
+
+    const ghost = document.createElement('span');
+    ghost.className = 'piece piece--destroyed';
+    ghost.dataset.piece = type;
+    ghost.dataset.color = color;
+    ghost.dataset.element = element;
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.style.setProperty('--cast-ms', `${POWER_CAST_MS}ms`);
+    renderPieceContent(ghost, { type, color });
+    entry.el.append(ghost);
+
+    this.#sweepUp(ghost, POWER_CAST_MS);
+  }
+
+  /** A short knock on the whole board. See playPower. */
+  #knock() {
+    this.#root.classList.remove('board--knocked');
+    // Forcing a reflow is what lets the same class be re-added and re-run
+    // within one frame — two burns in quick succession are two knocks, not a
+    // class that was already there and so did nothing.
+    void this.#root.offsetWidth;
+    this.#root.classList.add('board--knocked');
+    this.#sweepUp(null, KNOCK_MS, () => this.#root.classList.remove('board--knocked'));
+  }
+
+  /**
+   * Take something off the board once its animation has had time to finish.
+   *
+   * On a timer rather than on animationend, which is not one event but
+   * several: these carry animations on their pseudo-elements too, at
+   * deliberately different lengths, and the first to finish would take the
+   * rest away with it. Every timer is held so dispose() can cancel it.
+   */
+  #sweepUp(node, after, done = null) {
+    const timer = window.setTimeout(() => {
+      node?.remove();
+      done?.();
+      this.#casts.delete(timer);
+    }, after + CAST_CLEANUP_GRACE_MS);
+    this.#casts.add(timer);
   }
 
   /**
@@ -393,7 +548,8 @@ export class Board {
     // square it just landed on in the same frame as the move animation, and
     // a burst begun while the tab was in the background can still be sitting
     // here when the player comes back to it.
-    entry.el.querySelectorAll('.square__cast').forEach((stale) => stale.remove());
+    entry.el.querySelectorAll('.square__cast, .square__shock')
+      .forEach((stale) => stale.remove());
 
     const cast = document.createElement('span');
     cast.className = 'square__cast';
@@ -407,15 +563,20 @@ export class Board {
     if (delay) cast.style.animationDelay = `${delay}ms`;
     entry.el.append(cast);
 
-    // Removed on a timer rather than on animationend, which is not one event
-    // but several: the burst animates, and so do its two pseudo-elements, at
-    // deliberately different lengths. The first of them to finish would take
-    // the other two off the board with it.
-    const done = window.setTimeout(() => {
-      cast.remove();
-      this.#casts.delete(done);
-    }, POWER_CAST_MS + delay + CAST_CLEANUP_GRACE_MS);
-    this.#casts.add(done);
+    // A shockwave, on everything except the Cleanse wave — where it would be
+    // a second element on each of sixty-four squares to draw a ring inside a
+    // ring that is already travelling outwards.
+    if (!wave) {
+      const shock = document.createElement('span');
+      shock.className = 'square__shock';
+      shock.dataset.element = element;
+      shock.setAttribute('aria-hidden', 'true');
+      shock.style.setProperty('--cast-ms', `${POWER_CAST_MS}ms`);
+      entry.el.append(shock);
+      this.#sweepUp(shock, POWER_CAST_MS);
+    }
+
+    this.#sweepUp(cast, POWER_CAST_MS + delay);
   }
 
   // -----------------------------------------------------------------------
@@ -452,6 +613,15 @@ export class Board {
     const elemental = state.elemental ?? null;
     const aiming = view?.aiming ?? null;
     const aimTargets = new Set(aiming?.targets ?? []);
+
+    // Aiming in the element's own colour rather than in the board's gold.
+    // Gold said "a power can reach here" and nothing else, which was true of
+    // all seven and so told you which of them you were holding only if you
+    // could still remember what you had pressed. Ice lights the board pale
+    // blue, fire orange, shadow violet — and the squares you may point at
+    // now look like the thing that is about to happen to them.
+    if (aiming?.element) this.#root.dataset.aim = aiming.element;
+    else this.#root.removeAttribute('data-aim');
 
     // Five of the six modes have no elemental layer, and this board repaints
     // on every clock tick and every move. Skipping the whole pass once it has
