@@ -1949,51 +1949,12 @@ body.is-modal-open {
   color: #f0cd85;
 }
 
-/* ==========================================================================
-   The clock
-
-   One readout on each player card, shown only in Speed Chess.
-   ========================================================================== */
-
-.player-card__clock {
-  flex: none;
-  min-width: 4.2rem;
-  padding: 0.3rem 0.55rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text-muted);
-  font-size: 1.02rem;
-  font-weight: 700;
-  /* Tabular figures, or the whole box twitches every tenth of a second as a 1
-     is replaced by a 4. A clock that jitters is a clock you stop reading. */
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  text-align: center;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-
-/* Whose time is actually being spent. Not the same as whose turn it is:
-   before White's first move neither clock runs, and neither should look like
-   it is bleeding. */
-.player-card__clock.is-running {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.player-card__clock.is-urgent {
-  border-color: var(--danger);
-  background: var(--danger-soft);
-  color: #ff9d94;
-}
-
-/* Down, not out — the flag has fallen and the number has stopped moving. */
-.player-card__clock.is-flagged {
-  opacity: 0.7;
-}
-
 /* --------------------------------------------------------------------------
-   Time-control picker
+   Choice picker
+
+   Two or more choices in a row, each a label over a note. Named for the
+   time controls it was built for; those went with Speed Chess and the
+   opponent picker is drawn with it now.
    -------------------------------------------------------------------------- */
 
 .time-picker {

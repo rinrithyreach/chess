@@ -25,7 +25,6 @@ import {
   BOT_TIME_BUDGET_MS,
   BOT_MAX_DEPTH,
   BOT_MIN_THINK_MS,
-  BOT_CLOCK_MARGIN_MS,
   BOT_NAME,
   log,
   warn,
@@ -36,10 +35,10 @@ import {
  *
  * A game the bot is in keeps its own mode rather than being flattened to
  * `bot`, because the mode is what the rest of the app reads to know what kind
- * of game it is: a Speed Chess game against the bot is still Speed Chess, and
- * has a clock to prove it.
+ * of game it is: an Elemental game against the bot is still Elemental, and
+ * has seven powers to prove it.
  */
-const BOT_MODES = [GAME_MODE.SPEED, GAME_MODE.ELEMENTAL];
+const BOT_MODES = [GAME_MODE.ELEMENTAL];
 
 /**
  * Piece worth, for the one decision made without the search: which move to
@@ -109,8 +108,8 @@ export const withBot = (Base) => class extends Base {
     const state = super.getState();
     if (!state) return state;
     // `vsBot` is what tells a RESUMED game to mount a bot again. The mode
-    // cannot carry it on its own: a Speed Chess game is mode `speed` whether
-    // the other seat holds a person or this.
+    // cannot carry it on its own: an Elemental game is mode `elemental`
+    // whether the other seat holds a person or this.
     return { ...state, vsBot: true };
   }
 
@@ -205,7 +204,9 @@ export const withBot = (Base) => class extends Base {
       const fen = state.fen;
       const started = Date.now();
 
-      const move = this.#vet(await this.#think(fen, this.#budget()));
+      // No second argument: with no clock to spare time for, what the bot
+      // may spend IS its own strength, which is #think's default.
+      const move = this.#vet(await this.#think(fen));
 
       // The game can end, restart or be left while the search runs.
       if (this.#stopped) return;
@@ -219,11 +220,7 @@ export const withBot = (Base) => class extends Base {
       // A reply that lands the instant the player's finger lifts reads as a
       // canned response rather than a decision, and steps on the animation of
       // the move that provoked it. Wait out the remainder of a short beat.
-      // The pause is a courtesy, and courtesy is not worth losing on time
-      // for: on a clock it is trimmed to whatever the bot can spare, and in
-      // a scramble it disappears entirely.
-      const elapsed = Date.now() - started;
-      const beat = Math.min(BOT_MIN_THINK_MS - elapsed, this.#spare());
+      const beat = BOT_MIN_THINK_MS - (Date.now() - started);
       if (beat > 0) await pause(beat);
       if (this.#stopped || this.getState().fen !== fen) return;
 
@@ -275,35 +272,6 @@ export const withBot = (Base) => class extends Base {
     const best = [...allowed].sort((a, b) => worth(b.captured) - worth(a.captured))[0];
     log('Bot move blocked by an effect; playing', best.san, 'instead');
     return best;
-  }
-
-  /**
-   * What the bot may spend on this move.
-   *
-   * Its own strength, or everything it has left bar a margin — whichever is
-   * less. Without this a Champion in a bullet game would sit and think for
-   * three seconds with two seconds on its clock, and flag in the middle of
-   * a search it never got to use.
-   */
-  #budget() {
-    const want = this.#strength.timeBudgetMs;
-    const left = this.#clockLeft();
-    if (left === null) return want;
-    return Math.max(60, Math.min(want, left - BOT_CLOCK_MARGIN_MS));
-  }
-
-  /** How much of the courtesy pause the clock can afford. */
-  #spare() {
-    const left = this.#clockLeft();
-    if (left === null) return BOT_MIN_THINK_MS;
-    return Math.max(0, left - BOT_CLOCK_MARGIN_MS);
-  }
-
-  /** The bot's own remaining time, or null in a game with no clock. */
-  #clockLeft() {
-    const clock = this.getClock?.();
-    if (!clock) return null;
-    return clock.remaining[this.#humanColor === WHITE ? BLACK : WHITE] ?? null;
   }
 
   async #think(fen, timeBudgetMs = this.#strength.timeBudgetMs) {

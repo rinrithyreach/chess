@@ -94,7 +94,6 @@ export const GAME_MODE = {
   LOCAL: 'local',
   BOT: 'bot',
   ONLINE: 'online',
-  SPEED: 'speed',
   // The one variant: chess with seven elements laid over it. Its rules live
   // in elemental.js and its session in sessions/elemental-session.js, both of
   // which are loaded only when a game of it is actually started.
@@ -139,77 +138,8 @@ export const BOT_MAX_DEPTH = 4;
  */
 export const BOT_MIN_THINK_MS = 450;
 
-/**
- * Time the bot keeps back from its own clock, in ms.
- *
- * On a clock the bot is spending its OWN time to think, so the budget has to
- * be the smaller of what it wants and what it has. This is the margin it
- * leaves itself: enough to return a move and submit it rather than flagging
- * mid-search, which would lose a game it might have drawn by playing almost
- * anything. It is not a way out — a bot that has run out of time still loses,
- * it just loses having made its last move.
- */
-export const BOT_CLOCK_MARGIN_MS = 300;
-
 /** Shown wherever the bot's seat needs a player name. */
 export const BOT_NAME = 'Bot';
-
-/**
- * Time controls for Speed Chess, written the way chess writes them.
- *
- * `initialMs + incrementMs` per side, Fischer-style: the increment is added
- * after a move is made, not before it, so it can never be banked by a player
- * who has already flagged.
- *
- * Four, because these are the four games people actually play — a minute for
- * bullet, three-plus-two and five-flat for blitz, ten-plus-five for something
- * you can think in. The `name` is what the format is called and the `label` is
- * the format itself; both are shown, because "3 + 2" is precise and "Blitz" is
- * what you say out loud.
- */
-export const TIME_CONTROLS = [
-  { id: '1+0', label: '1 + 0', name: 'Bullet', initialMs: 60_000, incrementMs: 0 },
-  { id: '3+2', label: '3 + 2', name: 'Blitz', initialMs: 180_000, incrementMs: 2_000 },
-  { id: '5+0', label: '5 + 0', name: 'Blitz', initialMs: 300_000, incrementMs: 0 },
-  { id: '10+5', label: '10 + 5', name: 'Rapid', initialMs: 600_000, incrementMs: 5_000 },
-];
-
-/** What a player gets without choosing: the middle of the road. */
-export const DEFAULT_TIME_CONTROL = '3+2';
-
-/**
- * One time control, or null.
- *
- * Resolved rather than trusted, for the same reason every other stored id is:
- * a control from a build that offered more of them must not become a game with
- * no clock in a mode whose whole point is the clock.
- */
-export function timeControl(id) {
-  return TIME_CONTROLS.find((control) => control.id === id) ?? null;
-}
-
-export function resolveTimeControl(id) {
-  return timeControl(id) ?? timeControl(DEFAULT_TIME_CONTROL);
-}
-
-/**
- * How often the clock display is repainted, in ms.
- *
- * Not how the time is MEASURED — that is done from timestamps, so the reading
- * is right however irregularly this fires. This is only how often the number
- * on screen catches up, and 100ms is the coarsest tick at which a tenths
- * display still counts down smoothly rather than stuttering.
- */
-export const CLOCK_TICK_MS = 100;
-
-/**
- * When a clock starts shouting, in ms.
- *
- * Ten seconds is also where the display switches to tenths, and the two go
- * together on purpose: the moment the number starts moving fast enough to
- * watch is the moment it is worth watching.
- */
-export const CLOCK_URGENT_MS = 10_000;
 
 // -------------------------------------------------------------------------
 // Talking to the other player
@@ -277,7 +207,7 @@ export const CHAT_MAX_LENGTH = 160;
  *
  * **Raising it here means deploying the rules again.** Until they are
  * deployed, a longer name still works everywhere it never left the device —
- * a local, bot, speed or elemental game — and is refused for
+ * a local, bot or elemental game — and is refused for
  * anything online.
  *
  * There is a limit at all, rather than none, for two reasons that have

@@ -419,11 +419,6 @@ async function boot() {
     }
   }
 
-  // Ten times a second while a clock runs, and nothing else in the app
-  // moves — so this repaints the two readouts rather than re-rendering the
-  // screen around them.
-  controller.on(EVENT.CLOCK, ({ clock }) => ui.renderClocks({ clock }));
-
   controller.on(EVENT.MOVE, ({ move }) => {
     // Captured here and consumed by the CHANGE render that follows, so the
     // animation always runs against the already-updated position.
@@ -614,7 +609,7 @@ async function boot() {
     },
 
     onStartGame: async ({
-      mode, whiteName, blackName, whiteAvatar, blackAvatar, timeControl, opponent,
+      mode, whiteName, blackName, whiteAvatar, blackAvatar, opponent,
     }) => {
       sound.unlock();
 
@@ -656,27 +651,14 @@ async function boot() {
         // bot-session.js builds that seat itself so it cannot inherit one.
         await controller.newGame({ whiteName, whiteAvatar, mode: GAME_MODE.BOT });
       } else {
-        // Speed Chess is one of the other two games with a clock on it, so
-        // it picks a session the same way they do and then hands over the
-        // one thing that differs. Against the bot the second name box was
-        // hidden, so there is no second name to pass.
-        const speed = mode === GAME_MODE.SPEED;
-        const speedBot = speed && opponent !== 'human';
-
-        if (speedBot) {
-          const { BotSession } = await import('./sessions/bot-session.js');
-          await controller.useSession(new BotSession());
-        } else {
-          await controller.useSession(new LocalSession());
-        }
-
+        // Local Two Player: both seats on this device, both names typed.
+        await controller.useSession(new LocalSession());
         await controller.newGame({
           whiteName,
-          blackName: speedBot ? undefined : blackName,
+          blackName,
           whiteAvatar,
-          blackAvatar: speedBot ? null : blackAvatar,
-          mode: speed ? GAME_MODE.SPEED : GAME_MODE.LOCAL,
-          timeControl: speed ? timeControl : null,
+          blackAvatar,
+          mode: GAME_MODE.LOCAL,
         });
       }
       ui.showScreen('game');

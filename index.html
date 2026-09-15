@@ -158,13 +158,6 @@
             </span>
           </label>
           <label class="mode">
-            <input type="radio" name="mode" value="speed" id="mode-speed">
-            <span class="mode__body">
-              <span class="mode__name">Speed Chess</span>
-              <span class="mode__desc">On the clock, against the bot or a friend</span>
-            </span>
-          </label>
-          <label class="mode">
             <input type="radio" name="mode" value="elemental" id="mode-elemental">
             <span class="mode__body">
               <span class="mode__name">Elemental Chess</span>
@@ -174,10 +167,14 @@
         </fieldset>
 
         <!--
-          Opponent. Shared by Speed Chess and Elemental Chess, which is why it
-          sits out here rather than inside either one's own block: both ask the
-          same question, and it decides the same thing for both — whether the
-          second name box above is any use.
+          Opponent. Elemental Chess is the one mode that asks. It sits out
+          here rather than inside that mode's own block because it decides
+          something about the form above it — whether the second name box is
+          any use — and because it was shared with Speed Chess before that
+          mode was removed.
+
+          Drawn with the time-picker's classes, which outlived the time
+          picker: they are what a row of choices looks like here.
         -->
         <div class="opponent-fields" id="opponent-fields" hidden>
           <div class="setting setting--stack">
@@ -187,7 +184,7 @@
               <button type="button" class="time-option is-active" data-opponent="bot"
                       role="radio" aria-checked="true" aria-label="Play the bot">
                 <span class="time-option__label">Bot</span>
-                <span class="time-option__name" id="opponent-bot-hint">On the clock too</span>
+                <span class="time-option__name" id="opponent-bot-hint">It has powers too</span>
               </button>
               <button type="button" class="time-option" data-opponent="human"
                       role="radio" aria-checked="false"
@@ -215,14 +212,6 @@
             Every piece has one charge, for the whole match. Powers are free —
             use one and still make your move — but only one a turn.
           </p>
-        </div>
-
-        <!-- Time controls come from TIME_CONTROLS in js/config.js. -->
-        <div class="speed-fields" id="speed-fields" hidden>
-          <div class="setting setting--stack">
-            <span class="setting__label" id="time-label">Time control</span>
-            <div class="time-picker" id="time-picker" role="radiogroup" aria-labelledby="time-label"></div>
-          </div>
         </div>
 
         <!-- Only the local player's name is needed for an online game. -->
@@ -404,10 +393,6 @@
             <span class="player-card__edge" id="top-edge" hidden></span>
           </span>
         </span>
-        <!-- Speed Chess only. A clock is the one thing on this card that
-             changes without anybody doing anything, so it is announced
-             politely rather than on every tenth of a second. -->
-        <span class="player-card__clock" id="top-clock" hidden aria-hidden="true"></span>
         <!--
           Where an emote lands. On the card of whoever sent it, so it is
           obvious who is waving without a name attached to it.
@@ -464,10 +449,6 @@
             <span class="player-card__edge" id="bottom-edge" hidden></span>
           </span>
         </span>
-        <!-- Speed Chess only. A clock is the one thing on this card that
-             changes without anybody doing anything, so it is announced
-             politely rather than on every tenth of a second. -->
-        <span class="player-card__clock" id="bottom-clock" hidden aria-hidden="true"></span>
         <!--
           Where an emote lands. On the card of whoever sent it, so it is
           obvious who is waving without a name attached to it.
