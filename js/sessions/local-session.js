@@ -46,6 +46,7 @@ import {
   GAME_MODE,
   resolveTimeControl,
   DEFAULT_PLAYER_NAMES,
+  NAME_MAX_LENGTH,
   log,
   warn,
 } from '../config.js';
@@ -300,6 +301,37 @@ export class LocalSession {
    */
   getControllableColors() {
     return [WHITE, BLACK];
+  }
+
+  /**
+   * Rename a seat, mid-game.
+   *
+   * Guarded by getControllableColors() rather than by the mode, which is what
+   * makes one method right everywhere: locally that is both seats, against a
+   * bot it is only yours, and a FirebaseSession narrows it to the seat this
+   * device is sitting in without this method knowing such a thing exists.
+   *
+   * The PGN header follows, because the header was written from the name when
+   * the game started and a saved game that disagrees with its own header is a
+   * puzzle for whoever opens it next.
+   */
+  setSeatName(raw, color) {
+    if (this.#destroyed) return { ok: false, error: 'Session destroyed' };
+
+    const seat = color ?? WHITE;
+    if (!this.#players[seat]) return { ok: false, error: 'No such seat' };
+    if (!this.getControllableColors().includes(seat)) {
+      return { ok: false, error: 'That seat is not yours to rename' };
+    }
+
+    const name = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX_LENGTH);
+    if (!name) return { ok: false, error: 'Pick a name first' };
+    if (this.#players[seat].name === name) return { ok: true, name, color: seat };
+
+    this.#players[seat] = { ...this.#players[seat], name };
+    this.#engine.setHeader(seat === WHITE ? 'White' : 'Black', name);
+    log('Seat renamed:', seat, '->', name);
+    return { ok: true, name, color: seat, state: this.#publish() };
   }
 
   async submitMove({ from, to, promotion } = {}) {

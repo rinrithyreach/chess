@@ -896,8 +896,8 @@ async function boot() {
 
     // Renaming yourself without leaving the game. Online only in practice —
     // the controller refuses it where the session cannot do it.
-    onRenameSeat: async ({ name }) => {
-      await controller.renameMe(name);
+    onRenameSeat: async ({ color, name }) => {
+      await controller.renameSeat(color, name);
     },
 
     // Chosen from the panel rather than from the piece. The controller works

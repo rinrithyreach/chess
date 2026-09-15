@@ -709,17 +709,22 @@ export class GameController {
    * is created under the name you have just chosen rather than the one you
    * had already decided was wrong.
    */
-  async renameMe(name) {
+  async renameSeat(color, name) {
     if (!this.#session.setSeatName) return { ok: false, error: 'Not this game' };
 
-    const result = await this.#session.setSeatName(name);
+    const result = await this.#session.setSeatName(name, color);
     if (!result.ok) {
-      this.#toast(result.error ?? 'Could not change your name', 'warn');
+      this.#toast(result.error ?? 'Could not change that name', 'warn');
       return result;
     }
 
-    storage.saveProfile({ name: result.name });
-    this.#toast(`You are ${result.name} now`);
+    // Online, the name IS your identity to everybody else, so it is kept for
+    // the next room. Locally the two names belong to the game in front of you
+    // — they are typed fresh on the form each time, and quietly overwriting
+    // your online profile because you renamed Player 2 would be a surprise.
+    if (this.#state?.online) storage.saveProfile({ name: result.name });
+
+    this.#toast(`Now playing as ${result.name}`);
     this.#emitChange();
     return result;
   }
@@ -1376,6 +1381,9 @@ export class GameController {
     return {
       state: this.#state,
       view: { ...this.#view },
+      // Which seats this device may act for. The views use it to decide who
+      // may be renamed, rather than each of them working the mode out again.
+      controllable: this.#session.getControllableColors?.() ?? [],
       settings: this.getSettings(),
       orientation: this.#view.orientation,
       isProcessing: this.#processing,

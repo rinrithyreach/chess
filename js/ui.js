@@ -1089,7 +1089,7 @@ export class UI {
     if (edge > 0) edgeEl.textContent = `+${edge}`;
   }
 
-  #renderPlayers({ state, orientation }) {
+  #renderPlayers({ state, orientation, controllable = [] }) {
     const bottomColor = orientation === 'black' ? BLACK : WHITE;
     const topColor = bottomColor === WHITE ? BLACK : WHITE;
     const taken = this.#readCaptures(state.verboseMoves);
@@ -1109,17 +1109,20 @@ export class UI {
         name.title = full;
       }
 
-      // Renaming is offered on exactly one card: the seat this device is
-      // sitting in, in an online game. Which card that is depends on the
-      // orientation, because Flip can put you at the top — so it follows
-      // the colour rather than the position.
+      // Offered on any seat this device may act for, which is the same
+      // question as "may I move these pieces" and so is asked of the session
+      // rather than worked out from the mode. Online that is one seat; against
+      // a bot it is yours and not the bot's; in local two-player it is both,
+      // and both cards get a pencil.
+      //
+      // It follows the COLOUR rather than the position, because Flip can put
+      // your seat at the top of the screen.
       const rename = this.#dom[`btn-rename-${prefix}`];
       if (rename) {
-        const mine = Boolean(state.online) && state.online.myColor === color;
+        const mine = controllable.includes(color);
         rename.hidden = !mine || Boolean(state.isGameOver);
-        // Editing that is still open when the card stops being yours — a
-        // rematch swapping the colours — would be a box writing to somebody
-        // else's seat.
+        // A box still open when the card stops being yours — a rematch
+        // swapping the colours — would be writing to somebody else's seat.
         if (rename.hidden) this.#stopRenaming(prefix);
       }
       if (colorEl) colorEl.textContent = color === WHITE ? 'White' : 'Black';
@@ -1305,6 +1308,17 @@ export class UI {
       return;
     }
     say(element.emoji, power.info.power, element.blurb, 'Use');
+  }
+
+  /**
+   * Which colour is sitting on a given card right now.
+   *
+   * #cardSide is built by #renderPlayers from the orientation and is the one
+   * place that mapping lives, so asking it here keeps a second copy of
+   * "who is where" from drifting out of step with the first.
+   */
+  #colorOnCard(prefix) {
+    return Object.keys(this.#cardSide ?? {}).find((c) => this.#cardSide[c] === prefix) ?? null;
   }
 
   /**
@@ -2546,8 +2560,8 @@ export class UI {
         : 'onUsePower');
     });
 
-    // Renaming yourself mid-game. Both cards are wired; only the one that
-    // is yours ever shows its button.
+    // Renaming a player mid-game. Both cards are wired; only the ones this
+    // device may act for ever show their button.
     ['top', 'bottom'].forEach((prefix) => {
       this.#dom[`btn-rename-${prefix}`]?.addEventListener('click', () => {
         this.#startRenaming(prefix);
@@ -2559,8 +2573,12 @@ export class UI {
       // a name should not be published letter by letter.
       input?.addEventListener('change', () => {
         const value = input.value;
+        // Read off the card rather than remembered, because Flip and a
+        // rematch both move a colour from one card to the other and a
+        // remembered one would rename whoever is standing there now.
+        const color = this.#colorOnCard(prefix);
         this.#stopRenaming(prefix);
-        this.#call('onRenameSeat', { name: value });
+        this.#call('onRenameSeat', { color, name: value });
       });
       input?.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') { event.preventDefault(); input.blur(); return; }

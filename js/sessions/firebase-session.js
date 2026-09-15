@@ -1053,10 +1053,15 @@ export class FirebaseSession {
    * deciding it is White and the write landing, White can be somebody else.
    * Renaming them would be worse than refusing.
    */
-  async setSeatName(raw) {
+  async setSeatName(raw, color) {
     if (this.#destroyed) return { ok: false, error: 'Session destroyed' };
     if (!this.#roomRef || !this.#myColor || !this.#sdk) {
       return { ok: false, error: 'Not in a room' };
+    }
+    // The caller names the seat it means, the same way it does locally. Here
+    // there is only ever one it may mean.
+    if (color && color !== this.#myColor) {
+      return { ok: false, error: 'That seat is not yours to rename' };
     }
 
     // Collapsed and clipped the same way every other name on the way in is,
@@ -1064,18 +1069,21 @@ export class FirebaseSession {
     const name = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX_LENGTH);
     if (!name) return { ok: false, error: 'Pick a name first' };
 
-    const color = this.#myColor;
-    if (this.#room?.players?.[color]?.name === name) return { ok: true, name };
+    // Named separately from the `color` parameter, which the caller may
+    // have left out entirely: there is only one seat this device can mean,
+    // and this is it.
+    const mine = this.#myColor;
+    if (this.#room?.players?.[mine]?.name === name) return { ok: true, name, color: mine };
 
     try {
       const { runTransaction, serverTimestamp } = this.#sdk;
       const outcome = await runTransaction(this.#roomRef, (room) => {
         if (room === null) return undefined;
-        const seat = room.players?.[color];
+        const seat = room.players?.[mine];
         if (!seat || seat.uid !== this.#uid) return undefined;
         return {
           ...room,
-          players: { ...room.players, [color]: { ...seat, name } },
+          players: { ...room.players, [mine]: { ...seat, name } },
           updatedAt: serverTimestamp(),
         };
       });
@@ -1083,8 +1091,8 @@ export class FirebaseSession {
       if (!outcome.committed) {
         return { ok: false, error: 'That seat is not yours any more' };
       }
-      log('Seat renamed:', color, '->', name);
-      return { ok: true, name, state: this.getState() };
+      log('Seat renamed:', mine, '->', name);
+      return { ok: true, name, color: mine, state: this.getState() };
     } catch (error) {
       warn('Rename refused', error);
       return {
