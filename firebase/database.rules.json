@@ -70,7 +70,7 @@
               ".validate": "newData.isString() && (newData.val() === auth.uid || newData.val() === data.parent().parent().child('w').child('uid').val() || newData.val() === data.parent().parent().child('b').child('uid').val())"
             },
             "name": {
-              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50"
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120"
             },
             "avatar": {
               ".validate": "newData.isString() && newData.val().length <= 6144 && newData.val().matches(/^data:image\\/(png|jpeg|webp);base64,/)"
@@ -116,7 +116,7 @@
           ".write": "auth.uid === $uid",
           ".validate": "newData.hasChildren(['name', 'code'])",
 
-          "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50" },
+          "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120" },
           "code": { ".validate": "newData.isString() && newData.val().matches(/^[A-HJ-NP-Z2-9]{6}$/) && root.child('handles').child(newData.val()).val() === auth.uid" },
           "avatar": { ".validate": "newData.isString() && newData.val().length <= 6144 && newData.val().matches(/^data:image\\/(png|jpeg|webp);base64,/)" },
           "updatedAt": { ".validate": "newData.isNumber()" },
@@ -148,7 +148,7 @@
           "$fromUid": {
             ".write": "auth.uid === $uid || (auth.uid === $fromUid && $fromUid !== $uid)",
             ".validate": "newData.hasChildren(['name', 'at'])",
-            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50" },
+            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120" },
             "code": { ".validate": "newData.isString() && newData.val().matches(/^[A-HJ-NP-Z2-9]{6}$/)" },
             "at": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
@@ -160,7 +160,7 @@
           "$fromUid": {
             ".write": "auth.uid === $uid || (auth.uid === $fromUid && $fromUid !== $uid && (!newData.exists() || root.child('users').child($uid).child('friends').child($fromUid).exists()))",
             ".validate": "newData.hasChildren(['name', 'room', 'at'])",
-            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50" },
+            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120" },
             "room": { ".validate": "newData.isString() && newData.val().matches(/^[A-HJ-NP-Z2-9]{6}$/)" },
             "at": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }

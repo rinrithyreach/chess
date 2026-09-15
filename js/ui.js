@@ -351,9 +351,11 @@ export class UI {
     this.#dom['chat-input']?.setAttribute('maxlength', String(CHAT_MAX_LENGTH));
     this.#dom['input-friend-code']?.setAttribute('maxlength', String(FRIEND_CODE_LENGTH));
 
-    // Every box a name can be typed into, from one number. Four boxes, and
-    // the markup cannot import the constant, so the attributes there are a
-    // fallback for a page whose scripts have not run rather than the source.
+    // Every box a name can be typed into, from one number. The markup
+    // cannot import the constant, so the four attributes over in index.html
+    // are a fallback for a page whose scripts have not run, rather than the
+    // source — and the two rename boxes have no attribute at all, because
+    // they are only ever filled by a script that has.
     ['input-white', 'input-black', 'input-online-name', 'input-my-name',
       'input-rename-top', 'input-rename-bottom']
       .forEach((id) => this.#dom[id]?.setAttribute('maxlength', String(NAME_MAX_LENGTH)));
@@ -880,6 +882,7 @@ export class UI {
     const who = document.createElement('span');
     who.className = 'chat__who';
     who.textContent = state.players?.[message.color]?.name ?? '';
+    who.title = who.textContent;
 
     const body = document.createElement('span');
     if (message.kind === 'emote') {
@@ -2095,7 +2098,12 @@ export class UI {
       body.className = 'friend__body';
       const name = document.createElement('span');
       name.className = 'friend__name';
+      // Clipped rather than wrapped, like the player cards, and for the same
+      // reason carrying the whole thing on the title: a row that shares its
+      // width with two buttons cuts a long name short, and a name you can
+      // see has been cut but cannot read is worse than one that fits.
       name.textContent = invite.name;
+      name.title = invite.name;
       const note = document.createElement('span');
       note.className = 'friend__note';
       note.textContent = 'Wants to play now';
@@ -2138,6 +2146,7 @@ export class UI {
       const name = document.createElement('span');
       name.className = 'friend__name';
       name.textContent = request.name;
+      name.title = request.name;
       const note = document.createElement('span');
       // Not friend__status: that carries a presence dot, and a request has
       // no presence. It also has to share the row with two buttons, so it
@@ -2183,6 +2192,7 @@ export class UI {
       const name = document.createElement('span');
       name.className = 'friend__name';
       name.textContent = friend.name;
+      name.title = friend.name;
 
       const status = document.createElement('span');
       status.className = 'friend__status';

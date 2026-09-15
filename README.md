@@ -390,20 +390,47 @@ players to agree (and swap colours). The network draw-offer path is still
 implemented and still tested, but with the Draw button gone there is no longer
 a way to start one from this build.
 
-**Names are up to 50 characters.** One number, `NAME_MAX_LENGTH`, sets every
-box a name can be typed into — both players on the New Game form, the online
-name, and your own name in the friends panel — and the same number is enforced
-by the security rules on the three names that leave the device: your seat in a
-room, your profile, and the name on a friend request or an invitation. They
-match for the reason the chat cap matches: a name that can be typed but not
-saved is a refusal that arrives after the fact, with the box already emptied.
+**Names are up to 120 characters — a sentence, and as many words as fit in
+one.** One number, `NAME_MAX_LENGTH`, sets every box a name can be typed into
+— both players on the New Game form, the online name, your own name in the
+friends panel, and the two mid-game rename boxes — and the same number is
+enforced by the security rules on the three names that leave the device: your
+seat in a room, your profile, and the name on a friend request or an
+invitation. They match for the reason the chat cap matches: a name that can be
+typed but not saved is a refusal that arrives after the fact, with the box
+already emptied.
 
 There is a limit at all, rather than none, for two reasons that are nothing to
 do with taste. The whole room record is rewritten on **every move**, both names
 inside it, so a name is a cost paid again on every move by both devices. And a
 player card is one line with an ellipsis, so past a point the extra characters
 cannot be seen by anybody anyway — the card carries the whole name in its
-`title`, so a clipped one can still be read rather than merely noticed.
+`title`, so a clipped one can still be read rather than merely noticed, and
+so now do the friend rows, the request and invite rows, and the name over a
+chat message.
+
+The number went twenty, then fifty, then a hundred and twenty, and the last of
+those is the one that stops it being a number anybody notices. It is around
+four times what fits on the card it is drawn on, so what you run into is no
+longer the cap — it is the card, and the card has handled it since the first
+of those three numbers. It is still not unlimited and cannot be: the security
+rules enforce a length rather than the absence of one, and a field with no cap
+is a field that eventually has a book pasted into it.
+
+**Raising it is two files and one deploy, and the deploy is the half that
+matters.** `NAME_MAX_LENGTH` in `js/config.js` and the four name rules in
+`firebase/database.rules.json` are the two files; until `firebase deploy
+--only database` is actually run, the deployed rules still enforce whatever
+number they were last deployed with, and a longer name works in every mode
+that never leaves the device while being refused by every room. That state is
+survivable but it used to be baffling: the refusal came back as "The room
+would not take that name", which is true and useless. A rename refused on a
+name longer than `DEPLOYED_NAME_FLOOR` now says it is longer than the room
+allows and names the file to deploy. Length is the only thing about a name the
+rules have an opinion on — the validate is `isString() && length > 0 &&
+length <= N` and nothing else, and whether the seat is yours was settled by
+the transaction, which fails a different way — so that guess is right
+essentially always.
 
 **A player can be renamed mid-game**, in every mode. A pencil sits against
 the name on each card this device may act for, and pressing it swaps the name
@@ -1021,12 +1048,18 @@ The rules in `firebase/database.rules.json` are what stop anyone from writing
 to your database. See [`firebase/README.md`](firebase/README.md) for exactly
 what they enforce.
 
-**Redeploy them after updating the app.** The rules have grown four times
-now — seat pictures, then chat, then friends and presence, then the longer
-name cap — and each time, a project still running the older set refuses the
-new feature rather than ignoring it. Nothing breaks: a room is still created, a game is still
-playable, and the app says which thing needs the deploy. But the feature
-stays off until this command is run.
+**Redeploy them after updating the app.** The rules have grown five times
+now — seat pictures, then chat, then friends and presence, then a longer name
+cap, then a much longer one — and each time, a project still running the older
+set refuses the new feature rather than ignoring it. Nothing breaks: a room is
+still created, a game is still playable, and the app says which thing needs the
+deploy. But the feature stays off until this command is run.
+
+The name cap is the one to watch, because it is the only one of the five that
+a player meets by *typing something* rather than by pressing a button that is
+missing. A client at 120 against rules deployed at 20 refuses the name and
+nothing else, and the refusal arrives on a rename that looked like it worked
+— so it says so specifically now, and names this file.
 
 If `firebase-tools` is not installed, the same file can be pasted into
 **Realtime Database → Rules** in the Firebase console and published — which
@@ -1589,7 +1622,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, the tournament ladder **30**, Speed Chess **57** (35 for the clock, 22 for playing the bot on it), chat, emotes, friends and presence **110**, Elemental Chess **226**, its powers panel a further **113**, all seven powers being chosen and what one looks like going off **43**, long names **29**, renaming mid-game **48**, the emote bubble **14**, with **15** more run against the deployed site and the real Firebase project rather than a stand-in. The groups were run separately, so
+Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, the tournament ladder **30**, Speed Chess **57** (35 for the clock, 22 for playing the bot on it), chat, emotes, friends and presence **110**, Elemental Chess **226**, its powers panel a further **113**, all seven powers being chosen and what one looks like going off **43**, long names **56**, renaming mid-game **48**, the emote bubble **14**, with **15** more run against the deployed site and the real Firebase project rather than a stand-in. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -1624,7 +1657,7 @@ the totals are reported separately rather than as one number:
 | **The emote bubble (Chromium)** | **14** | **A duration, so it is measured rather than trusted: the bubble is fired and watched at 50ms intervals until it goes, and it has to still be there well past the old 2.6s and to leave within a small margin of the configured time — it lives 5,014ms against a configured 5,000. The stylesheet is checked to READ the duration rather than repeat it, no emote animation is left carrying a hard-coded one, every `var()` fallback matches the constant, and the custom property is confirmed on the root of a running page. Plus the things a longer bubble must not break: it still appears at once, carries the right glyph, and a second emote replays the animation instead of sitting still because the class was already on** |
 | **All seven, chosen (Chromium)** | **43** | **Burn and Chain Attack being AIMED rather than only going off, which is the half of the variant that did not exist. Every row pressable at move one; the two that destroy correctly not ready there, because nothing is in contact yet, and saying the thing that is still true of them — pressing one explains rather than doing nothing, and starts no aim. Then in contact: Burn aims from the pawn that is actually beside something and offers only the enemies beside THAT pawn, and firing it takes the whole ring rather than the one square aimed at, spends that pawn's charge, and leaves it your move. Chain Attack aims from the knight, offers only what is a knight's move away, and takes two pieces for one charge — the one struck and the one the bolt arcs on to — while the knight stays where it fired from. The rule that keeps the position legal gets its own check, from a position where burning would open a file onto the caster's OWN king: refused, with a reason, and costing no charge. And the half that did not change is checked too — a Fire pawn that captures still burns without being asked. The visible half is caught mid-blast: three pieces drawn coming apart with the right element and the right piece type, a beam from the pawn that did it, a shockwave on every square reached, the board knocked, the aiming colour put away — then all of it gone a second and a half later. With reduced motion asked for, none of it is drawn at all and the power still happens. The bot reaches for them too, in a position where taking the queen by hand costs it the knight: it takes her with the bolt instead, which the CHARGE is what proves — a knight that captures carries its charge to the square it lands on and one that fires spends it. Then the whole thing again at 320 wide, where the bar's hint is about twenty characters and "Fires free when this piece captures" arrived as "Fires free when this piec…"** |
 | **Renaming a player mid-game (Chromium ×2 + real project)** | **48** | **Two browsers in one real room. The control appears on exactly one card and it is the seat that device is sitting in — checked against the colour rather than the position — while the same card on the opponent's screen has no button at all. The name becomes a box holding the name it already had; Enter commits, the card updates, and the OTHER browser shows the new name without reloading. A move still plays afterwards, so the rename did not disturb the game. Escape abandons the edit instead of saving it, a blank name is refused with a reason, and the new name is written to the stored profile for the next room. The room is deleted afterwards, so the database is left as it was found. Then the offline modes, each checked for the cards it should offer rather than for a blanket answer: local two-player offers BOTH, and a bot game offers yours and not the bot's. In each, the rename goes in through the real control, lands on the card and in the game state, and survives a reload through the autosave. The bot's own seat refuses a rename asked for directly, and its name is untouched afterwards. And a local rename leaves the stored online profile alone, which is the one way this could have quietly changed who you are to your friends** |
-| **Long names (Chromium)** | **29** | **The cap is one number and everything agrees with it: all four name boxes read it out of config, the four rules in `database.rules.json` carry it, the markup fallbacks match, and no `slice(0, 20)` is left anywhere — checked by reading the shipped files rather than by remembering. Then a 37-character name through the real form: typed whole, over the cap stopped AT the cap rather than let run, carried into the game intact, held whole in the card's DOM and offered in full on hover where the card clips it, and back whole after a reload. The card is measured at 320 and 390 — one line still, inside its own card, no sideways scroll. The stored profile keeps it at full length with Firebase cut off, which is where the cap actually lives. And the state every existing installation will be in the moment this ships: client at 50, deployed rules still at 20 — the friends hub still comes up, the box still shows the whole name, and the panel says plainly that the rules need deploying and names the file. Waited for rather than slept through, because a refused write costs a real round trip and a fixed wait landing early reads as "no hub at all" — which is exactly how this was briefly mistaken for a regression** |
+| **Long names (Chromium)** | **56** | **The cap is one number and everything agrees with it: all four name boxes read it out of config, the four rules in `database.rules.json` carry it, the markup fallbacks match, and no `slice(0, 20)` is left anywhere — checked by reading the shipped files rather than by remembering. Then a 37-character name through the real form: typed whole, over the cap stopped AT the cap rather than let run, carried into the game intact, held whole in the card's DOM and offered in full on hover where the card clips it, and back whole after a reload. The card is measured at 320 and 390 — one line still, inside its own card, no sideways scroll. The stored profile keeps it at full length with Firebase cut off, which is where the cap actually lives. And the state every existing installation will be in the moment this ships: client at 120, deployed rules still at 20 — the friends hub still comes up, the box still shows the whole name, and the panel says plainly that the rules need deploying and names the file. Waited for rather than slept through, because a refused write costs a real round trip and a fixed wait landing early reads as "no hub at all" — which is exactly how this was briefly mistaken for a regression. Then the whole of it again with a name of MANY WORDS filled up to the cap rather than counted out to it, because a run of 120 x's proves the field holds 120 characters and nothing about whether a person could use it: fifteen words typed in full, reaching the seat with every word intact, clipped on the card rather than growing it, the whole sentence on hover, and at 320 and 390 still one line, still inside its own card, still no sideways scroll. Including through the box the complaint actually came from — the pencil on your own card, which gets the cap from config like the other four and takes a sentence without trimming it. And the three places a name is drawn are read out of the shipped CSS rather than trusted, because two of them only ever appear in a room with a second person in it. Then the refusal itself: a long name turned down online is called too long and told which file to deploy, a short one keeps the sentence that fits it, and the guess between them is made against a named floor rather than a bare 20. And last the pill that has to carry it, measured at 320 rather than looked at — a toast may use the width of the phone rather than half of it, is centred within it to the pixel, and the one naming a file stays on the screen instead of hanging off the side it was centred within. That measurement is the whole of how (16) was found** |
 | **Your picture from the friends panel (Chromium)** | **38** | **The picker is in your own card, says what it does, and imports a real PNG through the real pipeline. It is ONE picture: the same data URL lands on the online form’s picker, in storage and on the hub, setting it in either place shows in both, and clearing it in either clears both. It survives a reload. Then the same again with every remote Firebase request aborted — the hub up, not connected, its own copy of the picture null — where the picture has to stay put on both pickers and in storage, which is the bug that pass caught. Plus a regression pass proving the two seat pickers are still separate slots: a picture on Player 1 reaches the white seat and nothing else** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
@@ -1844,6 +1877,28 @@ time being hidden by a rule that has now changed:
    when reach came off the caster's own lines. Widening the reach made the bot
    fire on move one, every game, and the assertion started failing — which is
    the most useful thing a test can do.
+
+16. **Every toast had been laid out against half the screen.** The strip the
+   pills sit in is `position: fixed` with no width, and it was centred the
+   familiar way — `left: 50%` with a `transform: translateX(-50%)` pulling it
+   back. That centres it correctly and quietly halves it: a fixed box with no
+   width shrinks to fit inside what is left of the viewport *from its own left
+   edge*, and the transform is a paint-time move that the layout has already
+   finished without. So on a 320px phone the strip was 160px, and every toast
+   wrapped at half the width its own `max-width: min(88vw, 340px)` allowed.
+   Fixed with `left: 0; right: 0` and no transform, the pills already being
+   centred by `align-items: center`.
+
+   Nobody had noticed because nothing measured it and the messages were short
+   enough to survive it — "The room would not take that name" merely came out
+   on two lines instead of one. It surfaced while checking whether a longer
+   refusal would fit, and the longer one did not merely wrap: it contains a
+   filename, which is one unbreakable word, so it blew straight through the
+   160px and hung off the side of the screen it had been so carefully centred
+   within. `overflow-wrap: anywhere` on the pill is the other half of that.
+
+   Found by measuring rather than by looking, which is the only way this kind
+   is ever found. A centred thing that is too narrow still looks centred.
 
 ### Manual checklist
 

@@ -1869,19 +1869,32 @@ body.is-modal-open {
 
 .toasts {
   position: fixed;
-  left: 50%;
+  /* A full-width strip with the pills centred inside it, rather than a
+     shrink-to-fit box pushed to the middle. It used to be `left: 50%` with
+     a `translateX(-50%)` to pull it back, which centres it correctly and
+     quietly halves it: a fixed box with no width is laid out against what
+     is left of the viewport from its own left edge, so at 320px the strip
+     was 160px and every toast wrapped at half the width its own max-width
+     allowed. A thirty-three character message came out on two lines, and a
+     longer one containing a filename could not break at all and hung out
+     past the edge it had been so carefully centred within. */
+  left: 0;
+  right: 0;
   bottom: calc(1.25rem + env(safe-area-inset-bottom));
   z-index: 200;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   align-items: center;
-  transform: translateX(-50%);
   pointer-events: none;
 }
 
 .toast {
   max-width: min(88vw, 340px);
+  /* A message can name a file, and a filename is one unbreakable word. With
+     nowhere to break it, the pill grows past its own max-width and off the
+     side of the screen. */
+  overflow-wrap: anywhere;
   padding: 0.6rem 1rem;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
@@ -2480,6 +2493,14 @@ body.is-modal-open {
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-faint);
+  /* One line, like every other place a name is drawn. This is the smallest
+     type in the app and it is in capitals with letters held apart, so a
+     long name sets four lines of shouting above a message reading "hi" and
+     the bubble is mostly its own header. The whole name is on the element's
+     title, the same as on the player cards. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat__body {
@@ -2694,8 +2715,10 @@ body.is-modal-open {
 
 .friend__name {
   font-weight: 650;
-  /* A name is capped at 20 characters, which still overflows a narrow row
-     next to two buttons. */
+  /* A name can be a short sentence, and this row shares its width with two
+     buttons, so it was never going to fit whatever the cap said. The number
+     has been twenty and fifty and is now a hundred and twenty; this rule is
+     the reason none of those changes needed a second thought here. */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

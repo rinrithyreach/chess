@@ -329,9 +329,18 @@ export const CHAT_MAX_LENGTH = 160;
  * every move, both names included, so a name is a cost paid again on every
  * move by both devices. And the cards the name is drawn on are one line with
  * an ellipsis, so past a point the extra characters cannot be seen by anyone
- * anyway. Fifty is a long name and still a cheap one.
+ * anyway.
+ *
+ * A hundred and twenty is a sentence — twenty-odd words — which is well past
+ * the point of anybody minding, and still small enough that two of them are
+ * lost in the noise of a position. It is not unlimited and cannot be: the
+ * rules enforce a number rather than the absence of one, and a field with no
+ * cap is a field somebody eventually pastes a book into. But it is around
+ * four times what fits on the card the name is drawn on, so the cap is no
+ * longer the thing anybody runs into — the card is, and the card has always
+ * handled it, with an ellipsis and the whole name on hover.
  */
-export const NAME_MAX_LENGTH = 50;
+export const NAME_MAX_LENGTH = 120;
 
 /**
  * How many messages a room keeps.

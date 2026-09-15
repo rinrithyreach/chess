@@ -66,6 +66,34 @@ export const CONNECTION = {
 const colorName = (color) => (color === WHITE ? 'White' : 'Black');
 const other = (color) => (color === WHITE ? BLACK : WHITE);
 
+/**
+ * The smallest name cap this project has ever had deployed.
+ *
+ * Not a rule and not a limit — a threshold for guessing well when a rename
+ * is refused. The deployed rules and the rules in this repository are two
+ * different things, and raising NAME_MAX_LENGTH in both files changes
+ * nothing online until somebody runs the deploy. A client that is ahead of
+ * the database refuses long names and no others, which is a very specific
+ * symptom deserving a very specific sentence rather than a shrug.
+ *
+ * Below this, no cap the project has ever shipped could be the reason, so
+ * the refusal is something else and is described as something else.
+ */
+const DEPLOYED_NAME_FLOOR = 20;
+
+/**
+ * Said when the room turns a name down.
+ *
+ * Length is the only thing about a name the rules have an opinion on — the
+ * validate is `isString() && length > 0 && length <= N` and nothing more —
+ * and whether the seat is yours was already settled by the transaction,
+ * which fails a different way with a different sentence. So a refusal on a
+ * long name is the deployed cap, essentially always, and saying so is the
+ * difference between a dead end and a thing to go and do.
+ */
+const NAME_TOO_LONG_FOR_ROOM =
+  'That name is longer than the room allows — deploy firebase/database.rules.json';
+
 /*
  * Both of these moved to firebase-client.js when the friends panel became a
  * second thing that talks to Firebase and needed the same explanations. They
@@ -1095,12 +1123,15 @@ export class FirebaseSession {
       return { ok: true, name, color: mine, state: this.getState() };
     } catch (error) {
       warn('Rename refused', error);
-      return {
-        ok: false,
-        error: isPermissionDenied(error)
-          ? 'The room would not take that name'
-          : explainFirebaseError(error),
-      };
+      if (isPermissionDenied(error)) {
+        return {
+          ok: false,
+          error: name.length > DEPLOYED_NAME_FLOOR
+            ? NAME_TOO_LONG_FOR_ROOM
+            : 'The room would not take that name',
+        };
+      }
+      return { ok: false, error: explainFirebaseError(error) };
     }
   }
 
