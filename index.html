@@ -367,8 +367,20 @@
         a chat log there would push the controls off the screen. The count is
         the only thing that leaks out of the sheet while it is shut.
       -->
+      <!--
+        Drawn rather than typed. This sits between the menu and the settings
+        buttons, both of which are inline SVG taking the bar's own colour, and
+        an emoji among them is the one full-colour thing in a monochrome row —
+        it also arrives as a different picture on Windows, Android and iOS,
+        none of which the rest of the bar does. The dots are knocked out of
+        the bubble with evenodd rather than drawn over it, so the whole icon
+        is one path in one colour and follows currentColor like its
+        neighbours.
+      -->
       <button type="button" class="room-bar__chat" id="btn-chat" aria-label="Chat">
-        <span class="room-bar__chat-glyph" aria-hidden="true">💬</span>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path fill-rule="evenodd" d="M5 4h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-6.6l-4.8 3.7A.9.9 0 0 1 6 19v-3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Zm3 4.6A1.4 1.4 0 1 0 8 11.4a1.4 1.4 0 0 0 0-2.8Zm4 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm4 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Z"/>
+        </svg>
         <span class="room-bar__unread" id="chat-unread" hidden>0</span>
       </button>
     </div>

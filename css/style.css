@@ -2322,12 +2322,21 @@ body.is-modal-open {
   place-items: center;
   width: 34px;
   height: 34px;
+  /* Zeroed because the browser's own is `1px 6px` and this button is only
+     34px across: with border-box that leaves a 20px content box for a 22px
+     icon, which overflows it and lands a pixel off centre in a circle. The
+     44px icon buttons either side never noticed — 32px of room is more than
+     the same icon needs. */
+  padding: 0;
   flex: none;
   border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--panel);
+  /* Inherited by the icon through `fill: currentColor`, so the bubble
+     darkens on hover with the border and the two stay in step. There is no
+     font-size here any more: the button held an emoji once and now holds a
+     drawn shape with its own dimensions, and the badge sets its own. */
   color: var(--text-muted);
-  font-size: 1rem;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
 }
@@ -2339,10 +2348,6 @@ body.is-modal-open {
 
 .room-bar__chat:active {
   transform: translateY(1px);
-}
-
-.room-bar__chat-glyph {
-  line-height: 1;
 }
 
 /* --------------------------------------------------------- emote bubble -- */
