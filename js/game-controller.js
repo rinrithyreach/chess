@@ -357,6 +357,7 @@ export class GameController {
     blackAvatar = null,
     mode = GAME_MODE.LOCAL,
     startFen,
+    botLevel = null,
   } = {}) {
     storage.clearGame();
     this.#resetView();
@@ -370,6 +371,7 @@ export class GameController {
       black: { name: blackName, avatar: blackAvatar },
       mode,
       startFen,
+      botLevel,
     });
 
     this.#started = true;
@@ -1194,6 +1196,9 @@ export class GameController {
       // mode cannot answer that on its own: an Elemental game is `elemental`
       // whether the other seat held a person or the bot.
       vsBot: this.#state.vsBot === true,
+      // Which level that bot was, so resuming restores the opponent and not
+      // merely the position.
+      botLevel: this.#state.botLevel ?? null,
       // Charges, effects and the ply they expire against. None of it is
       // derivable from the position — a spent pawn looks exactly like a
       // loaded one — so without this a reload would hand both players a full

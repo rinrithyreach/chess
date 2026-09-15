@@ -25,6 +25,8 @@ import {
   BOARD_ZOOM_LEVELS,
   clampBoardZoom,
   GAME_MODE,
+  BOT_LEVELS,
+  DEFAULT_BOT_LEVEL,
   UI_STYLES,
   SELECTABLE_UI_STYLES,
   DEFAULT_UI_STYLE,
@@ -281,6 +283,7 @@ export class UI {
       'gameover-detail', 'btn-rematch', 'btn-gameover-new',
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
       'theme-picker', 'bg-picker',
+      'bot-fields', 'bot-picker',
       'opponent-fields', 'opponent-picker', 'opponent-bot-hint',
       'mode-elemental', 'elemental-fields', 'elements-list',
       'powerbar', 'power-glyph', 'power-name', 'power-hint', 'btn-power',
@@ -495,6 +498,31 @@ export class UI {
       });
     }
 
+    // Difficulty. Same shape as every other picker here: one list in
+    // config.js decides what exists, and the markup holds none of it.
+    const levels = this.#dom['bot-picker'];
+    if (levels) {
+      levels.innerHTML = '';
+      BOT_LEVELS.forEach((level) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'time-option';
+        button.dataset.level = level.id;
+        button.setAttribute('role', 'radio');
+        const chosen = level.id === DEFAULT_BOT_LEVEL;
+        button.setAttribute('aria-checked', String(chosen));
+        if (chosen) button.classList.add('is-active');
+        button.innerHTML =
+          `<span class="time-option__label">${level.label}</span>`
+          + `<span class="time-option__name">${level.hint}</span>`;
+        // The hint is decoration beside the name for a sighted reader and
+        // the whole of what the button means for anybody else, so it is
+        // said once, joined up.
+        button.setAttribute('aria-label', `${level.label} — ${level.hint}`);
+        levels.append(button);
+      });
+    }
+
     // The elemental rules card. Built from the same table the rules
     // themselves are written against, so an element cannot end up described
     // here as one thing and implemented as another.
@@ -569,6 +597,10 @@ export class UI {
     const elemental = mode === GAME_MODE.ELEMENTAL;
 
     if (this.#dom['online-fields']) this.#dom['online-fields'].hidden = !online;
+    // Difficulty is asked only where it is answerable. The Elemental bot
+    // takes no level — there is no picker for it, and a game that silently
+    // used whatever this one was left on would be a choice nobody made.
+    if (this.#dom['bot-fields']) this.#dom['bot-fields'].hidden = !bot;
     if (this.#dom['elemental-fields']) this.#dom['elemental-fields'].hidden = !elemental;
     // Elemental is the one mode that asks who you are playing, being the one
     // that can be played either way round on this device.
@@ -1621,6 +1653,12 @@ export class UI {
     this.openModal('gameover');
   }
 
+  /** Which difficulty the form is offering. */
+  #selectedBotLevel() {
+    const active = this.#dom['bot-picker']?.querySelector('.time-option.is-active');
+    return active?.dataset.level ?? DEFAULT_BOT_LEVEL;
+  }
+
   /**
    * Who the Elemental game is against: 'bot' or 'human'.
    *
@@ -2175,6 +2213,7 @@ export class UI {
         whiteAvatar: this.#avatarFor('p1'),
         blackAvatar: this.#avatarFor('p2'),
         opponent: this.#selectedOpponent(),
+        botLevel: this.#selectedBotLevel(),
       });
     });
 
@@ -2484,7 +2523,7 @@ export class UI {
     // Both pickers behave the same way and neither belongs to the
     // controller: what is chosen here is not a setting and not game state
     // until a game actually starts with it.
-    ['time-picker', 'opponent-picker'].forEach((id) => {
+    ['bot-picker', 'opponent-picker'].forEach((id) => {
       this.#dom[id]?.addEventListener('click', (event) => {
         const option = event.target.closest('.time-option');
         if (!option) return;

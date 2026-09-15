@@ -1963,6 +1963,14 @@ body.is-modal-open {
   gap: 0.5rem;
 }
 
+/* Three across rather than two-and-a-stray. The hints under the labels are
+   two words and wrap to a second line on a narrow phone, which is why the
+   options are a flex column and not a fixed height: the grid makes all three
+   as tall as the tallest, and they stay a row. */
+.time-picker--three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .time-option {
   display: flex;
   flex-direction: column;

@@ -167,6 +167,19 @@
         </fieldset>
 
         <!--
+          Difficulty. Player vs Bot is the one mode that asks, and the rows
+          come from BOT_LEVELS in js/config.js — a level is an entry in that
+          list and nothing here.
+        -->
+        <div class="bot-fields" id="bot-fields" hidden>
+          <div class="setting setting--stack">
+            <span class="setting__label" id="bot-level-label">Difficulty</span>
+            <div class="time-picker time-picker--three" id="bot-picker"
+                 role="radiogroup" aria-labelledby="bot-level-label"></div>
+          </div>
+        </div>
+
+        <!--
           Opponent. Elemental Chess is the one mode that asks. It sits out
           here rather than inside that mode's own block because it decides
           something about the form above it — whether the second name box is
