@@ -10,15 +10,13 @@
 
 import {
   STORAGE_KEYS,
+  RETIRED_STORAGE_KEYS,
   STORAGE_VERSION,
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
   BOARD_THEMES,
   resolveUiStyle,
   resolveBackground,
-  DEFAULT_GAUNTLET,
-  GAUNTLET_LENGTH,
-  clampGauntletRound,
   clampBoardZoom,
   FRIEND_CODE_LENGTH,
   NAME_MAX_LENGTH,
@@ -237,34 +235,30 @@ export function loadAvatars() {
 }
 
 /**
- * How far up the tournament ladder this device has got.
+ * Throw away what a removed feature left behind.
  *
- * Two numbers: the rung to play next, and the highest one ever beaten. The
- * second is the only part that is really a record — the first is reset by a
- * loss, and resetting it must not quietly erase what the player has done.
+ * Called once at startup. Deliberately quiet and deliberately unguarded by
+ * anything: there is nothing to decide, no version to compare, and no way for
+ * it to be wrong twice — a key that is already gone is simply gone again.
  *
- * Both are forced back into the ladder rather than trusted. A run stored by a
- * build with more rungs than this one would otherwise leave a player standing
- * on a round that does not exist, which is not a harder game but no game.
+ * Wrapped because storage can throw rather than merely be empty. A private
+ * window with site data blocked throws on `removeItem` the same way it does
+ * on `getItem`, and failing to tidy up is not worth failing to start over.
  */
-export function loadGauntlet() {
-  const { value: raw } = readJson(STORAGE_KEYS.GAUNTLET);
-  const source = raw && typeof raw === 'object' ? (raw.run ?? raw) : null;
-  if (!source || typeof source !== 'object') return { ...DEFAULT_GAUNTLET };
-
-  const best = Math.trunc(Number(source.best));
-  return {
-    round: clampGauntletRound(source.round),
-    best: Number.isFinite(best) ? Math.min(Math.max(best, 0), GAUNTLET_LENGTH) : 0,
-  };
-}
-
-export function saveGauntlet(run) {
-  return writeJson(STORAGE_KEYS.GAUNTLET, {
-    version: STORAGE_VERSION,
-    savedAt: Date.now(),
-    run,
+export function sweepRetiredKeys() {
+  let swept = 0;
+  RETIRED_STORAGE_KEYS.forEach((key) => {
+    try {
+      if (window.localStorage.getItem(key) === null) return;
+      window.localStorage.removeItem(key);
+      swept += 1;
+    } catch {
+      // Nothing to report and nobody to report it to. The key stays where it
+      // is on a device that would not have let us read it either.
+    }
   });
+  if (swept) log('Swept', swept, 'retired storage key(s)');
+  return swept;
 }
 
 export function saveAvatars(avatars) {

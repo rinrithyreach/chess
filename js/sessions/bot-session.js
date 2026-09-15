@@ -27,8 +27,6 @@ import {
   BOT_MIN_THINK_MS,
   BOT_CLOCK_MARGIN_MS,
   BOT_NAME,
-  gauntletRound,
-  clampGauntletRound,
   log,
   warn,
 } from '../config.js';
@@ -41,7 +39,7 @@ import {
  * of game it is: a Speed Chess game against the bot is still Speed Chess, and
  * has a clock to prove it.
  */
-const BOT_MODES = [GAME_MODE.TOURNAMENT, GAME_MODE.SPEED, GAME_MODE.ELEMENTAL];
+const BOT_MODES = [GAME_MODE.SPEED, GAME_MODE.ELEMENTAL];
 
 /**
  * Piece worth, for the one decision made without the search: which move to
@@ -69,15 +67,14 @@ export const withBot = (Base) => class extends Base {
   #humanColor = WHITE;
 
   /**
-   * How hard this particular bot thinks, and which rung it is.
+   * How hard this bot thinks.
    *
-   * Held per GAME rather than read from the constants at every search,
-   * because the tournament needs five different opponents out of one bot.
-   * Null round means an ordinary Player-vs-Bot game, which is the default
-   * strength and no rung at all.
+   * Held per GAME rather than read from the constants at every search. It was
+   * five different opponents out of one bot while the ladder existed, and is
+   * one opponent now — but a search that reads its own budget off a field is
+   * the shape that let it be five, and it costs nothing to keep.
    */
   #strength = { timeBudgetMs: BOT_TIME_BUDGET_MS, maxDepth: BOT_MAX_DEPTH };
-  #round = null;
 
   #worker = null;
   #workerFailed = false;
@@ -93,17 +90,14 @@ export const withBot = (Base) => class extends Base {
 
   async createGame(config = {}) {
     this.#humanColor = config.humanColor === BLACK ? BLACK : WHITE;
-    this.#setRound(config.gauntletRound ?? null);
 
-    const botName = this.#opponentName();
+    const botName = BOT_NAME;
     const state = await super.createGame({
       ...config,
       mode: BOT_MODES.includes(config.mode) ? config.mode : GAME_MODE.BOT,
       // Whichever seat the bot is in gets its name, so every place that shows
       // a player name — cards, PGN headers, the game-over dialog — says who
-      // actually played without any of them knowing a bot exists. On the
-      // ladder that name is the rung, so the board itself says who you are up
-      // against without a single extra label anywhere.
+      // actually played without any of them knowing a bot exists.
       white: this.#humanColor === WHITE ? config.white : { name: botName },
       black: this.#humanColor === WHITE ? { name: botName } : config.black,
     });
@@ -111,46 +105,17 @@ export const withBot = (Base) => class extends Base {
     return state;
   }
 
-  /**
-   * Point this session at one rung of the ladder, or at the ordinary bot.
-   *
-   * The strength is copied out rather than held by reference so that a later
-   * edit to the ladder cannot change the opponent in a game already under way.
-   */
-  #setRound(round) {
-    const rung = round === null ? null : gauntletRound(clampGauntletRound(round));
-    this.#round = rung?.round ?? null;
-    this.#strength = rung
-      ? { timeBudgetMs: rung.timeBudgetMs, maxDepth: rung.maxDepth }
-      : { timeBudgetMs: BOT_TIME_BUDGET_MS, maxDepth: BOT_MAX_DEPTH };
-  }
-
-  /** What the bot's seat is called: the rung's name, or just Bot. */
-  #opponentName() {
-    return this.#round === null ? BOT_NAME : gauntletRound(this.#round).label;
-  }
-
-  /**
-   * The rung rides along in the state, so it survives a save.
-   *
-   * Without it, resuming a Champion game after a refresh would hand the board
-   * back with the Novice thinking for it: the position would be right and the
-   * opponent would quietly have been swapped.
-   */
   getState() {
     const state = super.getState();
     if (!state) return state;
     // `vsBot` is what tells a RESUMED game to mount a bot again. The mode
-    // cannot carry it on its own any more: a Speed Chess game is mode
-    // `speed` whether the other seat holds a person or this.
-    return { ...state, gauntletRound: this.#round, vsBot: true };
+    // cannot carry it on its own: a Speed Chess game is mode `speed` whether
+    // the other seat holds a person or this.
+    return { ...state, vsBot: true };
   }
 
   async restoreGame(saved) {
-    // The rung first, because it decides what the bot's seat is called and so
-    // has to be known before the names below are read.
-    this.#setRound(saved?.gauntletRound ?? null);
-    const botName = this.#opponentName();
+    const botName = BOT_NAME;
 
     // Which seat the human had is recoverable from the saved names, because
     // createGame put the bot's name in the bot's seat. Falling back to White
@@ -188,7 +153,7 @@ export const withBot = (Base) => class extends Base {
     // turn it is has to be re-derived rather than assumed.
     if (result.ok) {
       const state = this.getState();
-      const botName = this.#opponentName();
+      const botName = BOT_NAME;
       if (state.players?.[WHITE]?.name === botName) this.#humanColor = BLACK;
       else if (state.players?.[BLACK]?.name === botName) this.#humanColor = WHITE;
       this.#maybeMove();

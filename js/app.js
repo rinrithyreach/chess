@@ -50,6 +50,11 @@ async function boot() {
   let board = new Board(boardEl);
   let boardStyle = 'classic';
 
+  // Before anything reads storage, so a key belonging to a feature this
+  // build no longer has is gone rather than merely ignored. Nothing depends
+  // on the result; it is tidying, not migration.
+  storage.sweepRetiredKeys();
+
   await controller.init();
 
   // A move waiting to be animated on the next render.
@@ -123,11 +128,6 @@ async function boot() {
     board.render(snapshot, { animateMove: pendingAnimation });
     pendingAnimation = null;
     ui.render(snapshot);
-    // The ladder is on the setup screen rather than this one, so it is
-    // repainted here for the next time the player looks at it — a run that
-    // moved during the game they just finished must not be stale when they
-    // walk back to the form.
-    ui.syncGauntlet(snapshot.gauntlet);
     handleOnlineTransitions(snapshot);
     reportActivity(snapshot);
   });
@@ -324,10 +324,6 @@ async function boot() {
     // the matching provider back. Restore a bot game onto a plain
     // LocalSession and the bot's pieces simply become the player's — the
     // position is right and the opponent has quietly gone.
-    // A tournament game is a bot game with a rung attached, so it resumes
-    // the same way — and BotSession reads the rung back out of the record,
-    // which is what stops a resumed Champion game being finished off by the
-    // Novice.
     // Elemental Chess first: a resumed game of it needs the variant back
     // whether or not the bot was in it, and mounting a plain bot session
     // would leave the board holding charges and effects that nothing knows
@@ -337,8 +333,7 @@ async function boot() {
         ? (await import('./sessions/elemental-bot-session.js')).ElementalBotSession
         : (await import('./sessions/elemental-session.js')).ElementalSession;
       await controller.useSession(new Session());
-    } else if (info?.mode === GAME_MODE.BOT || info?.mode === GAME_MODE.TOURNAMENT
-        || info?.vsBot) {
+    } else if (info?.mode === GAME_MODE.BOT || info?.vsBot) {
       const { BotSession } = await import('./sessions/bot-session.js');
       await controller.useSession(new BotSession());
     } else {
@@ -630,17 +625,6 @@ async function boot() {
       // game left mounted. BotSession extends LocalSession, so `instanceof`
       // cannot tell them apart, and starting a two-player game on a session
       // that still answers as the bot is exactly the bug that invites.
-      // The ladder picks its own opponent and its own strength, so it takes
-      // the round rather than a second name. Same session as Player vs Bot:
-      // one bot, five settings of it.
-      if (mode === GAME_MODE.TOURNAMENT) {
-        const { BotSession } = await import('./sessions/bot-session.js');
-        await controller.useSession(new BotSession());
-        await controller.startGauntletRound(undefined, { name: whiteName });
-        ui.showScreen('game');
-        return;
-      }
-
       // Elemental Chess. Two sessions again — a person on this device, or the
       // bot — but the difference between them is a mixin rather than a
       // separate game: both are the same variant, and the variant's rules are
@@ -976,21 +960,6 @@ async function boot() {
 
     onPromotionChoice: (piece) => controller.completePromotion(piece),
 
-    /**
-     * Play the next rung without going back through the form.
-     *
-     * The name is carried over from the game just finished rather than
-     * asked for again: it is the same player, still climbing.
-     */
-    onLadderNext: async ({ round }) => {
-      sound.unlock();
-      const name = controller.getSnapshot().state?.players?.[WHITE]?.name;
-      const { BotSession } = await import('./sessions/bot-session.js');
-      await controller.useSession(new BotSession());
-      await controller.startGauntletRound(round, { name });
-      ui.showScreen('game');
-    },
-
     // Remembering a picture is not a setting and touches no game state, so it
     // does not go through onSettingChange: nothing needs re-rendering, and a
     // game already under way keeps the picture its players sat down with.
@@ -1019,7 +988,6 @@ async function boot() {
 
   ui.syncSettings(controller.getSettings());
   ui.syncAvatars(controller.getAvatars());
-  ui.syncGauntlet(controller.getGauntlet());
   ui.refreshContinueButton();
   ui.setOnlineAvailable(isFirebaseConfigured(), firebaseConfigError());
   // Friends need a project behind them in a way local play does not, so the

@@ -21,10 +21,6 @@ export const STORAGE_KEYS = {
   GAME: 'chess-arena:game',
   SETTINGS: 'chess-arena:settings',
   AVATARS: 'chess-arena:avatars',
-  // How far up the ladder you have got. Its own key rather than a corner of
-  // the game record, because it outlives every individual game in the run —
-  // and because losing a game must not be able to lose the run with it.
-  GAUNTLET: 'chess-arena:gauntlet',
   // Who this device is to other people: the name it plays online under,
   // and the friend code others type to find it. Separate from the game
   // record because it outlives every game, and separate from settings
@@ -32,6 +28,19 @@ export const STORAGE_KEYS = {
   // you your friends list, which is not true of any setting here.
   PROFILE: 'chess-arena:profile',
 };
+
+/**
+ * Keys this app used to write and no longer does.
+ *
+ * Swept once on load rather than left behind. A removed feature that keeps
+ * its corner of localStorage is litter on a device belonging to somebody who
+ * cannot see it, cannot clear it, and never asked for it — and `chess-arena:`
+ * is a namespace this app is responsible for the whole of, not only the part
+ * it currently reads.
+ *
+ * `gauntlet` held how far up the tournament ladder a device had climbed.
+ */
+export const RETIRED_STORAGE_KEYS = ['chess-arena:gauntlet'];
 
 /**
  * Seats on the New Game form that remember a profile picture between games.
@@ -85,7 +94,6 @@ export const GAME_MODE = {
   LOCAL: 'local',
   BOT: 'bot',
   ONLINE: 'online',
-  TOURNAMENT: 'tournament',
   SPEED: 'speed',
   // The one variant: chess with seven elements laid over it. Its rules live
   // in elemental.js and its session in sessions/elemental-session.js, both of
@@ -145,58 +153,6 @@ export const BOT_CLOCK_MARGIN_MS = 300;
 
 /** Shown wherever the bot's seat needs a player name. */
 export const BOT_NAME = 'Bot';
-
-/**
- * The tournament ladder: five bots, each harder than the last.
- *
- * Strength is the same two numbers the bot already takes, because there is
- * only one bot here — a ladder of separate engines would be five times the
- * code for a difference nobody asked for. `timeBudgetMs` is what actually
- * binds: the search deepens iteratively until the budget runs out, so more
- * time is more plies wherever the position allows them. `maxDepth` is the
- * ceiling that stops a quiet position being searched past the point of
- * usefulness, and raising it with the budget is what keeps the two in step.
- *
- * Round 3 is deliberately today's bot, unchanged — the opponent anyone who has
- * played this app already knows. Two rounds sit below it so the ladder opens
- * with something a casual player beats, and two above so finishing it means
- * something.
- *
- * The budget is also a promise about waiting. Champion thinks for around three
- * seconds a move, which is a long time on a phone and is meant to be: it is
- * the last round, and BOT_MIN_THINK_MS shows the same pause is deliberate at
- * the other end of the ladder too.
- */
-export const GAUNTLET_ROUNDS = [
-  { round: 1, label: 'Novice', hint: 'Barely looks ahead', timeBudgetMs: 200, maxDepth: 2 },
-  { round: 2, label: 'Club', hint: 'Takes what you leave', timeBudgetMs: 500, maxDepth: 3 },
-  { round: 3, label: 'Expert', hint: 'Sees short tactics', timeBudgetMs: 1200, maxDepth: 4 },
-  { round: 4, label: 'Master', hint: 'Thinks before answering', timeBudgetMs: 2200, maxDepth: 5 },
-  { round: 5, label: 'Champion', hint: 'Takes its time', timeBudgetMs: 3000, maxDepth: 6 },
-];
-
-export const GAUNTLET_LENGTH = GAUNTLET_ROUNDS.length;
-
-/** A run nobody has started: standing at round one, nothing beaten. */
-export const DEFAULT_GAUNTLET = { round: 1, best: 0 };
-
-/** One rung, or null. Rounds are 1-based because that is how they are read. */
-export function gauntletRound(round) {
-  return GAUNTLET_ROUNDS.find((rung) => rung.round === round) ?? null;
-}
-
-/**
- * Force a stored round back into the ladder.
- *
- * A record from a build with more rungs than this one, or a hand-edited
- * number, must not leave the player standing on a round that does not exist —
- * which would be a game with no opponent rather than a wrong difficulty.
- */
-export function clampGauntletRound(round) {
-  const n = Math.trunc(Number(round));
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(Math.max(n, 1), GAUNTLET_LENGTH);
-}
 
 /**
  * Time controls for Speed Chess, written the way chess writes them.
@@ -321,7 +277,7 @@ export const CHAT_MAX_LENGTH = 160;
  *
  * **Raising it here means deploying the rules again.** Until they are
  * deployed, a longer name still works everywhere it never left the device —
- * a local, bot, speed, tournament or elemental game — and is refused for
+ * a local, bot, speed or elemental game — and is refused for
  * anything online.
  *
  * There is a limit at all, rather than none, for two reasons that have
