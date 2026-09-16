@@ -461,10 +461,18 @@ export class UI {
     // Background picker. Same shape as the board themes above, and for the
     // same reason: one list in config.js decides what exists, so a background
     // is a block of CSS and a row in that list, with no markup to add here.
+    //
+    // And the same rule as Look & Feel: with one background there is nothing
+    // to choose between, so the section hides rather than offering a
+    // radiogroup of one. A second row in BACKGROUNDS brings it back.
     const backgrounds = this.#dom['bg-picker'];
     if (backgrounds) {
+      const offerAChoice = BACKGROUNDS.length > 1;
+      const section = backgrounds.closest('.setting');
+      if (section) section.hidden = !offerAChoice;
+
       backgrounds.innerHTML = '';
-      BACKGROUNDS.forEach((background) => {
+      (offerAChoice ? BACKGROUNDS : []).forEach((background) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'bg-swatch';

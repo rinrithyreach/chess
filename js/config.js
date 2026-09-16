@@ -418,9 +418,9 @@ export const BOARD_THEMES = [
  *
  * The background is not just the strip around the board. The 3D renderer is
  * transparent — `alpha: true`, clear colour alpha 0 — so the page shows
- * through the board's own scene as well as around it, which is why this is
- * worth a setting at all and why every one of these is dark: a light ground
- * behind a lit 3D board reads as a photograph on the wrong wall.
+ * through the board's own scene as well as around it, which is why it matters
+ * at all and why it is dark: a light ground behind a lit 3D board reads as a
+ * photograph on the wrong wall.
  *
  * Each id is a block in style.css that redefines the surface tokens only —
  * base, glow, panels and borders, in one hue, holding the lightness ladder
@@ -429,9 +429,6 @@ export const BOARD_THEMES = [
  */
 export const BACKGROUNDS = [
   { id: 'midnight', label: 'Midnight', hint: 'Cool and dark' },
-  { id: 'charcoal', label: 'Charcoal', hint: 'Neutral graphite' },
-  { id: 'forest', label: 'Forest', hint: 'Club-room green' },
-  { id: 'mahogany', label: 'Mahogany', hint: 'Warm and wooden' },
 ];
 
 /** The background a player gets with nothing stored, and the fallback. */

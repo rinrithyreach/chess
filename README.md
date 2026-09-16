@@ -691,27 +691,24 @@ skin, and a saved `classic` from back when it was on offer, both land on the
 3D board with no migration step and nobody left behind. (`js/board-3d.js`
 explains in its header why Arcade went; the history is in git.)
 
-**Background** — four grounds in Settings: *Midnight* (the default cool dark),
-*Charcoal*, *Forest* and *Mahogany*. Not only the strip around the board —
-the 3D renderer is transparent, so the page shows through its scene as well
-as around it, and changing this changes what the board is sitting in. Each one
-redefines the surface tokens only — ground, glow, panels and borders, in one
-hue, holding the lightness ladder the default sets — so cards, modals and
-toasts follow without being listed. Text and accent tokens are deliberately
-untouched: they carry the contrast, and every background is checked against
-them (body text clears **AAA** on the ground and on a panel in all four).
-Each swatch in the picker is the game screen in miniature — ground, a player
-card, the gold pip — rather than a square of the ground: these grounds are all
-within a few points of black, so a plain chip of one is a black box that tells
-you nothing. What separates them on a real screen is the ground seen against
-the cards and the accent on it, so that is what the swatch shows.
+**Background** — *Midnight*, the one ground. Not only the strip around the
+board — the 3D renderer is transparent, so the page shows through its scene as
+well as around it. It redefines the surface tokens only — ground, glow, panels
+and borders, in one hue — so cards, modals and toasts follow without being
+listed, while text and accent tokens carry the contrast and are left alone.
 
-Applied before first paint by the same inline script that applies the skin,
-so coming back to a saved choice never flashes the default first.
+*Charcoal*, *Forest* and *Mahogany* have been removed, and the Background row
+in Settings with them. It hides rather than being deleted, for the reason Look &
+Feel does: a radiogroup of one is a control that cannot do anything, so the
+section hides whenever fewer than two backgrounds exist and would come back on
+its own if a second were added. A device that had saved one of the three lands
+on Midnight with no migration step — `resolveBackground`, and the inline script
+that applies the ground before first paint, both decline an id they do not know
+and fall back to the default.
 
 **Interface** — start screen, new-game setup, waiting room with the shareable
 code, responsive game screen, friends panel, chat sheet, settings (sound,
-board theme, background, coordinates, animations, auto-flip, chat and emotes),
+board theme, coordinates, animations, auto-flip, chat and emotes),
 custom confirmation modals, toasts, and a collapsible move history.
 
 **Every control answers the pointer** — hovering any button lifts it 2px,
@@ -1440,7 +1437,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, chat, emotes, friends and presence **110**, long names **56**, a confirmation raised over a sheet **40**, renaming mid-game **48**, the emote bubble **14**, with **15** more run against the deployed site and the real Firebase project rather than a stand-in. A further **440** covered Elemental Chess — the variant, its powers panel, the powers being chosen, and the supers — and went with the mode; they are not counted here because there is nothing left for them to run against. The groups were run separately, so
+Pictures on online seats add **36 more**, hover feedback **20**, chat, emotes, friends and presence **110**, long names **56**, a confirmation raised over a sheet **40**, renaming mid-game **48**, the emote bubble **14**, with **15** more run against the deployed site and the real Firebase project rather than a stand-in. A further **440** covered Elemental Chess — the variant, its powers panel, the powers being chosen, and the supers — and went with the mode; they are not counted here because there is nothing left for them to run against. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -1463,7 +1460,6 @@ the totals are reported separately rather than as one number:
 | **Profile pictures (Chromium)** | **39** | **A real file through the real picker: centre-cropped, scaled to 128px, under budget; shown on the card, saved, restored after a reload, offered back next game; a 6-megapixel photo still fits; a non-image is refused and says why; remote, `javascript:` and SVG values all rejected** |
 | Rules (emulator) | 14 | The rules of the time loaded into the database emulator and driven as an ordinary signed-in user: a room with no picture accepted, unknown player fields rejected, a stranger's uid refused a seat. Its avatar rows asserted that *every* picture was rejected, which was true of the rules then deployed and is no longer true of the rules in this repo — superseded by the suite below, not re-run |
 | **Pictures on online seats (Chromium ×2)** | **36** | **Two devices against a database that enforces the shipped rule text — the cap and the pattern are read out of `firebase/database.rules.json` itself, so client and rules are checked against each other rather than against anyone's memory. A photograph over the budget at 128px comes back 96px and inside it; one already inside is not re-encoded a second time; a remote URL, an SVG and nothing at all are all refused. Two players create, join, and see each other's face on both devices, and the room document carrying both faces is 9,475 bytes. Then the same run against rules that do NOT know the field: the write is refused, the room is created anyway without the picture, both players are told why, and the game is playable — the failure that this feature caused the first time it shipped. Zero console errors** |
-| **Background (Chromium)** | **32** | **All four grounds: each repaints the page, marks only itself checked, and previews itself in the picker rather than the one in force; the choice survives a reload and is proved to be on the root element BEFORE any module runs (app.js blocked, the attribute already set), so it cannot flash the default first; an unknown id out of storage lands on the default. The swatches are measured rather than admired: each must show a card that separates from its own ground (fill and outline both), and no two cards may be within 8 points of each other — the check that a paint-chip preview would fail even while every ground was technically a different colour. Contrast is computed from the token values in the stylesheet itself for every background — body text AAA on the ground and on a panel, muted text AA, the accent legible — rather than eyeballed** |
 | **Hover feedback (Chromium)** | **20** | **Measured as a pointer, as a finger, and as someone who asked for less motion. With a pointer: buttons, icon buttons, the picture pickers and the swatches all lift exactly 2px and settle back when it leaves, the gold buttons glow gold rather than grey, the sheen is a real gradient behind the label, and hovering the chosen swatch does not strip the outline that marks it chosen. Locked Undo stays flat and shadowless while Flip beside it lifts, and a press beats the lift. On a touch screen the media query does not match, so a tapped button is not left floating. Under reduced motion the lift does not happen at all and the sheen is gone rather than parked mid-sweep. Caught two real specificity bugs: the gold glow was losing to the generic hover rule, and the reduced-motion override was losing to both** |
 | **The deployed site (Chromium ×2 + real project)** | **15** | **The published URL on a phone viewport, the real SDK from the CDN, the real rules: two anonymous accounts claim two friend codes, one adds the other by code, the request arrives with the right name, accepting writes both lists, then a real room with a real message and a real emote crossing between them, a move landing after the conversation, and presence moving to "in a game" on the friend's screen. It removes its own rooms, profiles, presence, friendships and handles afterwards, so the database is left as it was found. Caught a real bug: a friend whose presence had not arrived yet was being announced as offline** |
 | **Chat, emotes, friends, presence, invitations (Chromium ×2–3)** | **110** | **Fifteen of them read `firebase/database.rules.json` itself and assert what it says — that a message can only be written as yourself *or left exactly as it was*, that a colour must match the seat you hold, that a friends list is readable only by its owner, that somebody may add themselves to yours only while your request stands, that a request cannot be sent to yourself, that an invitation may only be written by somebody already on the list while withdrawing one is always allowed, and that the profile-picture rule is byte-for-byte the seat-picture rule. The rest drive two and three real browsers against a database that enforces that rule text. Two players talk: what you send lands on your own side and the other side, attributed to the seat, counted as unread while the sheet is shut and cleared when it opens. An emote arrives named and is drawn from the receiver's own list; with the sheet open it stays in the log on **both** devices, and only with the sheet shut does it pop on the card of whoever sent it. That pair replaced an assertion that checked for a bubble while the sheet was open — a bubble nobody could see, since the sheet is drawn over the cards, so it passed for as long as the bug existed and would have gone on passing. `<img src=x onerror=alert(1)>` arrives as characters and creates no element. **A move after a conversation is not refused** — the check the "unchanged" rule clauses exist for, and the one that would have broken every game after the first message. A log of 60 is shown 40 deep, oldest dropped, and sending into a full log trims the room rather than growing it. Blank, whitespace-only, over-long and unknown-emote sends are each refused for their own reason, and a second send in the same instant is refused for the cooldown. With the setting off the button is gone, both sends refuse, and nothing arrives on screen. Two devices claim two different friend codes, each handle points back at its claimer, a request crosses with the right name, accepting writes both lists and clears both cleanups, and removing clears both. Presence follows a game: starting one moves a friend to "In a game" on the other device without anybody reopening the panel. A reload reclaims the same code rather than a second one. Then the whole thing again against rules that know none of it: the game is still playable and the move still crosses, the message is refused with an explanation, and the friends panel says the rules need deploying rather than sitting empty. It also holds the mode list in place: the five modes in their intended order, and choosing any one of them marking that one and only that one — measured from computed styles after the transition has finished, because a row caught mid-fade looks selected and this project has been fooled by that twice. That check found a real bug: Online Multiplayer could not be highlighted at all, because the rule keyed on a class its label had never carried. Then invitations, on three browsers at once: a friend who is about can be asked, one who is not on the list cannot — and a third browser going round the client and writing straight at the database is refused by the rules, which is the check that matters, since the client is the half an attacker replaces. One tap hosts a room, stands in it, gets the panel out of the way, and writes an invitation naming that room, under the right name, carrying nothing else; the row for that friend then says "Invited" and will not send a second. Cancelling the room withdraws it rather than leaving it pointing at a room that has gone. Asked again, the other phone shows a count with the panel shut, the invitation named and offering both answers, and Join seats both players in that one room with no code typed anywhere — after which the invitation is deleted and the count is gone. An invitation seeded three minutes old is not offered at all, neither in the panel nor in the state behind it. And the only write refused in the whole run is the one that was supposed to be. Zero console errors** |
@@ -1783,12 +1779,10 @@ being hidden by a rule that changed underneath it:
 | 28 | Trade evenly, then win a piece | The lead badge appears only on the side that is ahead, and vanishes at level material |
 | 29 | Promote a pawn | Neither pile changes — a promotion is not a capture |
 | 30 | Play on a phone | The board reaches both edges of the screen; cards and controls keep their margins |
-| 31 | Pick a background in Settings | The whole page repaints at once — ground, cards, modals and all |
-| 32 | Reload after picking one | It is still there, and was there from the first frame rather than snapping in |
-| 33 | Open Friends from the menu | A six-character code appears; copy it |
-| 34 | Type your name in the Friends panel | It is remembered, and the New Game form offers the same name |
-| 35 | Turn Chat & Emotes off, then join a game | No chat button; nothing arrives and nothing can be sent |
-| 36 | Open Friends with nobody on the list | No Game invites section at all, and the empty line explains what to do |
+| 31 | Open Friends from the menu | A six-character code appears; copy it |
+| 32 | Type your name in the Friends panel | It is remembered, and the New Game form offers the same name |
+| 33 | Turn Chat & Emotes off, then join a game | No chat button; nothing arrives and nothing can be sent |
+| 34 | Open Friends with nobody on the list | No Game invites section at all, and the empty line explains what to do |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 

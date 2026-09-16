@@ -78,13 +78,13 @@ body {
    renegotiate that — which is also what keeps adding a background to a block
    of seven values rather than an audit of the whole stylesheet.
 
-   Midnight has a block like the others even though `:root` already says the
-   same thing, and the duplication is deliberate. `:root` is the fallback for a
-   page with no `data-bg` at all — script blocked, storage unreadable — while
-   this block is what the attribute selects, and what a SWATCH needs: a swatch
-   cannot inherit Midnight's values from `:root` while some other background is
-   the one in force, which is exactly when it would be showing the wrong
-   colours. The two must be changed together.
+   Midnight has a block even though `:root` already says the same thing, and
+   the duplication is deliberate. `:root` is the fallback for a page with no
+   `data-bg` at all — script blocked, storage unreadable — while this block is
+   what the attribute selects, and what a SWATCH needs: a swatch cannot inherit
+   its values from `:root` while some other background is the one in force.
+   With one background there is no other, and no picker is drawn, but this is
+   the shape a second one would slot into. The two must be changed together.
    -------------------------------------------------------------------------- */
 
 :root[data-bg="midnight"],
@@ -96,39 +96,6 @@ body {
   --panel-soft: #212636;
   --border: #2a3040;
   --border-strong: #3a4257;
-}
-
-:root[data-bg="charcoal"],
-.bg-swatch__preview[data-bg="charcoal"] {
-  --bg: #101012;
-  --bg-glow: #202024;
-  --bg-elevated: #17181b;
-  --panel: #1d1e22;
-  --panel-soft: #24262b;
-  --border: #2e3036;
-  --border-strong: #40434b;
-}
-
-:root[data-bg="forest"],
-.bg-swatch__preview[data-bg="forest"] {
-  --bg: #0b1410;
-  --bg-glow: #16281f;
-  --bg-elevated: #111d18;
-  --panel: #16241e;
-  --panel-soft: #1c2c25;
-  --border: #26382f;
-  --border-strong: #364d41;
-}
-
-:root[data-bg="mahogany"],
-.bg-swatch__preview[data-bg="mahogany"] {
-  --bg: #14100d;
-  --bg-glow: #2a1e16;
-  --bg-elevated: #1d1813;
-  --panel: #241d17;
-  --panel-soft: #2c241c;
-  --border: #382c22;
-  --border-strong: #4d3c2e;
 }
 
 body {
@@ -1791,9 +1758,9 @@ body.is-modal-open {
 /* --------------------------------------------------------------------------
    Background picker
 
-   Two columns rather than the board picker's three: these labels are words
-   rather than one-word colours, and four of them in a row on a phone would
-   wrap "Mahogany" onto two lines.
+   Two columns rather than the board picker's three: each swatch carries a
+   name and a hint under a preview, and more than two across on a phone wraps
+   the longer names onto two lines.
    -------------------------------------------------------------------------- */
 
 .bg-picker {
