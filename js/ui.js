@@ -1123,6 +1123,48 @@ export class UI {
     if (this.#historyExpanded) list.scrollTop = list.scrollHeight;
   }
 
+  /**
+   * Which colour is sitting on a given card right now.
+   *
+   * #cardSide is built by #renderPlayers from the orientation and is the one
+   * place that mapping lives, so asking it here keeps a second copy of
+   * "who is where" from drifting out of step with the first.
+   */
+  #colorOnCard(prefix) {
+    return Object.keys(this.#cardSide ?? {}).find((c) => this.#cardSide[c] === prefix) ?? null;
+  }
+
+  /**
+   * Swap the name on a card for a box holding the same name.
+   *
+   * Deliberately not a modal. A name is one short string and the card is
+   * already showing it: putting the box where the name was means the player
+   * is editing the thing they tapped, in the place they tapped it, rather
+   * than reading a dialog about it.
+   */
+  #startRenaming(prefix) {
+    const input = this.#dom[`input-rename-${prefix}`];
+    const line = this.#dom[`${prefix}-name`]?.parentElement;
+    if (!input || !line) return;
+
+    input.value = this.#dom[`${prefix}-name`]?.textContent ?? '';
+    line.hidden = true;
+    input.hidden = false;
+    input.focus();
+    input.select();
+    this.#renaming = prefix;
+  }
+
+  /** Put the name back, whether it changed or not. */
+  #stopRenaming(prefix = this.#renaming) {
+    if (!prefix) return;
+    const input = this.#dom[`input-rename-${prefix}`];
+    const line = this.#dom[`${prefix}-name`]?.parentElement;
+    if (input) input.hidden = true;
+    if (line) line.hidden = false;
+    if (this.#renaming === prefix) this.#renaming = null;
+  }
+
   #renderControls({ state }) {
     const online = state.online;
     // Online, the board is only live once both seats are filled.
