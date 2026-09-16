@@ -324,16 +324,7 @@ async function boot() {
     // the matching provider back. Restore a bot game onto a plain
     // LocalSession and the bot's pieces simply become the player's — the
     // position is right and the opponent has quietly gone.
-    // Elemental Chess first: a resumed game of it needs the variant back
-    // whether or not the bot was in it, and mounting a plain bot session
-    // would leave the board holding charges and effects that nothing knows
-    // how to read — a position that looks right and plays as ordinary chess.
-    if (info?.mode === GAME_MODE.ELEMENTAL) {
-      const Session = info.vsBot
-        ? (await import('./sessions/elemental-bot-session.js')).ElementalBotSession
-        : (await import('./sessions/elemental-session.js')).ElementalSession;
-      await controller.useSession(new Session());
-    } else if (info?.mode === GAME_MODE.BOT || info?.vsBot) {
+    if (info?.mode === GAME_MODE.BOT || info?.vsBot) {
       const { BotSession } = await import('./sessions/bot-session.js');
       await controller.useSession(new BotSession());
     } else {
@@ -464,17 +455,6 @@ async function boot() {
       : last.body;
     ui.toast(`${who}: ${said}`);
   });
-
-  /**
-   * An elemental power went off.
-   *
-   * Straight to the board, because a power is the one thing in the game whose
-   * effect cannot be read back out of the state that follows it: a piece that
-   * has just burned and a piece that has just been captured leave the same
-   * board behind. Optional on purpose — a renderer that has nothing to say
-   * about powers is a renderer that draws a correct board without them.
-   */
-  controller.on(EVENT.POWER, (payload) => board.playPower?.(payload));
 
   controller.on(EVENT.TOAST, ({ message, tone }) => ui.toast(message, tone));
 
@@ -609,7 +589,7 @@ async function boot() {
     },
 
     onStartGame: async ({
-      mode, whiteName, blackName, whiteAvatar, blackAvatar, opponent, botLevel, loadout,
+      mode, whiteName, blackName, whiteAvatar, blackAvatar, botLevel,
     }) => {
       sound.unlock();
 
@@ -620,33 +600,6 @@ async function boot() {
       // game left mounted. BotSession extends LocalSession, so `instanceof`
       // cannot tell them apart, and starting a two-player game on a session
       // that still answers as the bot is exactly the bug that invites.
-      // Elemental Chess. Two sessions again — a person on this device, or the
-      // bot — but the difference between them is a mixin rather than a
-      // separate game: both are the same variant, and the variant's rules are
-      // in one place whichever seat the opponent is in.
-      if (mode === GAME_MODE.ELEMENTAL) {
-        const vsBot = opponent !== 'human';
-        const Session = vsBot
-          ? (await import('./sessions/elemental-bot-session.js')).ElementalBotSession
-          : (await import('./sessions/elemental-session.js')).ElementalSession;
-
-        await controller.useSession(new Session());
-        await controller.newGame({
-          whiteName,
-          blackName: vsBot ? undefined : blackName,
-          whiteAvatar,
-          blackAvatar: vsBot ? null : blackAvatar,
-          mode: GAME_MODE.ELEMENTAL,
-          // Both sides play with the same sixteen. One loadout rather than two
-          // is a fairness decision before it is a screen-space one: seventeen
-          // elements against a different sixteen would be a match-up rather
-          // than a game, and the bot has nowhere to choose from anyway.
-          loadout,
-        });
-        ui.showScreen('game');
-        return;
-      }
-
       if (mode === GAME_MODE.BOT) {
         // Imported lazily: the search and its tables are dead weight for
         // anyone who only ever plays another person.
@@ -865,40 +818,10 @@ async function boot() {
         copied ? 'info' : 'error');
     },
 
-    /**
-     * Elemental Chess: aim the selected piece's power, or call it off.
-     *
-     * Both are one line because the controller owns the whole of it — which
-     * square is selected, what that piece can do, and whether a power is
-     * already being aimed. The button only has to say which of the two the
-     * player pressed.
-     */
-    onUsePower: async () => {
-      sound.unlock();
-      await controller.beginAiming();
-    },
-
-    onCancelPower: () => controller.cancelAiming(),
-
     // Renaming yourself without leaving the game. Online only in practice —
     // the controller refuses it where the session cannot do it.
     onRenameSeat: async ({ color, name }) => {
       await controller.renameSeat(color, name);
-    },
-
-    // Chosen from the panel rather than from the piece. The controller works
-    // out whether that still needs a caster picked, so this end does not have
-    // to know there are two ways in.
-    onCastPower: async (element) => {
-      sound.unlock();
-      await controller.castPower(element);
-    },
-
-    // The super of whatever is already in hand. No element argument: the bar
-    // is the only way in, and the bar is only ever about the selected piece.
-    onCastSuper: async () => {
-      sound.unlock();
-      await controller.beginSuperAiming();
     },
 
     onAcceptDraw: () => controller.acceptDraw(),
@@ -907,7 +830,6 @@ async function boot() {
     onUndo: () => controller.undo(),
 
     onFlip: () => controller.flipBoard(),
-
 
     onResign: async () => {
       const snapshot = controller.getSnapshot();
@@ -934,7 +856,6 @@ async function boot() {
     },
 
     onRematch: () => controller.rematch(),
-
 
     onLeaveGame: async () => {
       ui.closeModal('menu');

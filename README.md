@@ -75,10 +75,9 @@ ends says a move happened; it does not say which way, and which way is the
 thing you want when you look up and someone has moved. Both boards draw the
 same ring in the same gold at the same radius.
 
-**Four game modes** — *Local Two Player* (share one device), *Player vs Bot*,
-*Online Multiplayer* and *Elemental Chess*. Each is a session provider and
-nothing else: the board, the UI and the controller are identical in all of
-them.
+**Three game modes** — *Local Two Player* (share one device), *Player vs Bot*
+and *Online Multiplayer*. Each is a session provider and nothing else: the
+board, the UI and the controller are identical in all of them.
 
 **The bot** — negamax with alpha-beta, ordered moves, a quiescence search and
 piece-square tables, searching under a time budget rather than to a fixed
@@ -115,9 +114,10 @@ one of the wrong strength.
 
 The bot's seat is **named after the level** — *Bot (Hard)* — so the player
 card, the PGN headers and the game-over dialog all say who you actually played.
-It is also the only place the choice is visible once the form has gone. The
-Elemental bot, which is offered no picker, stays plain *Bot*: claiming a level
-nobody chose would be worse than showing none.
+It is also the only place the choice is visible once the form has gone. A bot
+with no level chosen — a game resumed from a save written before there was a
+picker — stays plain *Bot*: claiming a level nobody chose would be worse than
+showing none.
 
 **Speed Chess has been removed**, and the chess clock with it — it was the
 only thing that ever had one. Gone: the mode, four time controls, the clock
@@ -132,10 +132,11 @@ a field on every game record, a branch in every session, and a shape the
 parts that stay get written around.
 
 Two things outlived it. The opponent picker — bot or a friend on this device
-— was shared with Elemental Chess and stays there, still drawn with the
-`.time-option` classes it was built beside. And `BOT_MIN_THINK_MS`, the
-courtesy pause before the bot replies, which used to be trimmed to whatever
-the clock could spare and is now simply the pause.
+— passed to Elemental Chess, and has since gone with that too; the
+`.time-option` classes it was drawn with now belong solely to the
+bot-difficulty row. And `BOT_MIN_THINK_MS`, the courtesy pause before the bot
+replies, which used to be trimmed to whatever the clock could spare and is now
+simply the pause.
 
 **Tournament has been removed.** It was a ladder of five bots — one bot at
 five settings of the two numbers it already took — climbed a rung at a time,
@@ -156,339 +157,49 @@ this app is responsible for the whole of, not only the part it still reads.
 The bot itself is untouched. Its strength was always a per-game field with
 the ordinary constants as its default, and only the ladder ever overrode it.
 
-**Elemental Chess** — the one variant, playable against the bot or against
-someone sharing your device. Every piece carries an element, and every element
-grants one power that the piece may use **once in the whole match**:
+**Elemental Chess has been removed**, and the whole layer it needed with it.
+It was the one variant: every piece carried an element, every element granted
+one power the piece could spend once a match, and a second, louder power that
+cost the whole turn. It had grown to seventeen elements against sixteen
+pieces, with a loadout before the match to decide which of them came.
 
-| | Piece | Power | Reach |
-|---|---|---|---|
-| 🔥 Fire | Pawn | **Burn** — every enemy piece on the eight squares around that pawn is destroyed | beside your Fire pawn — *and free whenever it captures* |
-| 💧 Water | Dark-squared bishop | **Water Shield** — any one of your pieces cannot be captured for a turn | anywhere |
-| ⚡ Lightning | Queen's knight | **Chain Attack** — the enemy you pick is destroyed, and the bolt arcs on to the best enemy a knight's move from THERE | a knight's move from your Lightning knight — *and free whenever it captures* |
-| ❄️ Ice | Queen's rook | **Freeze** — any one enemy piece cannot move for a turn | anywhere |
-| 🌿 Nature | Queen | **Vines** — any empty square cannot be entered or crossed for a turn | anywhere |
-| 🌑 Shadow | King | **Teleport** — to any empty square where it would be safe, once a match | anywhere safe |
-| ✨ Light | Light-squared bishop | **Cleanse** — clears every effect on the board; while charged, holds the enemy king's teleport shut | the whole board |
-| ⚙️ Metal | King's rook | **Bulwark** — one of your pieces cannot be destroyed, frozen, silenced or dragged for a turn. It can still be *captured* | anywhere |
-| 🕳️ Void | King's knight | **Silence** — one enemy piece keeps its charge and may not spend it for a turn | anywhere, *the enemy king included* |
-| ☀️ Sun | Pawn | **Solar Flare** — the first enemy on a line out of the pawn is destroyed, and your nearest spent piece gets its power back | three squares down any of the eight lines |
-| 🌙 Moon | Pawn | **Tide** — every enemy on one rank is pulled a square back towards their own side | any rank with room behind it |
-| 🩸 Blood | Pawn | **Bloodletting** — the pawn dies where it stands and takes an enemy piece with it | anywhere — *anything up to a rook* |
-| 👻 Spirit | Pawn | **Revive** — the piece you lost most recently stands back up, spent | any empty square in your own half |
-| 🌀 Gravity | Pawn | **Pull** — one enemy piece is dragged a square towards your pawn | anywhere with an empty square on the near side |
-| ⏳ Time | Pawn | **Rewind** — the move they just played is put back, and the turn they spent on it is gone | their last move, if it took nothing |
-| 💎 Crystal | Pawn | **Prism** — one of your pieces cannot be captured, and a power aimed at it rebounds onto its caster | anywhere |
-| 🌌 Space | Pawn | **Displace** — your pawn changes places with any other piece of yours | anywhere but the king |
+Gone whole: the mode and its opponent picker, `elemental.js` and its two
+sessions, thirty-four powers, the six board effects, the charges and the
+per-piece element map, the graveyard and the last-move record they were
+tracked beside, the power bar, the supers row, the all-powers panel, the
+loadout picker, the rules card, the corner glyphs and the effect washes on
+both boards, every burst, beam, shockwave and knock, the two synth sounds, and
+the FEN-only save path that existed because a power reloading the position
+threw chess.js' move history away.
 
-### The loadout
+Taken out whole for the reason Tournament and Speed Chess were: a mode off the
+form but left half-wired is worse than one still offered. Nothing on screen
+would admit it existed, every trace of it would be a trap for whoever read the
+code next, and the parts that stay get written around a shape nothing uses.
 
-**Seventeen elements, sixteen pieces.** They do not fit, and that is the game
-rather than a problem with it: before a match you choose which eight of the
-nine pawn elements you are bringing, and the one you leave out sits it out.
+Four things it had been keeping alive went with it, all of them load-bearing
+for nothing else by the end:
 
-The back rank is settled — one rook is Ice and the other Metal, one knight is
-Lightning and the other Void, the bishops split by the colour of square they
-are stuck on for the whole game, and the queen and king are Nature and Shadow.
-Only slots with more elements than squares get a chooser, so today that is the
-pawns and only the pawns; add an eighteenth element to `ELEMENTS` in
-[`js/elemental.js`](js/elemental.js) and it appears in the picker on its own,
-with no other code needing to hear about it.
+- **The variant hooks on `LocalSession`.** `setPosition()` replaced the board
+  without a move having been played, `publishState()` announced state the base
+  class knew nothing about, and `getAllLegalMoves()` was there so a rule that
+  subtracts moves could ask what the whole set was first. All three existed for
+  this variant and had no other caller.
+- **The bot's move vetting.** The search plays chess and had to have its answer
+  checked against a freeze or a patch of vines before it was played. With
+  nothing left to forbid a legal move, the check and its fallback table go.
+- **`FEN_ONLY_MODES`, and the two counts that read it.** A saved game's depth is
+  the length of its move list again, everywhere — the second branch existed
+  because a burn cleared the history out from under that list.
+- **`squareDistance()` and the Cleanse wave it timed.**
 
-Both sides play the same sixteen. One loadout rather than two is a fairness
-decision before it is a screen-space one: seventeen elements against a
-different sixteen would be a match-up rather than a game.
+The opponent picker went too. It was built for Speed Chess, outlived it as
+Elemental Chess's, and had no third user — so the `.time-option` classes it
+was drawn with now belong solely to the bot-difficulty row.
 
-This is also what ended the rule the variant started with. An element used to
-be a pure function of piece and square — pawns were Fire, rooks were Ice, and
-the bishops split by shade — which meant nothing had to be carried across a
-move, a capture or a save. It is a lovely rule with exactly one failing: it can
-only ever name as many elements as there are kinds of piece, which is seven.
-Elements are tracked per piece now, by the same bookkeeping the charges already
-needed, and they travel with a piece through a capture, a castle, a teleport, a
-swap, a drag and a promotion. A Fire pawn that reaches the eighth rank is a
-Fire queen.
-
-### Three of the seventeen were asked for in terms chess does not have
-
-Armour that reduces damage, health to spend on a stronger attack, a move taken
-back. There are no hit points on a chessboard and no damage numbers, so each of
-those is written as the nearest thing the board can actually say:
-
-- **Metal** — "armour boost / reduce damage" became *proof against powers, and
-  nothing else*. An armoured piece cannot be burned, struck, frozen, silenced
-  or dragged, and can still be taken by an ordinary move. That last clause is
-  the whole reason it is not simply a second Water Shield.
-- **Blood** — "sacrifice HP, boost attack" became *a piece for a piece, at any
-  range*. The Blood pawn dies where it stands; what it buys is a reach no other
-  power has. It is the one power paid for twice, which is why the queen is
-  beyond it until the super drops that cap.
-- **Crystal** — "reflect damage, create shield" became *a shield that throws
-  powers back*. Aim a power squarely at a crystal piece and the power is spent,
-  nothing happens to the piece, and the caster is destroyed instead. Catch one
-  in a blast and it simply does not burn — the rebound is for the square you
-  pointed at, or every wide power would become a coin toss.
-
-### The supers
-
-**Each element has a second power, and it costs your whole move.**
-
-| | Power | Super |
-|---|---|---|
-| 🔥 Fire | Burn — one pawn's ring | **Firestorm** — *every* charged pawn of yours in contact erupts at once, whatever element it carried, and each is spent |
-| 💧 Water | Water Shield — one piece | **Tidal Guard** — every piece you have is shielded for a turn |
-| ⚡ Lightning | Chain Attack — two pieces | **Thunderstorm** — the bolt arcs twice more: three pieces |
-| ❄️ Ice | Freeze — one piece | **Deep Freeze** — that piece and every enemy touching it |
-| 🌿 Nature | Vines — one square | **Overgrowth** — a three-by-three thicket |
-| 🌑 Shadow | Teleport — the king, to an empty square | **Shadow Swap** — the king changes places with any piece of yours |
-| ✨ Light | Cleanse — clears every effect | **Dawn** — clears every effect *and* gives a spent piece its charge back |
-| ⚙️ Metal | Bulwark — one piece armoured | **Ironclad** — your whole army is proof against powers for a turn |
-| 🕳️ Void | Silence — one piece shut | **Nullify** — their whole army is silenced, and every effect *they* laid is swept away while yours stand |
-| ☀️ Sun | Solar Flare — one line | **Solstice** — all eight lines fire at once, and every ally touching the pawn is recharged |
-| 🌙 Moon | Tide — one rank | **Spring Tide** — the entire enemy army is drawn back a square |
-| 🩸 Blood | Bloodletting — up to a rook | **Bloodrite** — the same bargain with the cap gone: the queen is on the table |
-| 👻 Spirit | Revive — the last piece lost, spent | **Resurrection** — the *best* piece you have lost, and it comes back charged |
-| 🌀 Gravity | Pull — one piece, one square | **Singularity** — everything of theirs within two squares falls inward |
-| ⏳ Time | Rewind — their last move | **Stasis** — the rewind, *and* every enemy standing in your half is frozen |
-| 💎 Crystal | Prism — one piece | **Refraction** — your whole army turns to crystal for a turn |
-| 🌌 Space | Displace — swap with one of yours | **Wormhole** — your pawn opens on any empty square and shoves the enemies around it aside |
-
-Every ordinary power is free — fire it and still play your turn — which is
-what stops the powers being a second game bolted on beside the chess. A super
-inverts that one rule and nothing else: it spends the charge the ordinary
-power would have spent, **and it is your whole turn.** You fire it instead of
-moving.
-
-That is the entire price, and it is deliberately enormous. Giving up a move is
-the most expensive thing a player can do in chess, so a super can be as loud as
-it likes without becoming the obvious choice — the question is never "is this
-good" but "is this better than the move I am not making". It needs no new
-economy either: no cooldowns, no second currency, nothing extra to keep on
-screen. And it scales evenly across all seven, which two charges of the same
-element would not — four of the seven have only one piece to draw a charge
-from.
-
-**A super cannot be fired while your own king is in check**, and is not
-offered there rather than being offered and refused. Passing the turn in check
-leaves a king the opponent can simply take, which is not a position chess has
-a word for.
-
-Two of them refuse for a second reason, and both are the same reason: a super
-that would change nothing is still a whole move. Firestorm is offered only
-from a pawn that is itself about to erupt, and **Dawn** only when something has
-actually been spent — it is the one and only way a charge ever comes back.
-
-**The bot does not use them.** It plays the ordinary seven, as it always has.
-Choosing to give up a move is a judgement about a whole position rather than
-about material, and a bot that spent its turn on a Tidal Guard while behind
-would be worse than one that never reached for it. That is a real gap and it
-is written down rather than hidden: against the bot, supers are yours alone.
-
-The bar is where they are fired — select the piece, and a second line appears
-under the power saying what the super is and what it costs. They are also on
-the rules card on the New Game form, because the bar can only tell you about a
-piece you have already picked up, and a second power per element that is only
-found by selecting the right piece is a feature most players would never meet.
-
-**All seven are chosen by you, and powers are free in both senses.** Using one
-does not cost the turn — fire a power and then move as normal. And a power may
-be pointed anywhere it makes sense: freeze any enemy piece, shield any piece of
-your own, grow vines on any empty square, from anywhere on the board.
-
-Burn and Chain Attack were capture-only for a long time, which made two of the
-seven rows in the panel permanently unpressable — loaded, explained, and
-impossible to do anything with. Being given something you may not use is worse
-than not having it, and worse than either is being shown it in a list of
-buttons. They are now aimed like the rest.
-
-**But not from anywhere**, and that is the one deliberate exception in the
-whole variant. They are the two that *destroy*, and a power that removes
-material from any square on the board for the price of one turn is not a power,
-it is a win button. So they keep the shape of the piece that owns them: fire
-reaches the eight squares around its pawn, lightning a knight's move from its
-knight. You have to walk the piece into position first, which is the cost, and
-it is paid in the currency the game is already played in — with the side effect
-that a charged enemy pawn is now a thing to keep your queen away from.
-
-Both still go off by themselves, free and unasked, when their piece captures.
-Two pieces for one charge either way: a knight that captures destroys what it
-took and the bolt arcs to one more, and a knight that fires instead takes
-nothing itself, so the chain runs twice from the square it struck.
-
-That second half used to be the other way round, and it was wrong. Reach was
-worked out from the caster's own lines — the first enemy down a rook's file,
-the first friend down a bishop's diagonal — so at the opening bell five of the
-seven powers had nothing to aim at. Both rooks were walled in behind their own
-pawns, the queen could not see an empty square, and a player who opened the
-panel to see what they had was told, correctly and uselessly, that almost none
-of it could be used. A resource you cannot spend is not a decision, and the
-sightlines were adding a second layer of chess on top of the one already being
-played rather than a layer of the variant.
-
-What limits powers instead is the thing that was always doing the real work:
-there are sixteen charges a side for the whole game, one per piece, they cannot
-be replenished, and only one standalone power may be used per turn. Ice is
-still two freezes a match and no more, and losing a rook still costs you one of
-them — so the pieces carrying the powers are still worth protecting, which is
-the part of the old rule that was earning its keep. The element itself is a
-pure function of the piece and its square, so nothing is tracked per piece
-except the charge, and a promoted piece simply arrives as whatever it has
-become, loaded.
-
-**All seven are on screen, and a power can be chosen instead of a piece.**
-*All powers* under the board opens a panel of the seven, each saying who
-carries it, how many of them are still charged, and why it can or cannot fire
-right now — *ready*, *nothing in reach*, *held shut*, *one power a turn*, *all
-spent*. The rows keep their places for the whole match, spent ones greyed
-rather than dropped, because the list is read with a thumb already moving and
-a row that vanishes when its last piece dies takes the five below it up a
-place.
-
-It is also the only way to read the rules mid-game: the card on the New Game
-form goes out of reach the moment you start, and the bar above the panel can
-only ever speak about the piece in your hand — which is the wrong half of the
-question before you have picked one up. "What do I still have" is not
-answerable from a board where a charge is a glyph the size of a fingernail
-and you have to know by heart which element each piece carries.
-
-Tapping a power works from the other end to tapping a piece, and the two meet
-in the middle. Choosing *Freeze* selects a charged rook and goes straight to
-aiming, exactly as if you had tapped it yourself, so both ways in cost the
-same two taps.
-
-It picks the rook for you, which it could not always do. While reach came off
-the caster's rays, two charged rooks were two quite different freezes and
-there was a whole stage of aiming devoted to asking which — *Which piece
-should use it?*, then *Tap a highlighted square*. Now that a power reaches the
-whole board, every rook offers the identical freeze, so that stage was asking
-the player to break a tie that does not exist. It is gone, and with it the
-view state and the two hint strings that existed only to tell the two taps
-apart.
-
-Three rules keep it chess underneath:
-
-**A king is never burned, frozen, shielded or struck.** Not only for balance.
-chess.js refuses a position with a king missing, and a frozen king in check is
-a player with no legal reply and no rule to say what that means. Keeping kings
-out of every effect is what leaves checkmate, stalemate and the draws exactly
-as chess defines them.
-
-**Fire and lightning will not burn away your own defence.** Removing an enemy
-piece can open a line that was pointing at *your* king all along — and the
-turn has already passed, so there would be no move left to answer it with. The
-blast is all-or-nothing: if it would leave you in check it simply does not
-happen, and a toast says why, because the evidence otherwise is a piece that
-is inexplicably still standing there.
-
-**Effects break rather than strand anybody.** Freeze, vines and shields only
-ever *subtract* moves, and subtracting can take the last one away — leaving a
-player who is neither mated nor stalemated with nothing they are allowed to
-do. Chess has no word for that and this does not invent one: if filtering
-would empty a player's move list, the effects working against them are
-cleared instead. So freezing can never stand in for checkmate, and the board
-a player is handed is always one they can play from.
-
-Vines block movement, not sight: a check passes straight through them.
-
-**Powers look like something happening.** Five things, and between them they
-are what turns a state change into an event:
-
-- a **burst** keyed to the element, on every square the power touched;
-- a **beam** from the piece that spent itself to each thing it reached, because
-  a burn on three squares is otherwise three fires with no author, and the pawn
-  that caused them is the one piece on the board with nothing happening to it;
-- a **shockwave** leaving each square;
-- the **pieces coming apart** rather than ceasing to be — fire flares them
-  white-hot and chars them to ash while they turn over, lightning overexposes
-  them and takes them in half the time;
-- and a **knock** on the whole board, kept for the only thing in the game that
-  removes material without a move being played.
-
-Aiming is in the element's colour too. Gold said "a power can reach here" and
-nothing else, which was true of all seven and so told you which one you were
-holding only if you could still remember what you had pressed. Ice now lights
-the board pale blue and fire orange, so the squares you may point at look like
-the thing that is about to happen to them — which is a better reminder than the
-word in the bar, because it is where you are already looking.
-
-This was missing rather than under-done. Everything a power does, it does to
-the state, and the board is handed the state afterwards with no record of how
-it got that way: a piece that has just been burned off the board and a piece
-that has just been captured leave behind exactly the same sixty-four squares.
-So a variant built out of fire and lightning had no fire and no lightning in
-it — the only evidence either had gone off was a toast, and a piece that was
-there a moment ago and now is not.
-
-That is also why the session sends the board *what* it destroyed —
-`{square, type, color}` — rather than only where. A capture can be animated
-from a photograph of the live square, taken before the repaint erases it,
-because the board is told about the move before the position changes. A power
-is not: the session publishes its new state from inside `usePower()`, so by
-the time the event arrives the repaint has already removed the pieces and
-there is nothing left to clone. The first version of this cloned anyway and
-drew nothing at all, on either board.
-
-Each element gets a shape as well as a palette, because a palette on its own
-is no use to somebody who cannot tell the blues apart. Ice is angular, a
-six-spoked crystal that lingers after the others have gone, because the piece
-it landed on is stuck for a whole turn. Water is round and washes outward in
-two rings, leaving a bubble over the piece. Lightning is a single hard frame
-and a white zigzag — two drop shadows, one violet for the look and one dark so
-that a white bolt is still visible on a light square. Fire flickers, throws
-embers, and leans at a different angle on every square it lands on, so eight
-touching burns read as eight fires rather than as a repeated sprite. Nature
-unfurls instead of bursting. Shadow is the only one that goes *inward*: a king
-that teleports has not exploded, it has stopped being there. And Cleanse, the
-one power that touches the whole board, goes off as a wave — sixty-four
-squares timed off their distance from the bishop that cast it, because sixty
-four squares flashing together reads as a rendering fault rather than as an
-event.
-
-It is decoration and is built as such. Gradients and transforms only, no
-images and no per-frame filters; one composited element plus at most two
-pseudo-elements a square; every keyframe moving nothing but `transform` and
-`opacity`. It is skipped entirely when animations are off or the reader has
-asked for less motion — the board is already correct without it. The duration
-lives once in `config.js` and reaches the stylesheet as `--cast-ms` on each
-burst, so the pieces that finish early do it by taking a stated fraction of
-that rather than carrying a second number to be kept in step by hand.
-
-The three standing effects were flat washes and are no longer: frost creeping
-in from the corners of a frozen square, a bubble that is never quite still
-over a shielded piece, leaves leaning the way something growing leans. Slow
-and small on purpose — this sits under a piece the player is trying to read,
-sometimes for two plies, and it has to survive being looked at for that long
-without becoming the thing being looked at.
-
-The rules live in `js/elemental.js` as pure functions over a FEN — no engine,
-no DOM, no session — and the state lives in `sessions/elemental-session.js`,
-which is a **mixin** rather than a class so that the variant and the bot can
-be stacked: `withBot(withElemental(LocalSession))`. The bot goes on the
-outside, so a capture's fire has finished before the bot is handed the
-position to think about.
-
-The bot plays ordinary chess and its powers are chosen by hand-written
-heuristics on top, checked in order: slip the king away when in check, take
-something off the board with fire or lightning when it is worth at least a
-knight, shield a rook or better that is hanging, freeze the best thing it can
-reach, cleanse when there is something worth washing off. It uses them sensibly
-rather than brilliantly.
-
-Destroying comes second because it is the only one of the five that is
-permanent — everything below it delays something by a turn. And it picks the
-caster rather than taking the first it finds, because four pawns in contact are
-four quite different burns: reading them out of a Set in insertion order had it
-setting light to a pawn while a queen stood beside the pawn next door.
-When an effect forbids the move its search came back with, the move is vetted
-and swapped for the best one the rules will accept, which costs it some
-strength on the handful of turns where effects are on the board and never
-costs it a move.
-
-A power that changes the board — fire, lightning, a teleport — does it by
-rewriting the FEN and reloading it, because chess.js has no way to say "this
-piece is simply gone". Reloading clears the move history, so these games are
-saved and restored by **FEN plus their charges and effects**, and storage.js
-skips the PGN cross-check it runs on everything else. Undo is already
-unavailable app-wide, which is what makes that affordable.
+**The bot is untouched.** Its strength was always a per-game field with the
+ordinary constants as its default, and only the elemental session ever reached
+past the search — through `botUsePower()`, a hook nothing defines any more.
 
 **Online multiplayer** — create a room, share a six-character code, and play
 across two devices. Live move sync, per-device board orientation, opponent
@@ -1059,7 +770,6 @@ chess-game/
 │   ├── firebase-client.js        One app, one sign-in, shared by the two things that connect
 │   ├── social.js                 Friend codes, requests, friends, presence
 │   ├── chess-engine.js           Defensive wrapper around chess.js
-│   ├── elemental.js              Elemental Chess rules, as pure functions over a FEN
 │   ├── game-controller.js        Orchestration, selection, autosave
 │   ├── board-shared.js           Square list, FEN parsing, labels — used by BOTH boards
 │   ├── board.js                  Flat DOM board: rendering and interaction
@@ -1072,8 +782,6 @@ chess-game/
 │   ├── sessions/
 │   │   ├── local-session.js      Provider — two players, one device
 │   │   ├── bot-session.js        The bot, as a mixin over any base provider
-│   │   ├── elemental-session.js  Elemental Chess, as a mixin over any base
-│   │   ├── elemental-bot-session.js  Those two, stacked
 │   │   └── firebase-session.js   Phase 2 provider — two devices
 │   └── vendor/
 │       ├── chess.js              chess.js 1.4.0 ESM build (vendored)
@@ -1740,7 +1448,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, chat, emotes, friends and presence **110**, Elemental Chess **236**, its powers panel a further **113**, all seven powers being chosen and what one looks like going off **43**, the seven supers **48**, three bot difficulties **48**, long names **56**, a confirmation raised over a sheet **40**, renaming mid-game **48**, the emote bubble **14**, with **15** more run against the deployed site and the real Firebase project rather than a stand-in. The groups were run separately, so
+Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, chat, emotes, friends and presence **110**, three bot difficulties **48**, long names **56**, a confirmation raised over a sheet **40**, renaming mid-game **48**, the emote bubble **14**, with **15** more run against the deployed site and the real Firebase project rather than a stand-in. A further **440** covered Elemental Chess — the variant, its powers panel, the powers being chosen, and the supers — and went with the mode; they are not counted here because there is nothing left for them to run against. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -1765,16 +1473,12 @@ the totals are reported separately rather than as one number:
 | **Pictures on online seats (Chromium ×2)** | **36** | **Two devices against a database that enforces the shipped rule text — the cap and the pattern are read out of `firebase/database.rules.json` itself, so client and rules are checked against each other rather than against anyone's memory. A photograph over the budget at 128px comes back 96px and inside it; one already inside is not re-encoded a second time; a remote URL, an SVG and nothing at all are all refused. Two players create, join, and see each other's face on both devices, and the room document carrying both faces is 9,475 bytes. Then the same run against rules that do NOT know the field: the write is refused, the room is created anyway without the picture, both players are told why, and the game is playable — the failure that this feature caused the first time it shipped. Zero console errors** |
 | **Background (Chromium)** | **32** | **All four grounds: each repaints the page, marks only itself checked, and previews itself in the picker rather than the one in force; the choice survives a reload and is proved to be on the root element BEFORE any module runs (app.js blocked, the attribute already set), so it cannot flash the default first; an unknown id out of storage lands on the default. The swatches are measured rather than admired: each must show a card that separates from its own ground (fill and outline both), and no two cards may be within 8 points of each other — the check that a paint-chip preview would fail even while every ground was technically a different colour. Contrast is computed from the token values in the stylesheet itself for every background — body text AAA on the ground and on a panel, muted text AA, the accent legible — rather than eyeballed** |
 | **Hover feedback (Chromium)** | **20** | **Measured as a pointer, as a finger, and as someone who asked for less motion. With a pointer: buttons, icon buttons, the picture pickers and the swatches all lift exactly 2px and settle back when it leaves, the gold buttons glow gold rather than grey, the sheen is a real gradient behind the label, and hovering the chosen swatch does not strip the outline that marks it chosen. Locked Undo stays flat and shadowless while Flip beside it lifts, and a press beats the lift. On a touch screen the media query does not match, so a tapped button is not left floating. Under reduced motion the lift does not happen at all and the sheen is gone rather than parked mid-sweep. Caught two real specificity bugs: the gold glow was losing to the generic hover rule, and the reduced-motion override was losing to both** |
-| **Elemental Chess (Chromium)** | **233** | **The variant end to end, on both boards. The form: the mode, its opponent picker — inherited from Speed Chess and now the only user of it — and all seven elements on the rules card. Then the elements themselves, which are a pure function of piece and square — c1 Water and f1 Light for White, c8 Light and f8 Water for Black, so each side gets one of each. Thirty-two charges handed out and drawn on the board. Freeze: a rook still walled in behind its own pawns can freeze on move one and reaches every enemy piece but the king — fifteen of them, counted — the aim highlights exactly that set and no more and suppresses the move dots while it does, a burst plays on the frozen square AND on the rook that cast it and takes itself off the board again, the ice lands, the rook is spent, it is STILL your move, a second standalone power that turn is refused, the frozen piece offers no destinations and says why when asked directly, and the ice expires as your next turn begins. Fire: a pawn takes and three enemy pieces around it burn while its own pawn beside them does not, and a king beside the blast survives. Lightning: the arc picks the rook over the pawn, by value. Shadow: a charged enemy LIGHT bishop holds the teleport shut and the bar says so, a dark-squared one does not, and the real thing slips a checked king to a safe square — none of them on the file it was being checked down — for free, losing castling rights on the way. Water, Nature and Light: a shielded rook cannot be captured and is not even offered, vines block landing on a square AND sliding across it while a square short of them is still fine, and Cleanse fires with no target and clears the board. The bookkeeping around the three awkward moves: castling carries the rook’s charge to f1, en passant kills the charge of a pawn taken from a third square, and a promotion arrives loaded. A save and a reload bring back the position, the spent pieces, the effects and the ply they expire against. The bot freezes the most valuable thing its rook can see, spends the charge, and still moves afterwards; and it reaches for its king’s teleport when that is the way out of check — which is how the first version of that test was found to be wrong rather than the code. Two rules that keep the position legal get their own checks: a burn that would open a line onto your OWN king does not happen at all and costs no charge (the same capture with the bishop removed burns normally), and effects that would leave a player with no legal move break instead of stranding them. Restart and Rematch hand out fresh charges, clear the effects and put the ply back to zero — without which a rematch inherits the previous game’s spent pieces, invisibly, until somebody taps one. And the Continue dialog counts from the position rather than the move list, because a burn clears chess.js’ history and a game seven half-moves deep was offering to resume “0 moves played”. Both were found by these tests. Plus the a11y labels, the toasts, the layer tearing down cleanly when the next game is an ordinary one, the bar fitting and keeping a real tap target at 320, 390 and 768 wide, and a regression pass over all five older modes. Zero console errors. The phone pass that lives in this group also measures the chat button, which is where the room bar's one drawn icon gets checked for being drawn: an SVG and no emoji in the shipped markup, 22px like the icons either side of it, its `fill` resolving to the same colour as the button rather than to a colour of its own, centred in its circle to under a pixel, the circle still 34px, and the unread badge still on its corner. The centring assertion failed the first time it was written, at exactly one pixel, which is how the browser's default button padding was found squeezing a 22px icon into a 20px content box** |
 | **The deployed site (Chromium ×2 + real project)** | **15** | **The published URL on a phone viewport, the real SDK from the CDN, the real rules: two anonymous accounts claim two friend codes, one adds the other by code, the request arrives with the right name, accepting writes both lists, then a real room with a real message and a real emote crossing between them, a move landing after the conversation, and presence moving to "in a game" on the friend's screen. It removes its own rooms, profiles, presence, friendships and handles afterwards, so the database is left as it was found. Caught a real bug: a friend whose presence had not arrived yet was being announced as offline** |
 | **Chat, emotes, friends, presence, invitations (Chromium ×2–3)** | **110** | **Fifteen of them read `firebase/database.rules.json` itself and assert what it says — that a message can only be written as yourself *or left exactly as it was*, that a colour must match the seat you hold, that a friends list is readable only by its owner, that somebody may add themselves to yours only while your request stands, that a request cannot be sent to yourself, that an invitation may only be written by somebody already on the list while withdrawing one is always allowed, and that the profile-picture rule is byte-for-byte the seat-picture rule. The rest drive two and three real browsers against a database that enforces that rule text. Two players talk: what you send lands on your own side and the other side, attributed to the seat, counted as unread while the sheet is shut and cleared when it opens. An emote arrives named and is drawn from the receiver's own list; with the sheet open it stays in the log on **both** devices, and only with the sheet shut does it pop on the card of whoever sent it. That pair replaced an assertion that checked for a bubble while the sheet was open — a bubble nobody could see, since the sheet is drawn over the cards, so it passed for as long as the bug existed and would have gone on passing. `<img src=x onerror=alert(1)>` arrives as characters and creates no element. **A move after a conversation is not refused** — the check the "unchanged" rule clauses exist for, and the one that would have broken every game after the first message. A log of 60 is shown 40 deep, oldest dropped, and sending into a full log trims the room rather than growing it. Blank, whitespace-only, over-long and unknown-emote sends are each refused for their own reason, and a second send in the same instant is refused for the cooldown. With the setting off the button is gone, both sends refuse, and nothing arrives on screen. Two devices claim two different friend codes, each handle points back at its claimer, a request crosses with the right name, accepting writes both lists and clears both cleanups, and removing clears both. Presence follows a game: starting one moves a friend to "In a game" on the other device without anybody reopening the panel. A reload reclaims the same code rather than a second one. Then the whole thing again against rules that know none of it: the game is still playable and the move still crosses, the message is refused with an explanation, and the friends panel says the rules need deploying rather than sitting empty. It also holds the mode list in place: the five modes in their intended order, and choosing any one of them marking that one and only that one — measured from computed styles after the transition has finished, because a row caught mid-fade looks selected and this project has been fooled by that twice. That check found a real bug: Online Multiplayer could not be highlighted at all, because the rule keyed on a class its label had never carried. Then invitations, on three browsers at once: a friend who is about can be asked, one who is not on the list cannot — and a third browser going round the client and writing straight at the database is refused by the rules, which is the check that matters, since the client is the half an attacker replaces. One tap hosts a room, stands in it, gets the panel out of the way, and writes an invitation naming that room, under the right name, carrying nothing else; the row for that friend then says "Invited" and will not send a second. Cancelling the room withdraws it rather than leaving it pointing at a room that has gone. Asked again, the other phone shows a count with the panel shut, the invitation named and offering both answers, and Join seats both players in that one room with no code typed anywhere — after which the invitation is deleted and the count is gone. An invitation seeded three minutes old is not offered at all, neither in the panel nor in the state behind it. And the only write refused in the whole run is the one that was supposed to be. Zero console errors** |
-| **The powers panel (Chromium)** | **113** | **All seven elements listed in game, in a fixed order, with counts read off the real board — eight pawns, two knights, two rooks, one queen, one king, and one bishop each for Water and Light. Each row's state is checked against a position rather than asserted: every power that has something to point at is live from move one now that reach is no longer the caster's own lines, Teleport alone is held and says by what — their charged Light bishop — and the two that destroy say "on capture" until their piece is in position, which is the one true thing left to say about them. Then firing one by POWER: with both rooks charged it picks one without asking, selects it on the board exactly as a tap would, points at both enemy rooks and not at their king, and the hint asks for the target rather than for the piece — after which the ice lands, that rook alone is spent, the other keeps its charge, a burst plays, and it is still your move. With one rook left it is the same two taps. Every row then says "one power a turn", and pressing one explains rather than doing nothing. Not your turn: the rows stay up as a reference, greyed and unpressable, counts blank rather than showing you the bot's hand, and a forced click starts no aim and plays no move. The same on the 3D board, in an ordinary game where none of it may appear, and after a resignation where the whole bar goes. Cleanse, which is aimed at nothing, fires on the one tap instead of arming a mode there is nothing to point at — and goes off as a wave across all sixty-four squares, checked for exactly that: sixty-four bursts, the full one on the bishop and the plain one everywhere else, staggered rather than fired together. The 3D board gets the same power put through the whole chain, twice, because sixty-four bursts each holding a material of its own is where a leak would show. Then the whole panel measured on three phones at 320, 390 and 768 wide: seven rows present, every one of them a 44px tap target, nothing spilling out of the list, no sideways scroll, and the line naming who carries each power staying on one line rather than wrapping into the row below. The bar’s own hint is measured for clipping there too, because the All powers button took room off a line that has always been one line with an ellipsis — the resting wordings were shortened to fit rather than left to trail off mid-word at 320. Caught a real bug of a kind nothing else here would have: see (14)** |
 | **The emote bubble (Chromium)** | **14** | **A duration, so it is measured rather than trusted: the bubble is fired and watched at 50ms intervals until it goes, and it has to still be there well past the old 2.6s and to leave within a small margin of the configured time — it lives 5,014ms against a configured 5,000. The stylesheet is checked to READ the duration rather than repeat it, no emote animation is left carrying a hard-coded one, every `var()` fallback matches the constant, and the custom property is confirmed on the root of a running page. Plus the things a longer bubble must not break: it still appears at once, carries the right glyph, and a second emote replays the animation instead of sitting still because the class was already on** |
-| **All seven, chosen (Chromium)** | **43** | **Burn and Chain Attack being AIMED rather than only going off, which is the half of the variant that did not exist. Every row pressable at move one; the two that destroy correctly not ready there, because nothing is in contact yet, and saying the thing that is still true of them — pressing one explains rather than doing nothing, and starts no aim. Then in contact: Burn aims from the pawn that is actually beside something and offers only the enemies beside THAT pawn, and firing it takes the whole ring rather than the one square aimed at, spends that pawn's charge, and leaves it your move. Chain Attack aims from the knight, offers only what is a knight's move away, and takes two pieces for one charge — the one struck and the one the bolt arcs on to — while the knight stays where it fired from. The rule that keeps the position legal gets its own check, from a position where burning would open a file onto the caster's OWN king: refused, with a reason, and costing no charge. And the half that did not change is checked too — a Fire pawn that captures still burns without being asked. The visible half is caught mid-blast: three pieces drawn coming apart with the right element and the right piece type, a beam from the pawn that did it, a shockwave on every square reached, the board knocked, the aiming colour put away — then all of it gone a second and a half later. With reduced motion asked for, none of it is drawn at all and the power still happens. The bot reaches for them too, in a position where taking the queen by hand costs it the knight: it takes her with the bolt instead, which the CHARGE is what proves — a knight that captures carries its charge to the square it lands on and one that fires spends it. Then the whole thing again at 320 wide, where the bar's hint is about twenty characters and "Fires free when this piece captures" arrived as "Fires free when this piec…"** |
 | **Renaming a player mid-game (Chromium ×2 + real project)** | **48** | **Two browsers in one real room. The control appears on exactly one card and it is the seat that device is sitting in — checked against the colour rather than the position — while the same card on the opponent's screen has no button at all. The name becomes a box holding the name it already had; Enter commits, the card updates, and the OTHER browser shows the new name without reloading. A move still plays afterwards, so the rename did not disturb the game. Escape abandons the edit instead of saving it, a blank name is refused with a reason, and the new name is written to the stored profile for the next room. The room is deleted afterwards, so the database is left as it was found. Then the offline modes, each checked for the cards it should offer rather than for a blanket answer: local two-player offers BOTH, and a bot game offers yours and not the bot's. In each, the rename goes in through the real control, lands on the card and in the game state, and survives a reload through the autosave. The bot's own seat refuses a rename asked for directly, and its name is untouched afterwards. And a local rename leaves the stored online profile alone, which is the one way this could have quietly changed who you are to your friends** |
 | **A confirmation over a sheet (Chromium)** | **40** | **Which of two dialogs is in front, asked the only way that means anything: `elementFromPoint` in the middle of the panel, on the Remove button, and in the corner of the screen. All three came back `modal-friends` before the fix — the question was up, drawn, and completely unreachable. Driven through the real × on a real friend row, with the row seeded rather than fetched, because which dialog is in front needs no database. The row carries whose it is for a screen reader, the dangerous button is toned dangerous and says "Remove" rather than "OK", and the sheet stays open underneath. Then the bookkeeping the stacking hid: cancelling closes the question and not the sheet, and leaves the page behind locked — it used to unlock under an open sheet — while Cancel still answers false, which is what stops the removal. Escape unwinds one layer at a time, the sheet coming back still open and still locking, and only the second press lets the page behind scroll. Confirming answers true. The same again over the CHAT sheet, which is also later in the markup, where the chat has to keep counting as open underneath: a message arriving while a confirmation sits over the log is not news. And the whole thing at 320, where both buttons are 44px and reachable by a finger, and the dialog fits without a sideways scroll. The seed being wiped mid-suite by the app's own social repaint is why the rows go back in before every press: the first press worked and the second found an empty list, which read exactly like a friend having been removed by CANCELLING** |
-| **Player vs Bot, at three difficulties (Chromium)** | **48** | **That the choice REACHES the search, and survives everything that could quietly drop it. The list first, read out of the shipped config: three levels in order, each thinking longer and allowed deeper than the one below, Medium the default and today's bot BY REFERENCE rather than by copied numbers — which is what keeps "the bot you already know" true rather than true for now. Then the picker: offered for Player vs Bot and nowhere else, Medium chosen for you in the class AND in aria-checked, one label per button saying what it means, 44px targets, and choosing Hard moving both the mark and the announcement. Then three real games, one per level, each checked for carrying its level in the state and naming the seat for it — the only place the choice is visible once the form has gone. Hard, being the one allowed the longest search, is made to actually answer. Then the half that is easy to get wrong: the level written into the save record, read back after a reload, and a level from a build that had more of them falling back to Medium rather than leaving a bot with no settings, which would be a bot that cannot think rather than one of the wrong strength. The Elemental bot is checked to carry NO level and stay plain "Bot", because claiming a difficulty nobody was offered is worse than showing none. Timings are deliberately not asserted: "Hard thinks longer" is true of a budget, not of a wall clock on a shared box** |
-| **The seven supers (Chromium)** | **48** | **A second power per element, each costing the whole turn — so what is proved over and over is that the turn actually changes hands. A super that fired and left it your move would not be a bigger power, it would be a broken one. The table first, read out of the shipped rules: seven supers for the same seven elements, none of them named after the power it replaces. Then the bar: each of six pieces offering its super beside its ordinary power with the right element colour, the price said in the same three words every time, and a 42px target. The two that refuse are checked for refusing — a Fire pawn out of contact is offered no Firestorm, and Dawn is not offered while nothing has been spent, because both would cost a whole move and change nothing. Then all seven fired through the real button: Firestorm taking every piece its pawns touch and spending every pawn that erupted, Thunderstorm chaining three, Deep Freeze caught by the SHAPE it freezes rather than the count, Tidal Guard covering everything but the king, Overgrowth growing nine squares, Shadow Swap putting the king where the rook was, and Dawn giving a spent rook its charge back while washing the board clean. Every one of them checked for handing the turn over. Then the rules that keep it chess: a super is not even offered while your king is in check, firing one anyway is refused and costs neither the turn nor the board, one cannot follow an ordinary power in the same turn, and after one there is no move left to make. Caught a real bug — the first version asked whether the power had been AIMED to decide whether to sweep the whole board, so a Firestorm that took two pawns set light to all sixty-four squares** |
+| **Player vs Bot, at three difficulties (Chromium)** | **48** | **That the choice REACHES the search, and survives everything that could quietly drop it. The list first, read out of the shipped config: three levels in order, each thinking longer and allowed deeper than the one below, Medium the default and today's bot BY REFERENCE rather than by copied numbers — which is what keeps "the bot you already know" true rather than true for now. Then the picker: offered for Player vs Bot and nowhere else, Medium chosen for you in the class AND in aria-checked, one label per button saying what it means, 44px targets, and choosing Hard moving both the mark and the announcement. Then three real games, one per level, each checked for carrying its level in the state and naming the seat for it — the only place the choice is visible once the form has gone. Hard, being the one allowed the longest search, is made to actually answer. Then the half that is easy to get wrong: the level written into the save record, read back after a reload, and a level from a build that had more of them falling back to Medium rather than leaving a bot with no settings, which would be a bot that cannot think rather than one of the wrong strength. A bot with no level chosen is checked to stay plain "Bot", because claiming a difficulty nobody was offered is worse than showing none. Timings are deliberately not asserted: "Hard thinks longer" is true of a budget, not of a wall clock on a shared box** |
 | **Long names (Chromium)** | **56** | **The cap is one number and everything agrees with it: all four name boxes read it out of config, the four rules in `database.rules.json` carry it, the markup fallbacks match, and no `slice(0, 20)` is left anywhere — checked by reading the shipped files rather than by remembering. Then a 37-character name through the real form: typed whole, over the cap stopped AT the cap rather than let run, carried into the game intact, held whole in the card's DOM and offered in full on hover where the card clips it, and back whole after a reload. The card is measured at 320 and 390 — one line still, inside its own card, no sideways scroll. The stored profile keeps it at full length with Firebase cut off, which is where the cap actually lives. And the state every existing installation will be in the moment this ships: client at 120, deployed rules still at 20 — the friends hub still comes up, the box still shows the whole name, and the panel says plainly that the rules need deploying and names the file. Waited for rather than slept through, because a refused write costs a real round trip and a fixed wait landing early reads as "no hub at all" — which is exactly how this was briefly mistaken for a regression. Then the whole of it again with a name of MANY WORDS filled up to the cap rather than counted out to it, because a run of 120 x's proves the field holds 120 characters and nothing about whether a person could use it: fifteen words typed in full, reaching the seat with every word intact, clipped on the card rather than growing it, the whole sentence on hover, and at 320 and 390 still one line, still inside its own card, still no sideways scroll. Including through the box the complaint actually came from — the pencil on your own card, which gets the cap from config like the other four and takes a sentence without trimming it. And the three places a name is drawn are read out of the shipped CSS rather than trusted, because two of them only ever appear in a room with a second person in it. Then the refusal itself: a long name turned down online is called too long and told which file to deploy, a short one keeps the sentence that fits it, and the guess between them is made against a named floor rather than a bare 20. And last the pill that has to carry it, measured at 320 rather than looked at — a toast may use the width of the phone rather than half of it, is centred within it to the pixel, and the one naming a file stays on the screen instead of hanging off the side it was centred within. That measurement is the whole of how (16) was found** |
 | **Your picture from the friends panel (Chromium)** | **38** | **The picker is in your own card, says what it does, and imports a real PNG through the real pipeline. It is ONE picture: the same data URL lands on the online form’s picker, in storage and on the hub, setting it in either place shows in both, and clearing it in either clears both. It survives a reload. Then the same again with every remote Firebase request aborted — the hub up, not connected, its own copy of the picture null — where the picture has to stay put on both pickers and in storage, which is the bug that pass caught. Plus a regression pass proving the two seat pickers are still separate slots: a picture on Player 1 reaches the white seat and nothing else** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
@@ -1900,9 +1604,12 @@ And two from building that WebGL board:
    is that a piece has to be identifiable in the projection the camera
    actually produces, and for a board seen from above that is the plan view.
 
-And two from Elemental Chess, both of the same shape — a thing that resets
-itself and a thing that counts, neither of which the variant remembered to
-tell the rest of the app about:
+And four from Elemental Chess. **That mode has since been removed**, so the
+files and methods named below are no longer in the tree — the entries stay
+because the lessons are about layering, caching and what a view may ask, none
+of which left with the variant. The first two are the same shape: a thing that
+resets itself and a thing that counts, neither of which the variant remembered
+to tell the rest of the app about.
 
 11. **A rematch inherited the previous game's spent charges.** Restart and
    Rematch rebuild the position in `LocalSession`, which the elemental layer
@@ -1943,8 +1650,8 @@ round trip lands, read as though it were empty because there is nothing there:
    checks the picture is still there — which it is not, against the version
    without this fix.
 
-And one from the powers panel, which is the only bug here that was invisible
-by design:
+And one from the powers panel — also gone with the mode — which is the only
+bug here that was invisible by design:
 
 14. **Choosing a power from the panel froze the entire UI, silently.** The
    panel can ask which piece should cast, and in that moment there is no
@@ -1973,8 +1680,8 @@ by design:
    null guard stayed. It costs one condition, and a state that cannot happen
    today is a poor thing to have built a renderer around twice.
 
-And one from making the powers free, which had been sitting there the whole
-time being hidden by a rule that has now changed:
+And one more from the same mode, which had been sitting there the whole time
+being hidden by a rule that changed underneath it:
 
 15. **The panel flashed the bot its own hand.** The elemental session refuses
    to answer questions about a colour this device may not move — which is what

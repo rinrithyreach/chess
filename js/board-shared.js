@@ -60,25 +60,6 @@ function buildSquareList() {
 
 export const ALL_SQUARES = buildSquareList();
 
-/**
- * How many squares apart two squares are, counting a diagonal step as one.
- *
- * Chebyshev rather than Euclidean, because what it is used for is the Cleanse
- * wave: each square goes off a fixed step later than the ring inside it, and
- * on a grid the ring inside it is the one a king could step to. Euclidean
- * would make the diagonals lag, which turns an expanding square of light into
- * an expanding cross.
- *
- * Here rather than in either board, because both of them draw that wave.
- */
-export function squareDistance(a, b) {
-  if (!a || !b) return 0;
-  return Math.max(
-    Math.abs(FILES.indexOf(a[0]) - FILES.indexOf(b[0])),
-    Math.abs(RANKS.indexOf(a[1]) - RANKS.indexOf(b[1])),
-  );
-}
-
 /** Light or dark, computed from the coordinate rather than the array index. */
 export function squareShade(square) {
   const fileIndex = FILES.indexOf(square[0]);
@@ -120,43 +101,16 @@ export function boardFromFen(fen) {
 }
 
 /**
- * What an effect is called out loud.
- *
- * Words rather than the emoji the board paints: a screen reader announcing
- * "ice cube" would be describing the picture instead of the game.
- */
-const EFFECT_WORDS = {
-  frozen: 'frozen',
-  shield: 'shielded',
-  vines: 'vines',
-  armour: 'armoured',
-  crystal: 'crystal shielded',
-  silenced: 'silenced',
-};
-
-/**
  * The label a screen reader reads for one square.
  *
- * `elemental` is the per-square description the session builds in Elemental
- * Chess ({element, charged} plus any effect), and is absent in every other
- * game — where this reads exactly as it always has. When it is there, the
- * order is what a player needs in the order they need it: where, what, what
- * it is, whether it can still do anything, and what is being done TO it.
+ * Where, what is standing there, and what the next tap would do with it.
  */
-export function describeSquare(square, piece, target, elemental = null) {
+export function describeSquare(square, piece, target) {
   const who = piece
     ? `${piece.color === WHITE ? 'white' : 'black'} ${PIECE_NAMES[piece.type]}`
     : 'empty';
 
   const extra = [];
-  if (elemental?.element) {
-    extra.push(elemental.element);
-    // Only the pieces that still have something say so. Announcing "spent" on
-    // every piece on the board by move thirty is noise, and the interesting
-    // half is the one that is still loaded.
-    if (elemental.charged) extra.push('charged');
-  }
-  if (elemental?.effect) extra.push(EFFECT_WORDS[elemental.effect] ?? elemental.effect);
   if (target) extra.push(target.isCapture ? 'capture' : 'move here');
 
   return [square, who, ...extra].join(', ');

@@ -15,17 +15,12 @@ import {
   WHITE,
   BLACK,
   GAME_MODE,
-  FEN_ONLY_MODES,
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
   log,
   warn,
 } from './config.js';
 import { isAvatar } from './avatar.js';
-// The element table, for naming a power in a toast and for telling the two
-// that also go off on a capture from the five that only ever wait to be aimed.
-// Pure data, no engine.
-import { ELEMENTS } from './elemental.js';
 import { LocalSession, SESSION_ACTION } from './sessions/local-session.js';
 import * as storage from './storage.js';
 import sound, { SOUND } from './sound.js';
@@ -39,29 +34,18 @@ export const EVENT = {
   DRAW_OFFER: 'draw-offer', // a draw has been offered to the opponent
   MOVE: 'move', // a move was just committed (for animation/sound)
   CHAT: 'chat', // the opponent said something, or sent an emote
-  POWER: 'power', // an elemental power went off
 };
 
 /**
  * How many half-moves a saved game is into itself.
  *
- * Normally that is the length of its move list. In a mode whose position is
- * saved by FEN, it is not: a power that changes the board reloads the
- * position, which clears chess.js' history, so the stored move list reaches
- * back only as far as the last power. A game nine moves deep would offer to
- * resume "3 moves played", which is not a rounding error but a different game.
- *
- * The FEN carries the answer exactly — a full-move counter and whose turn it
- * is — so for those modes it is counted from the position instead.
+ * The length of its move list, in every mode there is. This used to have a
+ * second branch that counted from the FEN instead, for a mode whose powers
+ * reloaded the position and cleared chess.js' history out from under the move
+ * list; with that mode gone the list is authoritative again everywhere.
  */
 function savedMoveCount(saved) {
-  const listed = Array.isArray(saved.moves) ? saved.moves.length : 0;
-  if (!FEN_ONLY_MODES.includes(saved.mode)) return listed;
-
-  const [, turn, , , , fullmove] = String(saved.fen ?? '').split(' ');
-  const moveNumber = Number(fullmove);
-  if (!Number.isFinite(moveNumber) || moveNumber < 1) return listed;
-  return (moveNumber - 1) * 2 + (turn === BLACK ? 1 : 0);
+  return Array.isArray(saved.moves) ? saved.moves.length : 0;
 }
 
 export class GameController {
@@ -89,16 +73,6 @@ export class GameController {
     legalTargets: [],
     pendingPromotion: null,
     lastRejected: null,
-    /**
-     * The power the player is currently aiming, or null.
-     *
-     * Elemental Chess only. Shaped {element, from, targets} — the same shape
-     * as a selection, deliberately, because aiming a power at a square and
-     * moving a piece to one are the same gesture as far as the board is
-     * concerned, and giving them the same shape is what lets one tap handler
-     * serve both.
-     */
-    aiming: null,
   };
 
   #settings = { ...DEFAULT_SETTINGS };
@@ -358,7 +332,6 @@ export class GameController {
     mode = GAME_MODE.LOCAL,
     startFen,
     botLevel = null,
-    loadout = null,
   } = {}) {
     storage.clearGame();
     this.#resetView();
@@ -373,9 +346,6 @@ export class GameController {
       mode,
       startFen,
       botLevel,
-      // Which elements this match is being played with. Ignored by every
-      // session but the elemental one, which is the only one that has any.
-      loadout,
     });
 
     this.#started = true;
@@ -563,15 +533,6 @@ export class GameController {
       return;
     }
 
-    // A power being aimed takes the next tap, whatever it lands on: one of its
-    // targets fires it, and anything else calls it off. It has to come first,
-    // ahead of selection, or tapping the enemy knight you were aiming at would
-    // be read as trying to pick up somebody else's piece.
-    if (this.#view.aiming) {
-      await this.#aimAt(square);
-      return;
-    }
-
     const selected = this.#view.selected;
 
     if (selected === square) {
@@ -612,367 +573,11 @@ export class GameController {
     this.#view.selected = square;
     this.#view.legalTargets = this.#session.getLegalMoves(square);
     this.#view.lastRejected = null;
-    this.#view.aiming = null;
-  }
-
-  // -----------------------------------------------------------------------
-  // Elemental powers
-  //
-  // Every method here is inert in an ordinary game: the session simply does
-  // not define getPower or usePower, so getPower() below returns null and
-  // everything downstream of it stops. Nothing in the standard game has to
-  // know the variant exists.
-  // -----------------------------------------------------------------------
-
-  /**
-   * Say what a capture's power just did.
-   *
-   * The three things worth hearing, and nothing else: it went off and took
-   * this much with it, it went off and there was nothing in reach, or it did
-   * not go off because it would have exposed your own king — which is the one
-   * a player cannot possibly work out from looking at the board, since the
-   * evidence is a piece that is still standing there.
-   */
-  #announcePower({ element, from, withheld, targets, destroyed = [] }) {
-    const info = ELEMENTS[element];
-    if (!info) return;
-
-    if (withheld) {
-      this.#toast(`${info.emoji} ${info.power} held back — it would have opened a line on your own king`, 'warn');
-      return;
-    }
-    if (!targets?.length) return;
-
-    const count = targets.length;
-    this.#toast(`${info.emoji} ${info.power} — ${count} ${count === 1 ? 'piece' : 'pieces'} destroyed`);
-    sound.play(SOUND.BLAST);
-    this.#emit(EVENT.POWER, { element, from, targets, destroyed, sweep: false });
-  }
-
-  /** The power offered by the piece on a square, or null. */
-  getPower(square) {
-    if (!square) return null;
-    return this.#session.getPower?.(square) ?? null;
-  }
-
-  /** The power the currently selected piece is offering, or null. */
-  getSelectedPower() {
-    return this.getPower(this.#view.selected);
-  }
-
-  /**
-   * The SUPER the currently selected piece is offering, or null.
-   *
-   * Null in every mode but Elemental, and null while your king is in check —
-   * the session decides that, because "may I give up my move" is a rule of
-   * the variant rather than a question about the view.
-   */
-  getSelectedSuper() {
-    const square = this.#view.selected;
-    if (!square) return null;
-    return this.#session.getSuper?.(square) ?? null;
-  }
-
-  /**
-   * Change the name on your own seat, mid-game.
-   *
-   * Inert in every mode but online: no other session defines setSeatName,
-   * because no other mode has a name that somebody else is reading off a
-   * different screen.
-   *
-   * The new name is written to the stored profile as well, so the next room
-   * is created under the name you have just chosen rather than the one you
-   * had already decided was wrong.
-   */
-  async renameSeat(color, name) {
-    if (!this.#session.setSeatName) return { ok: false, error: 'Not this game' };
-
-    const result = await this.#session.setSeatName(name, color);
-    if (!result.ok) {
-      this.#toast(result.error ?? 'Could not change that name', 'warn');
-      return result;
-    }
-
-    // Online, the name IS your identity to everybody else, so it is kept for
-    // the next room. Locally the two names belong to the game in front of you
-    // — they are typed fresh on the form each time, and quietly overwriting
-    // your online profile because you renamed Player 2 would be a surprise.
-    if (this.#state?.online) storage.saveProfile({ name: result.name });
-
-    this.#toast(`Now playing as ${result.name}`);
-    this.#emitChange();
-    return result;
-  }
-
-  /**
-   * Every power the side to move still holds — the panel's list.
-   *
-   * Empty in an ordinary game, and empty on a device that cannot move this
-   * colour, so the panel can render it without asking which mode it is in.
-   */
-  getArsenal() {
-    return this.#session.getArsenal?.() ?? [];
-  }
-
-  /**
-   * Fire a power chosen by element rather than by piece.
-   *
-   * The other way round from beginAiming(), which starts at the piece. Both
-   * end in the same place, and deliberately: choosing Freeze from the panel
-   * selects the rook that will cast it, so the board looks exactly as it would
-   * have done had the player tapped that rook themselves, and the tap after
-   * this one is the same tap either way.
-   *
-   * It picks the caster itself, which it could not always do. Reach used to
-   * come off the caster's own rays, so two charged rooks were two quite
-   * different freezes and choosing between them was the interesting half of
-   * the decision; there was a whole stage of aiming devoted to asking. Powers
-   * now reach the whole board, every rook offers the identical freeze, and
-   * asking which one should cast it would be asking the player to break a tie
-   * that does not exist.
-   */
-  async castPower(element) {
-    const row = this.getArsenal().find((entry) => entry.element === element);
-    if (!row) return { ok: false, error: 'Not this game' };
-
-    if (!row.squares.length) {
-      this.#toast(`${row.info.emoji} ${row.info.power} — all spent`, 'warn');
-      return { ok: false, error: 'Spent' };
-    }
-    if (this.#state?.elemental?.powerUsed) {
-      this.#toast('One power a turn — make your move', 'warn');
-      return { ok: false, error: 'Already used' };
-    }
-    if (row.blockedBy) {
-      this.#toast('A charged Light bishop holds the shadows shut', 'warn');
-      return { ok: false, error: 'Blocked' };
-    }
-    if (!row.ready.length) {
-      // The two that go off on a capture are worth a different sentence: they
-      // have nothing to aim at THIS turn, but they are not idle — walking the
-      // piece into contact is the move, and it may not even need the charge.
-      this.#toast(
-        row.info.onCapture
-          ? `${row.info.emoji} ${row.info.power} needs that piece next to something — it also fires free on a capture`
-          : `${row.info.power} has nothing to aim at`,
-        'warn',
-      );
-      return { ok: false, error: 'No targets' };
-    }
-
-    // Selecting the caster rather than merely remembering it, so the board
-    // looks exactly as it would have done had the player tapped that piece —
-    // and so cancelling out of the aim leaves them holding something sensible.
-    this.#select(row.ready[0]);
-    return this.beginAiming();
-  }
-
-  /**
-   * Start aiming the selected piece's power.
-   *
-   * A power that needs no target — Cleanse — is fired on the spot instead of
-   * being aimed at nothing, so the button does what it says rather than
-   * arming a mode the player then has to get out of.
-   */
-  async beginAiming() {
-    const power = this.getSelectedPower();
-    if (!power) return { ok: false, error: 'Nothing to use' };
-
-    if (power.blockedBy) {
-      this.#toast('A charged Light bishop holds the shadows shut', 'warn');
-      return { ok: false, error: 'Blocked' };
-    }
-    if (!power.ready) {
-      this.#toast(`${power.info.power} has nothing to aim at`, 'warn');
-      return { ok: false, error: 'No targets' };
-    }
-    if (!power.targets.length) return this.usePower(power.square, null);
-
-    this.#view.aiming = {
-      element: power.element,
-      from: power.square,
-      name: power.info.power,
-      targets: power.targets,
-    };
-    this.#emitChange();
-    return { ok: true };
-  }
-
-  /**
-   * Start aiming the selected piece's SUPER.
-   *
-   * The same two steps beginAiming takes, and deliberately a separate method
-   * rather than a flag on it: the two are reached from different buttons and
-   * refuse for different reasons, and a shared one would spend its length
-   * asking which it was.
-   */
-  async beginSuperAiming() {
-    const power = this.getSelectedSuper();
-    if (!power) {
-      this.#toast(
-        this.#state?.isCheck
-          ? 'You cannot give up your move while in check'
-          : 'No super there',
-        'warn',
-      );
-      return { ok: false, error: 'No super' };
-    }
-    if (power.blockedBy) {
-      this.#toast('A charged Light bishop holds the shadows shut', 'warn');
-      return { ok: false, error: 'Blocked' };
-    }
-    if (this.#state?.elemental?.powerUsed) {
-      this.#toast('One power a turn — make your move', 'warn');
-      return { ok: false, error: 'Already used' };
-    }
-    if (!power.ready) {
-      this.#toast(`${power.info.power} has nothing to aim at`, 'warn');
-      return { ok: false, error: 'No targets' };
-    }
-    if (!power.targets.length) {
-      return this.usePower(power.square, null, { isSuper: true });
-    }
-
-    this.#view.aiming = {
-      element: power.element,
-      from: power.square,
-      name: power.info.power,
-      targets: power.targets,
-      isSuper: true,
-    };
-    this.#emitChange();
-    return { ok: true };
-  }
-
-  /** Stop aiming, keeping the piece selected so the player can just move it. */
-  cancelAiming() {
-    if (!this.#view.aiming) return;
-    this.#view.aiming = null;
-    this.#emitChange();
-  }
-
-  /** A tap that lands while a power is being aimed. */
-  async #aimAt(square) {
-    const aiming = this.#view.aiming;
-    if (!aiming.targets.includes(square)) {
-      this.cancelAiming();
-      return;
-    }
-    await this.usePower(aiming.from, square, { isSuper: Boolean(aiming.isSuper) });
-  }
-
-  /**
-   * Fire a power. The turn does not pass — the player still has their move.
-   *
-   * The selection is deliberately kept: a rook that has just frozen something
-   * is very often the piece you then want to move, and clearing it would make
-   * the player tap it again for no reason.
-   */
-  async usePower(from, target, { isSuper = false } = {}) {
-    if (this.#processing) return { ok: false, error: 'Busy' };
-    if (!this.#session.usePower) return { ok: false, error: 'Not this game' };
-    if (isSuper && !this.#session.useSuper) return { ok: false, error: 'Not this game' };
-
-    this.#processing = true;
-    try {
-      // One method for both, because everything after the call is identical:
-      // the same sound, the same refreshed selection, the same event for the
-      // board to animate. Only the price differs, and the session charges it.
-      const result = isSuper
-        ? await this.#session.useSuper({ from, target })
-        : await this.#session.usePower({ from, target });
-      this.#view.aiming = null;
-
-      if (!result.ok) {
-        this.#toast(result.error ?? 'That power did not work', 'warn');
-        this.#emitChange();
-        return result;
-      }
-
-      const used = result.used ?? {};
-      const destroyed = used.destroyed ?? [];
-
-      // A rebound is the one outcome a player cannot read off the board. The
-      // power went off, something of THEIRS came apart, and the piece they
-      // aimed at is standing there untouched — which without a word looks
-      // like the power having misfired rather than like the enemy's crystal
-      // doing exactly what it was laid down to do.
-      if (used.rebounded) {
-        const thrown = ELEMENTS[used.rebounded];
-        this.#toast(
-          `💠 The crystal threw ${thrown?.power ?? 'that power'} straight back`,
-          'warn',
-        );
-      }
-
-      // One noise, not two. A power that took pieces off the board is a blast
-      // and nothing else; playing the shimmer underneath it as well just
-      // muddies the one sound that was carrying the news.
-      sound.play(destroyed.length ? SOUND.BLAST : SOUND.POWER);
-
-      // Re-read the destinations: the power may have changed what the selected
-      // piece can do — vines in its way, or its own king teleporting out of a
-      // pin — and a stale highlight is a move that will be refused.
-      if (this.#view.selected) this.#select(this.#view.selected);
-      // What the board needs to draw it: which element, where it came from,
-      // and what it landed on. Cleanse is the only power with nothing to point
-      // at, because what it does is not to a square but to the whole board —
-      // so the whole board is what answers, and that is what `sweep` says.
-      this.#emit(EVENT.POWER, {
-        element: used.element ?? null,
-        from: used.from ?? null,
-        targets: used.targets ?? [],
-        // Drawn louder, and worth telling apart: a super reaches further and
-        // costs the turn, so the board is entitled to make more of it.
-        isSuper: Boolean(used.isSuper),
-        name: used.name ?? null,
-        // The subset whose piece is now gone, which the board draws quite
-        // differently — a frozen queen and a burned one leave the same trace
-        // in the state that follows, and only one of them comes apart.
-        destroyed,
-        // Cleanse is the only power whose effect has no squares at all —
-        // what it does is not TO a square but to the whole board — so the
-        // whole board is what answers, and that is what `sweep` says.
-        //
-        // Asked of the SQUARES rather than of the aim. Firestorm and Tidal
-        // Guard are aimed at nothing either, and the first version of this
-        // read `!used.target`: a Firestorm that took two pawns set light to
-        // all sixty-four squares.
-        sweep: Boolean(used.element) && !(used.targets ?? []).length,
-      });
-
-      if (destroyed.length) {
-        const info = ELEMENTS[used.element];
-        const count = destroyed.length;
-        // The super's own name, when it was one. "Burn — 2 pieces destroyed"
-        // after a Firestorm names the wrong power, and the two do visibly
-        // different things.
-        const what = used.name ?? info?.power ?? 'That power';
-        this.#toast(
-          `${info?.emoji ?? ''} ${what} — `
-          + `${count} ${count === 1 ? 'piece' : 'pieces'} destroyed`,
-        );
-      } else if (used.isSuper) {
-        // A super that destroys nothing still cost the whole turn, which is
-        // worth saying out loud: the board changes in ways that are easy to
-        // miss and the turn has just gone.
-        const info = ELEMENTS[used.element];
-        this.#toast(`${info?.emoji ?? ''} ${used.name ?? 'Super'} — your move is spent`);
-      }
-      this.#emitChange();
-      return result;
-    } finally {
-      this.#processing = false;
-    }
   }
 
   #clearSelection() {
     this.#view.selected = null;
     this.#view.legalTargets = [];
-    // A power being aimed belongs to the piece that was selected; losing the
-    // piece has to lose the aim with it, or the next tap on the board fires
-    // a rook that is no longer chosen at a square it may no longer see.
-    this.#view.aiming = null;
   }
 
   /** Can this device move pieces of the given colour? */
@@ -1003,12 +608,6 @@ export class GameController {
     this.#processing = true;
     try {
       const result = await this.#session.submitMove({ from, to, promotion });
-
-      // Fire and lightning go off by themselves, so the only way a player
-      // finds out is if something says so — including, and especially, when
-      // the fire was WITHHELD because it would have opened a line onto their
-      // own king. A capture that visibly fails to burn needs a reason.
-      if (result.ok && result.elemental) this.#announcePower(result.elemental);
 
       if (!result.ok) {
         this.#clearSelection();
@@ -1208,7 +807,6 @@ export class GameController {
     this.#view.legalTargets = [];
     this.#view.pendingPromotion = null;
     this.#view.lastRejected = null;
-    this.#view.aiming = null;
   }
 
   getOrientation() {
@@ -1296,31 +894,13 @@ export class GameController {
       orientation: this.#view.orientation,
       roomCode: this.#state.online?.roomCode ?? null,
       myColor: this.#state.online?.myColor ?? null,
-      // Whether a bot was in this game, so resuming it puts one back. The
-      // mode cannot answer that on its own: an Elemental game is `elemental`
-      // whether the other seat held a person or the bot.
+      // Whether a bot was in this game, so resuming it puts one back. Kept
+      // beside the mode rather than folded into it: a save is read before any
+      // session exists to ask, and the two have disagreed before.
       vsBot: this.#state.vsBot === true,
       // Which level that bot was, so resuming restores the opponent and not
       // merely the position.
       botLevel: this.#state.botLevel ?? null,
-      // Charges, elements, effects and the ply they expire against. None of
-      // it is derivable from the position — a spent pawn looks exactly like a
-      // loaded one, and which element a piece carries stopped being readable
-      // off its type the moment there were seventeen of them for sixteen
-      // pieces — so without this a reload would hand both players a full set
-      // of powers back, and the wrong ones.
-      elemental: this.#state.elemental
-        ? {
-          ply: this.#state.elemental.ply,
-          charges: this.#state.elemental.charges,
-          elements: this.#state.elemental.elements,
-          loadout: this.#state.elemental.loadout,
-          graveyard: this.#state.elemental.graveyard,
-          lastMove: this.#state.elemental.lastMove,
-          effects: this.#state.elemental.effects,
-          powerPly: this.#state.elemental.powerUsed ? this.#state.elemental.ply : -1,
-        }
-        : null,
       savedAt: Date.now(),
     });
   }

@@ -28,11 +28,6 @@ export const SOUND = {
   CASTLE: 'castle',
   PROMOTE: 'promote',
   GAME_OVER: 'game-over',
-  // Elemental Chess. Two, not seven: what a player needs to hear is whether
-  // something was aimed or whether something went off, and seven separate
-  // noises would be a soundboard rather than feedback.
-  POWER: 'power',
-  BLAST: 'blast',
 };
 
 /**
@@ -65,18 +60,6 @@ const RECIPES = {
     { freq: 440, type: 'sine', start: 0, dur: 0.18, gain: 0.16 },
     { freq: 349, type: 'sine', start: 0.14, dur: 0.2, gain: 0.16 },
     { freq: 262, type: 'sine', start: 0.3, dur: 0.42, gain: 0.18 },
-  ],
-  // A power being spent: a rising shimmer, so it is plainly not a move.
-  [SOUND.POWER]: [
-    { freq: 580, type: 'triangle', start: 0, dur: 0.09, gain: 0.14, sweepTo: 880 },
-    { freq: 880, type: 'sine', start: 0.07, dur: 0.16, gain: 0.12, sweepTo: 1320 },
-  ],
-  // Fire and lightning taking pieces off the board: heavier than a capture,
-  // because more just happened than a capture.
-  [SOUND.BLAST]: [
-    { freq: 150, type: 'square', start: 0, dur: 0.14, gain: 0.15, sweepTo: 55 },
-    { freq: 520, type: 'triangle', start: 0, dur: 0.1, gain: 0.13, sweepTo: 120 },
-    { freq: 300, type: 'sine', start: 0.1, dur: 0.16, gain: 0.11, sweepTo: 90 },
   ],
 };
 

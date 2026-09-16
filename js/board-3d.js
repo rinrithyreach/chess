@@ -48,8 +48,6 @@ import {
   DEBUG,
   BOARD_ZOOM_LEVELS,
   DEFAULT_BOARD_ZOOM,
-  POWER_CAST_MS,
-  POWER_WAVE_STEP_MS,
   clampBoardZoom,
   warn,
 } from './config.js';
@@ -59,7 +57,6 @@ import {
   describeSquare,
   cubicBezierEasing,
   prefersReducedMotion,
-  squareDistance,
 } from './board-shared.js';
 
 /** Shared with the DOM board so a move feels the same on either. */
@@ -84,17 +81,6 @@ const CAST_GROWTH = 1.5;
  * a rook.
  */
 const CAST_RING_CLIMB = 0.75;
-
-/** How wide a beam is, in squares, before it thins out on the way to nothing. */
-const BEAM_WIDTH = 0.14;
-
-/**
- * How long the board is knocked out of true when a power destroys, in ms.
- *
- * Matches the keyframes in board.css, which do the actual moving — this board
- * and the flat one share the class, because they share the element it goes on.
- */
-const KNOCK_MS = 300;
 
 /** Board geometry, in world units: one square is 1×1. */
 const SQUARE = 1;
@@ -139,67 +125,6 @@ const HIGHLIGHT = {
   selected: { color: 0xe8b44c, opacity: 0.55 },
   check: { color: 0xe5594d, opacity: 0.75 },
   focus: { color: 0x7fb2ff, opacity: 0.5 },
-};
-
-/**
- * Elemental Chess, in the only vocabulary this board has: flat coloured
- * quads and rings.
- *
- * The DOM board says all of this with emoji in the corner of a square, which
- * is not available here — a sprite per square would mean a texture atlas, a
- * second material and a billboard update every frame, for information that a
- * colour carries perfectly well. The colours are the ones in board.css, so a
- * player who switches boards mid-game is not learning a second language:
- * ice pale blue, water deeper blue, vines green.
- *
- * The charge is a ring rather than a wash, because a charged piece is usually
- * also one you are about to move, and it has to be readable underneath the
- * selection tint rather than instead of it.
- */
-const ELEMENTAL_HIGHLIGHT = {
-  frozen: { color: 0x7ec8ff, opacity: 0.5 },
-  shield: { color: 0x56aaff, opacity: 0.5 },
-  vines: { color: 0x60be6e, opacity: 0.5 },
-  armour: { color: 0x9aa3b0, opacity: 0.5 },
-  crystal: { color: 0xa8f0e0, opacity: 0.5 },
-  silenced: { color: 0x6b5a80, opacity: 0.5 },
-  aim: { color: 0xe8b44c, opacity: 0.65 },
-  charged: { color: 0xffe0a0, opacity: 0.55 },
-};
-
-/**
- * A power going off, in the same vocabulary: a disc and a ring, per element.
- *
- * The flat board draws these as gradients with a shape each — a crystal for
- * ice, a bolt for lightning, embers for fire. None of that is available here
- * without a texture atlas and a billboard update per frame, for an event that
- * is over in under a second. So this says the two things that actually have
- * to survive the translation: WHICH element, in the colour the other board
- * already uses for it, and THAT something went off, by moving.
- *
- * `inward` is Shadow's, and is the one that is not merely decoration: a king
- * that teleports has not exploded, it has stopped being there, and the same
- * burst plays at the far end where something arrives. A burst that blooms at
- * both ends would say the opposite of what happened at one of them.
- */
-const ELEMENTAL_CAST = {
-  fire: { color: 0xff8a2a, ring: 0xffe08a },
-  water: { color: 0x5aa8ff, ring: 0xd6f2ff },
-  lightning: { color: 0xb08cff, ring: 0xffffff },
-  ice: { color: 0x9edcff, ring: 0xeafaff },
-  nature: { color: 0x6cca76, ring: 0xcef6be },
-  shadow: { color: 0x3a2068, ring: 0xa880f8, inward: true },
-  light: { color: 0xffd67a, ring: 0xfffcf0 },
-  metal: { color: 0x8e99a8, ring: 0xdfe6ef },
-  void: { color: 0x2a1f3d, ring: 0x8a6fc4, inward: true },
-  sun: { color: 0xffb02a, ring: 0xfff3c4 },
-  moon: { color: 0x7f8fd0, ring: 0xdfe4ff, inward: true },
-  blood: { color: 0xc42b3a, ring: 0xff9aa4 },
-  spirit: { color: 0x9fd8c8, ring: 0xf0fffa, inward: true },
-  gravity: { color: 0x4a3f8f, ring: 0xb0a6ff, inward: true },
-  time: { color: 0xd9b05a, ring: 0xfff0cc },
-  crystal: { color: 0x59d6c0, ring: 0xd8fff6 },
-  space: { color: 0x2b2050, ring: 0x9f8cff },
 };
 
 /**
@@ -404,15 +329,6 @@ export class Board3D {
   #richDetail = true;
   #pieceGroup = null;
   #markerGroup = null;
-  /**
-   * Power bursts.
-   *
-   * Its own group rather than the marker one, which is emptied and refilled
-   * from scratch on every render — a burst lives across renders by
-   * definition, since the render that clears the board of the piece it just
-   * destroyed happens while it is still playing.
-   */
-  #castGroup = null;
   #raycaster = new THREE.Raycaster();
   #pointer = new THREE.Vector2();
   /** The horizontal sheet a dragged piece rides on, at DRAG_LIFT above it. */
@@ -531,8 +447,7 @@ export class Board3D {
 
     this.#pieceGroup = new THREE.Group();
     this.#markerGroup = new THREE.Group();
-    this.#castGroup = new THREE.Group();
-    this.#scene.add(this.#pieceGroup, this.#markerGroup, this.#castGroup);
+    this.#scene.add(this.#pieceGroup, this.#markerGroup);
 
     this.#buildA11yGrid();
     this.#applyCamera(false);
@@ -1387,11 +1302,6 @@ export class Board3D {
 
     this.#pieces.forEach((piece) => this.#releasePiece(piece));
     this.#pieces.clear();
-    // Dropped before #animations, which is what would otherwise have taken
-    // their materials away: a burst still playing when the player switches
-    // board style owns a material that nothing else will ever free.
-    this.#castGroup?.children.forEach((mesh) => mesh.material.dispose());
-    this.#castGroup?.clear();
     this.#animations = [];
     this.#moving.clear();
 
@@ -1830,295 +1740,6 @@ export class Board3D {
     return mesh;
   }
 
-  /**
-   * Play a power going off. The 3D board's answer to board.playPower().
-   *
-   * Same contract, same payload, same reasoning — see board.js. Everything a
-   * power does it does to the state, and the state arrives with no record of
-   * how it got that way, so without this a burned piece and a captured one
-   * leave the same board behind.
-   *
-   * @param {object} payload {element, from, targets, sweep} — see EVENT.POWER.
-   */
-  playPower({ element, from = null, targets = [], destroyed = [], sweep = false } = {}) {
-    const spec = ELEMENTAL_CAST[element];
-    if (!spec || this.#disposed || !this.#castGroup) return;
-    if (!this.#animationsEnabled || prefersReducedMotion()) return;
-
-    if (sweep) {
-      // Cleanse touches the whole board, so the whole board answers — timed
-      // off each square's distance from the bishop, because sixty-four
-      // flashes on one frame read as a fault rather than as an event.
-      ALL_SQUARES.forEach((square) => {
-        this.#castAt(square, spec, squareDistance(from, square) * POWER_WAVE_STEP_MS);
-      });
-      return;
-    }
-
-    // Before anything else, because this takes the doomed pieces out of
-    // #pieces while they are still standing there. The repaint that follows
-    // would otherwise delete them outright, and a piece that vanishes between
-    // two frames is indistinguishable from one that was captured.
-    destroyed.forEach((piece) => this.#destroyPiece(piece, element));
-
-    const hit = new Set(targets.filter(Boolean));
-    if (from) hit.add(from);
-    hit.forEach((square) => {
-      this.#castAt(square, spec, 0);
-      if (from && square !== from) this.#beamTo(from, square, spec);
-    });
-
-    // The one piece of feedback in the app that reaches outside the element it
-    // belongs to, so it is reserved for the one thing that takes material off
-    // the board without a move being played. The class and the keyframes are
-    // the flat board's — this root is the same #board element — so the knock
-    // is identical whichever renderer is mounted.
-    if (destroyed.length) this.#knock();
-  }
-
-  /**
-   * A bolt of light lying on the board between the caster and what it hit.
-   *
-   * The flat board draws this as a rotated bar inside the caster's square.
-   * Here it is a quad in world space, which is simpler rather than harder: the
-   * two squares have real coordinates, so the beam is the segment between
-   * them and there is no orientation to think about — Flip moves the camera on
-   * this board, not the pieces.
-   */
-  #beamTo(from, to, spec) {
-    const a = this.#squareToWorld(from);
-    const b = this.#squareToWorld(to);
-    const dx = b.x - a.x;
-    const dz = b.z - a.z;
-    const length = Math.hypot(dx, dz);
-    if (!length) return;
-
-    const mesh = new THREE.Mesh(
-      this.#markerGeometry('beam'),
-      new THREE.MeshBasicMaterial({
-        color: spec.ring,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        toneMapped: false,
-        side: THREE.DoubleSide,
-      }),
-    );
-
-    // Rotated in its OWN plane first and tipped flat second — that is what
-    // the XYZ Euler order means here, and it is the order that works: tipping
-    // first would leave the in-plane spin turning the beam about the wrong
-    // axis. After the tip, the quad's local +X runs along world +X and its
-    // local +Y along world -Z, which is where the minus on dz comes from.
-    mesh.rotation.set(-Math.PI / 2, 0, Math.atan2(-dz, dx));
-    mesh.position.set(a.x + dx / 2, BOARD_Y + 0.02, a.z + dz / 2);
-    this.#castGroup.add(mesh);
-
-    const start = performance.now();
-    const duration = POWER_CAST_MS * 0.55;
-    this.#animations.push({
-      update: (now) => {
-        const t = Math.min(1, (now - start) / duration);
-        // Out along its own length, then gone — a line that is simply there
-        // for a moment reads as a rule drawn on the board, and a line that
-        // arrives reads as something being fired.
-        const reach = Math.min(1, t / 0.28);
-        mesh.scale.set(length * reach, BEAM_WIDTH * (1 - t * 0.7), 1);
-        mesh.material.opacity = t < 0.28 ? t / 0.28 : 1 - ((t - 0.28) / 0.72) ** 1.4;
-        return t >= 1;
-      },
-      done: () => {
-        this.#castGroup?.remove(mesh);
-        mesh.material.dispose();
-      },
-    });
-    this.#needsRender = true;
-  }
-
-  /**
-   * A piece coming apart, rather than ceasing to be.
-   *
-   * Lifted out of #pieces first, exactly as a capture is, so the repaint that
-   * follows leaves it alone — after which it is nobody's piece and can burn
-   * down in peace.
-   *
-   * IT DOES NOT SINK. The capture animation drops a piece through the board,
-   * which is right for a capture and quite wrong here: the board is a solid
-   * slab, so a piece that starts descending is simply gone within a couple of
-   * frames, and the first version of this was three pieces blinking out under
-   * three rings of fire. A blast has to be SEEN to consume them, so they stay
-   * up on the surface and change instead — fire flares them white-hot, chars
-   * them to nothing and turns them over as they go; lightning overexposes
-   * them and takes them in half the time, which is the same pair of readings
-   * the flat board draws in CSS.
-   *
-   * Each one gets its own copy of every material it is wearing. The two
-   * finishes are shared and cached across all thirty-two pieces — see
-   * #pieceMaterial — so writing a char into one of them would char the whole
-   * side, and then keep it charred for the rest of the game.
-   */
-  #destroyPiece({ square, type, color }, element) {
-    // Built rather than borrowed, and for the same reason the flat board
-    // builds its ghost: the session publishes its new state from inside
-    // usePower(), so this board has already repainted and dropped the piece
-    // by the time the event saying it was destroyed gets here. Taking the one
-    // still standing in #pieces worked only while nothing published in
-    // between, which is a thing that was true rather than a thing that was
-    // arranged.
-    const group = this.#makePiece({ type, color });
-    const world = this.#squareToWorld(square);
-    group.position.set(world.x, BOARD_Y, world.z);
-    group.rotation.y = group.userData.faces === -1 ? Math.PI : 0;
-    this.#pieceGroup.add(group);
-
-    // Its own copy of every material it is wearing: the two finishes are
-    // shared and cached across all thirty-two pieces, so charring one of them
-    // would char that whole side for the rest of the game.
-    const owned = [];
-    group.traverse((node) => {
-      if (!node.isMesh || !node.material) return;
-      const material = node.material.clone();
-      node.material = material;
-      owned.push(material);
-    });
-
-    const struck = element === 'lightning';
-    const start = performance.now();
-    const duration = POWER_CAST_MS * (struck ? 0.5 : 0.85);
-    const home = group.position.clone();
-
-    this.#animations.push({
-      update: (now) => {
-        const t = Math.min(1, (now - start) / duration);
-
-        owned.forEach((material) => {
-          if (struck) {
-            material.color.setRGB(1, 1, 1);
-            material.emissive?.setRGB(0.76, 0.68, 1);
-            material.emissiveIntensity = 2.4 * (1 - t * 0.5);
-          } else {
-            // Hot for the first half, then ash. Two ramps rather than one,
-            // because a piece that fades evenly from its own colour to black
-            // reads as a light being turned off rather than as something
-            // burning.
-            const heat = Math.max(0, 1 - t * 2);
-            material.color.setRGB(0.1 + heat * 0.85, 0.06 + heat * 0.3, 0.05);
-            material.emissive?.setRGB(heat, heat * 0.3, 0);
-            material.emissiveIntensity = heat * 2.2;
-          }
-        });
-
-        if (struck) {
-          group.position.set(home.x, home.y + t * 0.24, home.z);
-          group.scale.setScalar(Math.max(0.001, 1 + t * 0.3 - t * t * 1.3));
-        } else {
-          group.position.set(home.x, home.y + t * 0.12, home.z);
-          group.rotation.y += 0.08;
-          group.scale.setScalar(Math.max(0.001, 1 - t * t));
-        }
-        return t >= 1;
-      },
-      done: () => {
-        this.#releasePiece(group);
-        owned.forEach((material) => material.dispose());
-      },
-    });
-    this.#needsRender = true;
-  }
-
-  /** A short knock on the whole board. Shared with the flat board's CSS. */
-  #knock() {
-    this.#root.classList.remove('board--knocked');
-    // Forcing a reflow is what lets the same class be re-added and re-run in
-    // one frame: two blasts in quick succession are two knocks, not a class
-    // that was already there and so did nothing.
-    void this.#root.offsetWidth;
-    this.#root.classList.add('board--knocked');
-    window.setTimeout(() => this.#root.classList.remove('board--knocked'), KNOCK_MS);
-  }
-
-  /**
-   * One burst on one square: a wash on the deck, and a ring leaving it.
-   *
-   * THE RING HAS TO CLIMB. The first version of this was two flat quads lying
-   * on the board, which is how every other highlight here is drawn — and it
-   * was very nearly invisible. Flat is fine for a highlight, because a
-   * highlight is a property of the square and the square is what you are
-   * looking at. A burst is an event, and from a camera this low a flat circle
-   * on the deck is both foreshortened to a sliver and mostly hidden behind
-   * the very piece it is going off underneath. So the wash stays down and
-   * says WHERE, and the ring rises past the piece and says THAT.
-   *
-   * Which way it climbs is the one thing here that is not decoration. Shadow
-   * runs the whole burst backwards — the ring falls into the board and the
-   * wash closes rather than opening — because a king that teleports has not
-   * exploded, it has stopped being there, and the same burst plays at the far
-   * end where something arrives.
-   *
-   * Both meshes are built fresh and disposed on the way out rather than
-   * pooled. A burst is a couple of transparent quads that live for under a
-   * second, and pooling them would mean another lifetime to reason about
-   * alongside #markerPool and #moving — for an allocation that happens once
-   * per power rather than once per frame.
-   */
-  #castAt(square, spec, delay) {
-    const world = this.#squareToWorld(square);
-    const made = [];
-
-    const add = (shape, color, lift, opacity, climb) => {
-      const mesh = new THREE.Mesh(
-        this.#markerGeometry(shape),
-        new THREE.MeshBasicMaterial({
-          color,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
-          toneMapped: false,
-          side: THREE.DoubleSide,
-        }),
-      );
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.set(world.x, BOARD_Y + lift, world.z);
-      this.#castGroup.add(mesh);
-      made.push({ mesh, opacity, lift, climb });
-      return mesh;
-    };
-
-    // Lifted clear of the highlights below them — a burst under the aim tint
-    // is a burst nobody sees.
-    add('disc', spec.color, 0.022, 0.8, 0);
-    add('halo', spec.ring, 0.026, 0.95, CAST_RING_CLIMB);
-
-    const start = performance.now() + delay;
-    const run = (t) => {
-      // Up fast, down slow: a burst that fades evenly reads as a lamp being
-      // switched off rather than as something going off.
-      const fade = t < 0.16 ? t / 0.16 : 1 - ((t - 0.16) / 0.84) ** 1.7;
-      const k = spec.inward ? 1 - t : t;
-      made.forEach(({ mesh, opacity, lift, climb }) => {
-        mesh.scale.setScalar(CAST_MIN_SCALE + k * CAST_GROWTH);
-        mesh.position.y = BOARD_Y + lift + k * climb;
-        mesh.material.opacity = Math.max(0, fade) * opacity;
-      });
-    };
-
-    run(spec.inward ? 1 : 0);
-    this.#animations.push({
-      update: (now) => {
-        if (now < start) return false;
-        const t = Math.min(1, (now - start) / POWER_CAST_MS);
-        run(t);
-        return t >= 1;
-      },
-      done: () => made.forEach(({ mesh }) => {
-        this.#castGroup?.remove(mesh);
-        // The geometry is shared and cached; the material is this burst's own.
-        mesh.material.dispose();
-      }),
-    });
-    this.#needsRender = true;
-  }
-
   #takeMarker() {
     const pooled = this.#markerPool.pop();
     if (pooled) {
@@ -2167,56 +1788,6 @@ export class Board3D {
     if (state.checkSquare) place(state.checkSquare, HIGHLIGHT.check, 0.006);
     if (view?.selected) place(view.selected, HIGHLIGHT.selected, 0.008);
 
-    // Elemental Chess, or nothing. Under the selection and the legal moves,
-    // because an effect is a property of the square that was already there
-    // before you picked anything up.
-    const elemental = state.elemental ?? null;
-    if (elemental) {
-      Object.entries(elemental.marks ?? {}).forEach(([square, kind]) => {
-        const spec = ELEMENTAL_HIGHLIGHT[kind];
-        if (!spec) return;
-        // A shield is on the piece, so it draws as a ring around it; ice and
-        // vines take the whole square, because that is what they are on.
-        const shield = kind === 'shield';
-        const marker = place(square, spec, 0.003, shield ? 'ring' : 'square');
-        // The ring geometry runs from 0.27 to 0.33 of a square; 2.7 takes it
-        // out to 0.73–0.89, a hoop standing round the piece rather than a
-        // washer sitting under it. Anything past 3.0 and it laps the square.
-        if (shield) marker.scale.setScalar(2.7);
-      });
-
-      Object.entries(elemental.pieces ?? {}).forEach(([square, piece]) => {
-        if (!piece.charged) return;
-        const marker = place(square, ELEMENTAL_HIGHLIGHT.charged, 0.007, 'ring');
-        marker.scale.setScalar(1.4);
-      });
-    }
-
-    // Aiming a power: the board is in a mode, and the move dots below are
-    // suppressed for it. The same reasoning as the flat board — a dot means
-    // "your piece can go here", which is not what the next tap is going to do.
-    const aiming = view?.aiming ?? null;
-    if (aiming) {
-      // There is no caster to light up in the cast stage — picking one is the
-      // question being asked — so `from` is null until it is answered. place()
-      // needs a real square, and a throw here is invisible: the controller
-      // catches what a listener throws so a broken view cannot stop the game,
-      // which means the whole UI would just quietly stop repainting.
-      if (aiming.from) place(aiming.from, HIGHLIGHT.selected, 0.008);
-      // In the element's own colour, matching the flat board. Gold said "a
-      // power can reach here" and nothing else, which was true of all seven —
-      // so it told you which one you were holding only if you could still
-      // remember what you had pressed.
-      const aimSpec = ELEMENTAL_CAST[aiming.element]
-        ? { color: ELEMENTAL_CAST[aiming.element].ring, opacity: ELEMENTAL_HIGHLIGHT.aim.opacity }
-        : ELEMENTAL_HIGHLIGHT.aim;
-      (aiming.targets ?? []).forEach((square) => {
-        const marker = place(square, aimSpec, 0.011);
-        marker.scale.setScalar(0.5);
-      });
-      return;
-    }
-
     // Legal destinations: a small disc, a wide ring for a capture — the same
     // vocabulary the flat board uses, so the two read identically.
     (view?.legalTargets ?? []).forEach((target) => {
@@ -2238,14 +1809,9 @@ export class Board3D {
 
   #syncA11y(board, view, state) {
     const targets = new Map((view?.legalTargets ?? []).map((m) => [m.to, m]));
-    const elemental = state?.elemental ?? null;
     this.#a11ySquares.forEach((button, square) => {
       const piece = board.get(square) ?? null;
-      button.setAttribute('aria-label', describeSquare(square, piece, targets.get(square),
-        elemental && {
-          ...elemental.pieces?.[square],
-          effect: elemental.marks?.[square] ?? null,
-        }));
+      button.setAttribute('aria-label', describeSquare(square, piece, targets.get(square)));
       button.setAttribute(
         'aria-selected',
         String(square === view?.selected),

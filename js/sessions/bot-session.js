@@ -33,35 +33,16 @@ import {
 } from '../config.js';
 
 /**
- * Modes the bot can play that are not "Player vs Bot".
+ * The bot, as a layer over a session.
  *
- * A game the bot is in keeps its own mode rather than being flattened to
- * `bot`, because the mode is what the rest of the app reads to know what kind
- * of game it is: an Elemental game against the bot is still Elemental, and
- * has seven powers to prove it.
- */
-const BOT_MODES = [GAME_MODE.ELEMENTAL];
-
-/**
- * Piece worth, for the one decision made without the search: which move to
- * fall back on when a variant's rules refuse the one it chose. Kept local and
- * deliberately crude — it is a tie-break between moves that are all already
- * legal, not an evaluation.
- */
-const FALLBACK_WORTH = { p: 100, n: 320, b: 330, r: 500, q: 900 };
-
-/**
- * The bot, as a layer over any other session.
- *
- * A mixin rather than a plain class, because the bot now has two things to sit
- * on: ordinary chess, and Elemental Chess. The class body below is identical
- * either way — what differs is only what `super` reaches.
+ * A mixin rather than a plain class, and it has only one thing left to sit on
+ * now that the variant it was generalised for is gone. It stays a mixin
+ * because the shape costs nothing and is the thing that made stacking the bot
+ * on a second kind of game a one-line change last time.
  *
  * The bot always goes on the OUTSIDE. Its submitMove calls down through
  * whatever it wraps, so by the time it asks itself whether to reply, the layer
- * beneath has finished with the move — including, in the elemental game, the
- * fire and lightning a capture sets off. Stacked the other way round, the bot
- * would be handed a position one burn out of date.
+ * beneath has finished with the move.
  */
 export const withBot = (Base) => class extends Base {
   /** The colour the human plays. The bot takes the other one. */
@@ -72,8 +53,9 @@ export const withBot = (Base) => class extends Base {
    *
    * Held per GAME rather than read from the constants at every search, so
    * one bot can be three opponents. A null level is a bot nobody chose a
-   * level for — the Elemental game's, which offers no picker — and it plays
-   * at the defaults under the plain name.
+   * level for — a game started without the picker, or one resumed from a save
+   * written before there was one — and it plays at the defaults under the
+   * plain name.
    *
    * The numbers are copied out rather than held by reference, so editing
    * BOT_LEVELS cannot change the opponent in a game already under way.
@@ -102,7 +84,7 @@ export const withBot = (Base) => class extends Base {
     const botName = this.#opponentName();
     const state = await super.createGame({
       ...config,
-      mode: BOT_MODES.includes(config.mode) ? config.mode : GAME_MODE.BOT,
+      mode: GAME_MODE.BOT,
       // Whichever seat the bot is in gets its name, so every place that shows
       // a player name — cards, PGN headers, the game-over dialog — says who
       // actually played without any of them knowing a bot exists. With a
@@ -118,9 +100,11 @@ export const withBot = (Base) => class extends Base {
   getState() {
     const state = super.getState();
     if (!state) return state;
-    // `vsBot` is what tells a RESUMED game to mount a bot again. The mode
-    // cannot carry it on its own: an Elemental game is mode `elemental`
-    // whether the other seat holds a person or this.
+    // `vsBot` is what tells a RESUMED game to mount a bot again. It is kept
+    // beside the mode rather than folded into it because a save is read by
+    // app.js before any session exists to ask, and `mode` alone has been
+    // ambiguous before — it is cheaper to keep saying so than to find out
+    // again.
     //
     // The level rides along for the same reason: resuming a Hard game after
     // a refresh must not hand the board back with the Easy bot thinking for
@@ -232,20 +216,13 @@ export const withBot = (Base) => class extends Base {
 
   async #play() {
     try {
-      // Powers first, and only in a game that has any: a teleport moves the
-      // king, so searching before spending them would be searching a position
-      // the bot is about to change out from under itself. A no-op everywhere
-      // else, because nothing else defines the hook.
-      await this.botUsePower?.();
-      if (this.#stopped) return;
-
       const state = this.getState();
       const fen = state.fen;
       const started = Date.now();
 
       // No second argument: with no clock to spare time for, what the bot
       // may spend IS its own strength, which is #think's default.
-      const move = this.#vet(await this.#think(fen));
+      const move = await this.#think(fen);
 
       // The game can end, restart or be left while the search runs.
       if (this.#stopped) return;
@@ -286,33 +263,6 @@ export const withBot = (Base) => class extends Base {
    * There the search runs on the main thread instead, which briefly costs
    * smoothness but never costs a move.
    */
-  /**
-   * The searched move, or the best one the rules underneath will actually
-   * accept.
-   *
-   * The search plays chess. In Elemental Chess it can therefore come back with
-   * a move that a freeze, a shield or a patch of vines forbids, having never
-   * been told any of them exist. Rather than teach a move generator about ice,
-   * the answer is vetted afterwards and swapped for the best allowed
-   * alternative when it has to be — losing the bot some of its strength on the
-   * turns where effects are on the board, which is a handful of turns a game,
-   * and never losing it a move.
-   *
-   * `isMoveAllowed` only exists on the elemental layer, so in an ordinary game
-   * this hands back exactly what it was given.
-   */
-  #vet(move) {
-    if (!move) return move;
-    if (this.isMoveAllowed?.(move.from, move.to) !== false) return move;
-
-    const allowed = this.getAllLegalMoves();
-    if (!allowed.length) return null;
-    const worth = (type) => FALLBACK_WORTH[type] ?? 0;
-    const best = [...allowed].sort((a, b) => worth(b.captured) - worth(a.captured))[0];
-    log('Bot move blocked by an effect; playing', best.san, 'instead');
-    return best;
-  }
-
   async #think(fen, timeBudgetMs = this.#strength.timeBudgetMs) {
     const worker = this.#getWorker();
     if (worker) {

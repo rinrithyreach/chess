@@ -37,45 +37,6 @@ import {
 } from './config.js';
 import { fileToAvatar, isAvatar } from './avatar.js';
 import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
-// Small, pure and free of any engine, so the rules card and the power bar can
-// be built from the same table the variant's rules are written against —
-// rather than from a second copy of them kept in step by hand.
-import {
-  ELEMENTS,
-  ELEMENT_ORDER,
-  SLOT_CANDIDATES,
-  SLOT_SIZE,
-  SUPERS,
-  CONTESTED_SLOTS,
-  defaultLoadout,
-} from './elemental.js';
-
-/**
- * The second line of a row in the powers panel: who holds it, and why you can
- * or cannot press it.
- *
- * One line and one function, because the answers are mutually exclusive and
- * the order they are tested in IS the explanation: "all spent" beats "nothing
- * in reach", which beats "one a turn". Spread across the render loop as
- * ternaries, that order stops being visible and starts being an accident.
- *
- * It has to stay SHORT. The row is one line with an ellipsis at 320px wide,
- * and a line that reads "Pawn · ready, or when it cap…" is worse than a
- * shorter one that finishes its sentence — which is why Fire and Lightning
- * say only "on capture" when they have nothing in reach, and leave the rest
- * of the story to the row's own description.
- */
-function powerLine(info, entry, { mine, used }) {
-  if (!mine) return info.piece;
-  if (!entry || !entry.squares.length) return `${info.piece} · all spent`;
-  if (entry.blockedBy === 'void') return `${info.piece} · silenced`;
-  if (entry.blockedBy) return `${info.piece} · held shut`;
-  if (used) return `${info.piece} · one power a turn`;
-  if (!entry.ready.length) {
-    return `${info.piece} · ${info.onCapture ? 'on capture' : 'nothing in reach'}`;
-  }
-  return `${info.piece} · ready`;
-}
 
 /** A blank friend code, drawn the same way a blank room code is. */
 const FRIEND_CODE_BLANK = '-'.repeat(FRIEND_CODE_LENGTH);
@@ -174,25 +135,6 @@ export class UI {
    * one tap to reopen, and a panel that is already open on move one hides the
    * bottom of the board before anybody has asked it to.
    */
-  #powersOpen = false;
-  #powerRows = null;
-
-  /**
-   * The elements this side is bringing, while the New Game form is open.
-   *
-   * Held here rather than read back off the chips, because the chips are the
-   * picture and this is the fact: a slot that is one short has to be able to
-   * say so, and counting ticked buttons would make the answer depend on a
-   * render having happened.
-   */
-  #loadout = new Set(defaultLoadout());
-
-  /** Built once — the chips must not be replaced under a thumb mid-tap. */
-  #loadoutBuilt = false;
-
-  /** Which elements the game in progress contains. Null until a turn is ours. */
-  #carried = null;
-
   /** Which card is currently showing a name box, if either. */
   #renaming = null;
 
@@ -309,12 +251,6 @@ export class UI {
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
       'theme-picker', 'bg-picker',
       'bot-fields', 'bot-picker',
-      'opponent-fields', 'opponent-picker', 'opponent-bot-hint',
-      'mode-elemental', 'elemental-fields', 'elements-list',
-      'loadout-list', 'loadout-count', 'loadout-hint',
-      'powerbar', 'power-glyph', 'power-name', 'power-hint', 'btn-power',
-      'powerbar-super', 'super-name', 'super-hint', 'btn-super',
-      'btn-powers-toggle', 'powers-list',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
       // Phase 2 — online
@@ -550,43 +486,6 @@ export class UI {
       });
     }
 
-    // The elemental rules card. Built from the same table the rules
-    // themselves are written against, so an element cannot end up described
-    // here as one thing and implemented as another.
-    const elements = this.#dom['elements-list'];
-    if (elements) {
-      elements.innerHTML = '';
-      ELEMENT_ORDER.forEach((id) => {
-        const element = ELEMENTS[id];
-        const item = document.createElement('li');
-        item.className = 'element';
-        item.dataset.element = id;
-        // The super goes on the card as well as in the bar. The bar can only
-        // tell you about a piece you have already picked up, and the card is
-        // where the variant is learned — a second power per element that is
-        // only ever discovered by selecting the right piece is a feature most
-        // players would never find.
-        const over = SUPERS[id];
-        item.innerHTML =
-          `<span class="element__glyph" aria-hidden="true">${element.emoji}</span>` +
-          '<span class="element__body">' +
-          `<span class="element__name">${element.piece} — ${element.power}</span>` +
-          `<span class="element__desc">${element.blurb}</span>` +
-          (over
-            ? '<span class="element__super">'
-              + `<span class="element__supername">✦ ${over.power}</span>`
-              + `<span class="element__superdesc">${over.blurb}</span>`
-              + '</span>'
-            : '') +
-          '</span>';
-        elements.append(item);
-      });
-    }
-
-    // After the card, not before: the first paint greys the rows the loadout
-    // left out, and it cannot grey rows that have not been made yet.
-    this.#buildLoadout();
-
     // Background picker. Same shape as the board themes above, and for the
     // same reason: one list in config.js decides what exists, so a background
     // is a block of CSS and a row in that list, with no markup to add here.
@@ -637,30 +536,17 @@ export class UI {
   #applyMode(mode) {
     const online = mode === GAME_MODE.ONLINE;
     const bot = mode === GAME_MODE.BOT;
-    const elemental = mode === GAME_MODE.ELEMENTAL;
 
     if (this.#dom['online-fields']) this.#dom['online-fields'].hidden = !online;
-    // Difficulty is asked only where it is answerable. The Elemental bot
-    // takes no level — there is no picker for it, and a game that silently
-    // used whatever this one was left on would be a choice nobody made.
     if (this.#dom['bot-fields']) this.#dom['bot-fields'].hidden = !bot;
-    if (this.#dom['elemental-fields']) this.#dom['elemental-fields'].hidden = !elemental;
-    // Elemental is the one mode that asks who you are playing, being the one
-    // that can be played either way round on this device.
-    if (this.#dom['opponent-fields']) {
-      this.#dom['opponent-fields'].hidden = !elemental;
-    }
     if (this.#dom['btn-start-game']) this.#dom['btn-start-game'].hidden = online;
 
     const nameFields = this.#dom['form-new-game']
       ?.querySelectorAll('.field:not(.field--modes)');
-    // Elemental asks for a second name only when a second person is going
-    // to type one in.
-    const soloVariant = elemental && this.#selectedOpponent() === 'bot';
     nameFields?.forEach((field, index) => {
       if (index === 0) field.hidden = online;  // your own name
       else if (index === 1) {                  // the opponent's
-        field.hidden = online || bot || soloVariant;
+        field.hidden = online || bot;
       }
     });
   }
@@ -767,8 +653,6 @@ export class UI {
     this.#renderStatus(snapshot);
     this.#renderHistory(state);
     this.#renderControls(snapshot);
-    this.#renderPowerBar(snapshot);
-    this.#renderPowers(snapshot);
     this.#chatOn = snapshot.settings?.chat !== false;
     this.#renderOnline(state);
   }
@@ -1239,315 +1123,6 @@ export class UI {
     if (this.#historyExpanded) list.scrollTop = list.scrollHeight;
   }
 
-  /**
-   * The elemental power bar.
-   *
-   * Four things it can be saying, and the order they are checked in is the
-   * order they matter: a power is being aimed, a power is ready, the piece you
-   * have picked up has one that goes off by itself, or nothing is selected.
-   *
-   * The bar exists at all only in a game that has an `elemental` block, so
-   * every other mode leaves this after one line.
-   */
-  #renderPowerBar(snapshot) {
-    const bar = this.#dom.powerbar;
-    if (!bar) return;
-
-    const { state, view } = snapshot;
-    const on = Boolean(state.elemental) && !state.isGameOver;
-    bar.hidden = !on;
-    if (!on) return;
-
-    const button = this.#dom['btn-power'];
-    const glyph = this.#dom['power-glyph'];
-    const name = this.#dom['power-name'];
-    const hint = this.#dom['power-hint'];
-
-    const say = (emoji, title, detail, action = null, mood = null) => {
-      if (glyph) glyph.textContent = emoji;
-      if (name) name.textContent = title;
-      if (hint) hint.textContent = detail;
-      if (button) {
-        button.hidden = !action;
-        if (action) button.textContent = action;
-      }
-      bar.dataset.state = mood ?? (action ? 'ready' : 'idle');
-    };
-
-    // The super line, decided before the bar's own state is: while a power
-    // is being aimed there is exactly one thing to do, and offering a second
-    // button beside "Cancel" would be offering a way deeper into a mode the
-    // player is trying to leave.
-    this.#renderSuperRow(view?.aiming ? null : this.#controller.getSelectedSuper?.() ?? null,
-      state.elemental?.powerUsed);
-
-    // Aiming. The bar becomes the way out of it, because the player is now in
-    // a mode, and a mode with no visible exit is a trap.
-    if (view?.aiming) {
-      const aimed = ELEMENTS[view.aiming.element];
-      say(aimed.emoji, view.aiming.name, 'Tap a highlighted square', 'Cancel', 'aiming');
-      return;
-    }
-
-    const power = this.#controller.getSelectedPower?.() ?? null;
-    if (!power) {
-      const spent = state.elemental.powerUsed;
-      // Short enough to survive a 320px screen whole. The hint is one line
-      // with an ellipsis by design, and the All powers button beside it took
-      // room the longer wordings used to have — a hint that reads "Select one
-      // of your pie…" is worse than a shorter one that finishes its sentence.
-      say('🜁', 'Powers', spent ? 'One power a turn' : 'Select a piece');
-      return;
-    }
-
-    const element = ELEMENTS[power.element];
-    if (power.blockedBy === 'void') {
-      say(element.emoji, power.info.power, 'The Void has it by the throat');
-      return;
-    }
-    if (power.blockedBy) {
-      say(element.emoji, power.info.power, 'Their Light bishop holds it shut');
-      return;
-    }
-    // Nothing in reach, on a power that also goes off by itself. Saying so
-    // matters: the piece is not idle, it is one square away from being
-    // frightening, and it may not need the charge at all to get there.
-    //
-    // Four words, because this line is one line with an ellipsis and there
-    // are only about twenty characters of it at 320px wide. "Fires free when
-    // this piece captures" was the first try and arrived as "Fires free when
-    // this piec…", which says less than nothing.
-    if (!power.ready && power.info.onCapture) {
-      say(element.emoji, power.info.power, 'Free on a capture');
-      return;
-    }
-    if (state.elemental.powerUsed) {
-      say(element.emoji, power.info.power, 'One power a turn');
-      return;
-    }
-    if (!power.ready) {
-      say(element.emoji, power.info.power, 'Nothing in reach');
-      return;
-    }
-    say(element.emoji, power.info.power, element.blurb, 'Use');
-  }
-
-  /**
-   * The super line under the bar.
-   *
-   * Shown only when there is one to fire — a line that is always there and
-   * usually refuses is worse than one that appears when it means something,
-   * and this is a bar that has to fit four other controls at 320px.
-   *
-   * The hint is the price, every time, because the price is the whole of what
-   * makes a super a decision. "Costs your move" is three words and is the
-   * only thing a player needs to know before pressing it.
-   */
-  #renderSuperRow(power, powerUsed) {
-    const row = this.#dom['powerbar-super'];
-    if (!row) return;
-
-    const ready = Boolean(power) && power.ready && !power.blockedBy && !powerUsed;
-    row.hidden = !ready;
-    if (!ready) return;
-
-    const name = this.#dom['super-name'];
-    const hint = this.#dom['super-hint'];
-    if (name) name.textContent = power.info.power;
-    if (hint) hint.textContent = 'Costs your move';
-    row.dataset.element = power.element;
-  }
-
-  /**
-   * Which colour is sitting on a given card right now.
-   *
-   * #cardSide is built by #renderPlayers from the orientation and is the one
-   * place that mapping lives, so asking it here keeps a second copy of
-   * "who is where" from drifting out of step with the first.
-   */
-  #colorOnCard(prefix) {
-    return Object.keys(this.#cardSide ?? {}).find((c) => this.#cardSide[c] === prefix) ?? null;
-  }
-
-  /**
-   * Swap the name on a card for a box holding the same name.
-   *
-   * Deliberately not a modal. A name is one short string and the card is
-   * already showing it: putting the box where the name was means the player
-   * is editing the thing they tapped, in the place they tapped it, rather
-   * than reading a dialog about it.
-   */
-  #startRenaming(prefix) {
-    const input = this.#dom[`input-rename-${prefix}`];
-    const line = this.#dom[`${prefix}-name`]?.parentElement;
-    if (!input || !line) return;
-
-    input.value = this.#dom[`${prefix}-name`]?.textContent ?? '';
-    line.hidden = true;
-    input.hidden = false;
-    input.focus();
-    input.select();
-    this.#renaming = prefix;
-  }
-
-  /** Put the name back, whether it changed or not. */
-  #stopRenaming(prefix = this.#renaming) {
-    if (!prefix) return;
-    const input = this.#dom[`input-rename-${prefix}`];
-    const line = this.#dom[`${prefix}-name`]?.parentElement;
-    if (input) input.hidden = true;
-    if (line) line.hidden = false;
-    if (this.#renaming === prefix) this.#renaming = null;
-  }
-
-  /**
-   * The seven powers, open.
-   *
-   * The power bar above can only ever speak about the piece in hand, which is
-   * the wrong half of the question before you have picked one up: "what do I
-   * still have" is not answerable from a board where a charge is a glyph the
-   * size of a fingernail and you have to know by heart which element each
-   * piece carries. This is that answer, and it is also the rules card — the
-   * one on the New Game form goes out of reach the moment the game starts.
-   *
-   * Seven rows, always, spent ones greyed rather than dropped. The list is
-   * read mid-game with a thumb already moving, and a row that vanishes when
-   * its last piece dies takes the five below it up a place.
-   */
-  #renderPowers(snapshot) {
-    const list = this.#dom['powers-list'];
-    const toggle = this.#dom['btn-powers-toggle'];
-    if (!list || !toggle) return;
-
-    const { state } = snapshot;
-    const on = Boolean(state.elemental) && !state.isGameOver;
-    toggle.hidden = !on;
-    if (!on) {
-      list.hidden = true;
-      return;
-    }
-
-    list.hidden = !this.#powersOpen;
-    toggle.setAttribute('aria-expanded', String(this.#powersOpen));
-    if (!this.#powersOpen) return;
-
-    if (!this.#powerRows) this.#buildPowerRows(list);
-
-    // Empty while the other side is to move — getArsenal() is gated the same
-    // way getPower() is. The rows stay up regardless: somebody reading what
-    // Vines does while the bot thinks should not have the panel blink out
-    // from under them.
-    const held = new Map(
-      this.#controller.getArsenal().map((row) => [row.element, row]),
-    );
-    const mine = held.size > 0;
-    const used = Boolean(state.elemental.powerUsed);
-
-    // Which elements this game contains at all. Read off the board rather
-    // than off the loadout, because the board is the thing that knows: a game
-    // restored from a save has a loadout the panel never saw chosen, and a
-    // hand-loaded position has none.
-    //
-    // Only settled while it is your turn, since getArsenal() is empty on the
-    // other side's. Held from the last turn it was known, so the panel does
-    // not shed half its rows every time the bot thinks.
-    if (mine) {
-      this.#carried = new Set(
-        this.#controller.getArsenal().filter((row) => row.carried).map((row) => row.element),
-      );
-    }
-
-    ELEMENT_ORDER.forEach((id) => {
-      const info = ELEMENTS[id];
-      const row = this.#powerRows.get(id);
-      if (!row) return;
-
-      // A row for a power nobody brought is a promise the board cannot keep.
-      // Hidden rather than greyed: "all spent" and "never here" are different
-      // things and only one of them is worth a line.
-      const carried = !this.#carried || this.#carried.has(id);
-      row.li.hidden = !carried;
-      if (!carried) return;
-
-      const entry = held.get(id) ?? null;
-      const count = entry ? entry.squares.length : null;
-      const ready = Boolean(
-        entry && !used && !entry.blockedBy && entry.ready.length,
-      );
-
-      // Blank at nought rather than "×0", which would sit next to a row
-      // already saying "all spent" and add nothing but noise.
-      row.count.textContent = count ? `×${count}` : '';
-      row.item.dataset.ready = String(ready);
-
-      // Enabled whenever it is your turn, even when the power cannot fire —
-      // the refusals say something worth hearing ("their Light bishop holds
-      // it shut", "needs that piece next to something") and a
-      // disabled row cannot say anything at all on a screen with no hover.
-      row.item.disabled = !mine;
-      row.who.textContent = powerLine(info, entry, { mine, used });
-      row.item.setAttribute(
-        'aria-label',
-        `${info.name} — ${info.power}. ${info.detail}`,
-      );
-    });
-
-    this.#powerRows.get('note').hidden = mine;
-  }
-
-  /**
-   * Build the seven rows once and keep them.
-   *
-   * Not re-created on every render: the panel repaints on every published
-   * state, and replacing the element under a thumb mid-tap loses the tap.
-   */
-  #buildPowerRows(list) {
-    this.#powerRows = new Map();
-    list.textContent = '';
-
-    ELEMENT_ORDER.forEach((id) => {
-      const info = ELEMENTS[id];
-
-      const li = document.createElement('li');
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'powers__item';
-      item.dataset.power = id;
-      item.title = info.detail;
-
-      const glyph = document.createElement('span');
-      glyph.className = 'powers__glyph';
-      glyph.textContent = info.emoji;
-      glyph.setAttribute('aria-hidden', 'true');
-
-      const bodyEl = document.createElement('span');
-      bodyEl.className = 'powers__body';
-
-      const name = document.createElement('span');
-      name.className = 'powers__name';
-      name.textContent = info.power;
-
-      const who = document.createElement('span');
-      who.className = 'powers__who';
-
-      const count = document.createElement('span');
-      count.className = 'powers__count';
-
-      bodyEl.append(name, who);
-      item.append(glyph, bodyEl, count);
-      li.append(item);
-      list.append(li);
-
-      this.#powerRows.set(id, { li, item, who, count });
-    });
-
-    const note = document.createElement('li');
-    note.className = 'powers__note';
-    note.textContent = 'Your powers appear here on your turn.';
-    list.append(note);
-    this.#powerRows.set('note', note);
-  }
-
   #renderControls({ state }) {
     const online = state.online;
     // Online, the board is only live once both seats are filled.
@@ -1758,158 +1333,6 @@ export class UI {
   #selectedBotLevel() {
     const active = this.#dom['bot-picker']?.querySelector('.time-option.is-active');
     return active?.dataset.level ?? DEFAULT_BOT_LEVEL;
-  }
-
-  /**
-   * Who the Elemental game is against: 'bot' or 'human'.
-   *
-   * The picker it reads is styled as a `.time-option` because it was built
-   * beside the time controls and shares their look. The time controls have
-   * gone; the class stays, being what this picker is drawn with.
-   */
-  /**
-   * The loadout picker: which elements this side is bringing.
-   *
-   * There are seventeen elements and sixteen pieces, so somebody has to be
-   * left behind, and this is where that is decided. Only the CONTESTED slots
-   * get a chooser — the ones with more elements than squares — which today is
-   * the pawns and only the pawns. Everything on the back rank is settled and
-   * is shown in the rules card below rather than as a row of chips that cannot
-   * be unticked, because a control with exactly one legal state is not a
-   * control, it is a label pretending to be one.
-   *
-   * Built once, from the same table the game reads. Add a second queen element
-   * to ELEMENTS and a queen chooser appears here on its own.
-   */
-  #buildLoadout() {
-    const list = this.#dom['loadout-list'];
-    if (!list || this.#loadoutBuilt) return;
-    this.#loadoutBuilt = true;
-    list.textContent = '';
-
-    this.#loadout = new Set(defaultLoadout());
-
-    CONTESTED_SLOTS.forEach((slot) => {
-      SLOT_CANDIDATES[slot].forEach((id) => {
-        const element = ELEMENTS[id];
-        const over = SUPERS[id];
-
-        const li = document.createElement('li');
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'loadout__chip';
-        chip.dataset.element = id;
-        chip.dataset.slot = slot;
-        // The rule and its super, on the control itself. This is the moment a
-        // player decides between them and it is the only moment they can, so
-        // making them read the card underneath first would be asking them to
-        // choose and then explaining what they chose.
-        chip.title = `${element.detail}\n\n✦ ${over.power}: ${over.detail}`;
-
-        const glyph = document.createElement('span');
-        glyph.className = 'loadout__glyph';
-        glyph.textContent = element.emoji;
-        glyph.setAttribute('aria-hidden', 'true');
-
-        const name = document.createElement('span');
-        name.className = 'loadout__name';
-        name.textContent = element.name;
-
-        const power = document.createElement('span');
-        power.className = 'loadout__power';
-        power.textContent = element.power;
-
-        chip.append(glyph, name, power);
-        li.append(chip);
-        list.append(li);
-      });
-    });
-
-    list.addEventListener('click', (event) => {
-      const chip = event.target.closest('.loadout__chip');
-      if (chip) this.#toggleLoadout(chip.dataset.element, chip.dataset.slot);
-    });
-
-    this.#paintLoadout();
-  }
-
-  /**
-   * Tick or untick one element.
-   *
-   * Untick freely; tick only while the slot has room. The alternative — ticking
-   * a ninth pawn element and having the picker silently drop one of the eight
-   * already chosen — would mean a player's own earlier choice disappearing
-   * under their thumb with nothing to say which one went.
-   */
-  #toggleLoadout(id, slot) {
-    if (!id || !ELEMENTS[id]) return;
-
-    if (this.#loadout.has(id)) {
-      this.#loadout.delete(id);
-    } else {
-      const taken = SLOT_CANDIDATES[slot].filter((other) => this.#loadout.has(other)).length;
-      if (taken >= SLOT_SIZE[slot]) {
-        this.toast(`Eight ${slot === 'pawn' ? 'pawns' : 'pieces'} — drop one first`);
-        return;
-      }
-      this.#loadout.add(id);
-    }
-
-    this.#paintLoadout();
-  }
-
-  /** Draw the chips, and say how many are still to be chosen. */
-  #paintLoadout() {
-    const list = this.#dom['loadout-list'];
-    const count = this.#dom['loadout-count'];
-    if (!list) return;
-
-    let short = 0;
-    CONTESTED_SLOTS.forEach((slot) => {
-      const taken = SLOT_CANDIDATES[slot].filter((id) => this.#loadout.has(id)).length;
-      short += SLOT_SIZE[slot] - taken;
-    });
-
-    list.querySelectorAll('.loadout__chip').forEach((chip) => {
-      const on = this.#loadout.has(chip.dataset.element);
-      chip.dataset.on = String(on);
-      chip.setAttribute('aria-pressed', String(on));
-    });
-
-    // Said as what is left to do rather than as what has been done, because
-    // the only number that changes what the player does next is the shortfall.
-    if (count) {
-      count.textContent = short > 0
-        ? `Choose ${short} more`
-        : 'Ready — the one you left out sits this match out';
-      count.dataset.short = String(short > 0);
-    }
-
-    // The rules card greys the elements not coming, so the list below the
-    // picker is always a list of what this game actually contains.
-    const elements = this.#dom['elements-list'];
-    elements?.querySelectorAll('.element').forEach((row) => {
-      const id = row.dataset.element;
-      const contested = CONTESTED_SLOTS.includes(ELEMENTS[id]?.slot);
-      row.dataset.out = String(contested && !this.#loadout.has(id));
-    });
-  }
-
-  /**
-   * The elements this game will be played with.
-   *
-   * A short loadout is filled in rather than refused: normalizeLoadout() tops
-   * every slot up from the elements that were not picked, so a player who
-   * ticks nothing gets the default sixteen and a game rather than a form that
-   * will not submit.
-   */
-  #selectedLoadout() {
-    return [...(this.#loadout ?? new Set(defaultLoadout()))];
-  }
-
-  #selectedOpponent() {
-    const active = this.#dom['opponent-picker']?.querySelector('.time-option.is-active');
-    return active?.dataset.opponent ?? 'bot';
   }
 
   // -----------------------------------------------------------------------
@@ -2453,9 +1876,7 @@ export class UI {
         blackName: this.#dom['input-black']?.value ?? '',
         whiteAvatar: this.#avatarFor('p1'),
         blackAvatar: this.#avatarFor('p2'),
-        opponent: this.#selectedOpponent(),
         botLevel: this.#selectedBotLevel(),
-        loadout: this.#selectedLoadout(),
       });
     });
 
@@ -2629,20 +2050,6 @@ export class UI {
       this.#call('onSettingChange', { boardZoom: next });
       this.toast(`Board size: ${BOARD_ZOOM_LEVELS[next].label}`);
     });
-    // One button, two jobs, decided by what the bar is currently saying:
-    // start aiming a power, or stop aiming one. Both are the same gesture
-    // from the player's side — "this power" and "not this power" — so they
-    // share the control rather than putting a second one beside it that is
-    // hidden nine tenths of the time.
-    this.#dom['btn-super']?.addEventListener('click', () => {
-      this.#call('onCastSuper');
-    });
-
-    this.#dom['btn-power']?.addEventListener('click', () => {
-      this.#call(this.#dom.powerbar?.dataset.state === 'aiming'
-        ? 'onCancelPower'
-        : 'onUsePower');
-    });
 
     // Renaming a player mid-game. Both cards are wired; only the ones this
     // device may act for ever show their button.
@@ -2676,22 +2083,6 @@ export class UI {
         this.#stopRenaming(prefix);
       });
       input?.addEventListener('blur', () => this.#stopRenaming(prefix));
-    });
-
-    this.#dom['btn-powers-toggle']?.addEventListener('click', () => {
-      this.#powersOpen = !this.#powersOpen;
-      // Repainted here rather than waited for: nothing about the game has
-      // changed, so there is no change event on its way.
-      if (this.#lastSnapshot) this.#renderPowers(this.#lastSnapshot);
-    });
-
-    // Delegated: the seven rows are rebuilt at most once per game, but they do
-    // not exist at all until the panel is first opened, and a listener each
-    // would have to be attached from inside the render.
-    this.#dom['powers-list']?.addEventListener('click', (event) => {
-      const item = event.target.closest?.('.powers__item');
-      if (!item || item.disabled) return;
-      this.#call('onCastPower', item.dataset.power);
     });
 
     this.#dom['btn-restart']?.addEventListener('click', () => this.#call('onRestart'));
@@ -2766,20 +2157,17 @@ export class UI {
       this.#call('onSettingChange', { boardTheme: swatch.dataset.theme });
     });
 
-    // Both pickers behave the same way and neither belongs to the
-    // controller: what is chosen here is not a setting and not game state
-    // until a game actually starts with it.
-    ['bot-picker', 'opponent-picker'].forEach((id) => {
-      this.#dom[id]?.addEventListener('click', (event) => {
-        const option = event.target.closest('.time-option');
-        if (!option) return;
-        this.#dom[id].querySelectorAll('.time-option').forEach((node) => {
-          const active = node === option;
-          node.classList.toggle('is-active', active);
-          node.setAttribute('aria-checked', String(active));
-        });
-        // The opponent decides whether the second name box is any use.
-        if (id === 'opponent-picker') this.#applyMode(this.#selectedMode());
+    // The difficulty row does not belong to the controller: what is chosen
+    // here is not a setting and not game state until a game starts with it.
+    // It was a loop over two of these; the other picker went with the mode
+    // that asked the question, and this is the same code with one left.
+    this.#dom['bot-picker']?.addEventListener('click', (event) => {
+      const option = event.target.closest('.time-option');
+      if (!option) return;
+      this.#dom['bot-picker'].querySelectorAll('.time-option').forEach((node) => {
+        const active = node === option;
+        node.classList.toggle('is-active', active);
+        node.setAttribute('aria-checked', String(active));
       });
     });
 
@@ -2798,13 +2186,6 @@ export class UI {
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
 
-      // Aiming a power is a mode with nothing on screen dimmed, so Escape has
-      // to get out of it — and it has to do so before the modal handling
-      // below, because there is usually no modal open at the time.
-      if (!this.#openModal && this.#dom.powerbar?.dataset.state === 'aiming') {
-        this.#call('onCancelPower');
-        return;
-      }
       if (!this.#openModal) return;
 
       // Dismissing a draw offer must actually answer it, otherwise the offer

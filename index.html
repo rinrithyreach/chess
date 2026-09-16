@@ -157,13 +157,6 @@
               <span class="mode__desc" id="mode-online-desc">Play on two devices</span>
             </span>
           </label>
-          <label class="mode">
-            <input type="radio" name="mode" value="elemental" id="mode-elemental">
-            <span class="mode__body">
-              <span class="mode__name">Elemental Chess</span>
-              <span class="mode__desc">Every piece has one power to spend</span>
-            </span>
-          </label>
         </fieldset>
 
         <!--
@@ -177,69 +170,6 @@
             <div class="time-picker time-picker--three" id="bot-picker"
                  role="radiogroup" aria-labelledby="bot-level-label"></div>
           </div>
-        </div>
-
-        <!--
-          Opponent. Elemental Chess is the one mode that asks. It sits out
-          here rather than inside that mode's own block because it decides
-          something about the form above it — whether the second name box is
-          any use — and because it was shared with Speed Chess before that
-          mode was removed.
-
-          Drawn with the time-picker's classes, which outlived the time
-          picker: they are what a row of choices looks like here.
-        -->
-        <div class="opponent-fields" id="opponent-fields" hidden>
-          <div class="setting setting--stack">
-            <span class="setting__label" id="opponent-label">Opponent</span>
-            <div class="time-picker" id="opponent-picker" role="radiogroup"
-                 aria-labelledby="opponent-label">
-              <button type="button" class="time-option is-active" data-opponent="bot"
-                      role="radio" aria-checked="true" aria-label="Play the bot">
-                <span class="time-option__label">Bot</span>
-                <span class="time-option__name" id="opponent-bot-hint">It has powers too</span>
-              </button>
-              <button type="button" class="time-option" data-opponent="human"
-                      role="radio" aria-checked="false"
-                      aria-label="Play another person on this device">
-                <span class="time-option__label">A friend</span>
-                <span class="time-option__name">Same device</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!--
-          The elements, and the loadout that decides which of them come.
-
-          Both lists are built in ui.js from the ELEMENTS table rather than
-          written out here, which is the opposite of what this block used to
-          do. Back when there were seven of them and they never changed, prose
-          in the markup was worth more than a loop; there are seventeen now and
-          a player picks between them, so a hand-written copy would be a second
-          roster to keep in step with the first — and the one that drifted
-          would be the one the player reads before choosing.
-        -->
-        <div class="elemental-fields" id="elemental-fields" hidden>
-          <div class="setting setting--stack">
-            <span class="setting__label" id="loadout-label">Your pawns</span>
-            <p class="loadout__hint" id="loadout-hint">
-              Seventeen elements, sixteen pieces. Your back rank is settled —
-              choose which eight elements ride your pawns.
-            </p>
-            <ul class="loadout" id="loadout-list" aria-labelledby="loadout-label"></ul>
-            <p class="loadout__count" id="loadout-count" role="status"></p>
-          </div>
-          <div class="setting setting--stack">
-            <span class="setting__label" id="elements-label">The seventeen elements</span>
-            <ul class="elements" id="elements-list" aria-labelledby="elements-label"></ul>
-          </div>
-          <p class="elements__note">
-            Every piece has one charge, for the whole match. Powers are free —
-            use one and still make your move — but only one a turn.
-            <strong>✦ Supers cost your whole move</strong>, so you fire one
-            instead of playing. Not while your king is in check.
-          </p>
         </div>
 
         <!-- Only the local player's name is needed for an online game. -->
@@ -502,60 +432,6 @@
         <div class="status" id="status" role="status" aria-live="polite">
           <span class="status__text" id="status-text">White's Turn</span>
           <span class="status__badge" id="status-badge" hidden>Check</span>
-        </div>
-
-        <!--
-          Elemental Chess only. Sits between the status and the controls
-          because it is about the piece you have just picked up, and reads as
-          part of the answer to "whose turn and what now" rather than as a
-          sixth control. Hidden outright in every other game.
-        -->
-        <div class="powerbar" id="powerbar" hidden>
-          <div class="powerbar__row">
-            <span class="powerbar__glyph" id="power-glyph" aria-hidden="true">🔥</span>
-            <span class="powerbar__body">
-              <span class="powerbar__name" id="power-name">Burn</span>
-              <span class="powerbar__hint" id="power-hint">Select a piece</span>
-            </span>
-            <button type="button" class="btn btn--primary btn--tiny" id="btn-power" hidden>
-              Use
-            </button>
-            <!--
-              The way to the other six. The bar can only ever speak about the
-              piece in hand, and a charge is a glyph the size of a fingernail,
-              so without this the only way to know what you still hold is to
-              read all sixty-four squares.
-            -->
-            <button
-              type="button"
-              class="btn btn--ghost btn--tiny powerbar__toggle"
-              id="btn-powers-toggle"
-              aria-expanded="false"
-              aria-controls="powers-list"
-            >
-              All powers
-              <span class="powerbar__caret" aria-hidden="true">⌄</span>
-            </button>
-          </div>
-          <!--
-            The super. A second line rather than a third button on the first:
-            the row above already holds a glyph, two lines of text, Use and
-            All powers, and at 320px there is no room for another word — and
-            this is the one control in the app that needs to say its price
-            before it is pressed.
-          -->
-          <div class="powerbar__super" id="powerbar-super" hidden>
-            <span class="powerbar__superglyph" aria-hidden="true">✦</span>
-            <span class="powerbar__body">
-              <span class="powerbar__name" id="super-name">Firestorm</span>
-              <span class="powerbar__hint" id="super-hint">Costs your move</span>
-            </span>
-            <button type="button" class="btn btn--super btn--tiny" id="btn-super">
-              Super
-            </button>
-          </div>
-          <!-- Filled from ELEMENTS by #renderPowers — seven rows, always. -->
-          <ul class="powers" id="powers-list" hidden></ul>
         </div>
 
         <!-- Primary controls -->

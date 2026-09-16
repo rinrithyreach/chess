@@ -94,22 +94,7 @@ export const GAME_MODE = {
   LOCAL: 'local',
   BOT: 'bot',
   ONLINE: 'online',
-  // The one variant: chess with seven elements laid over it. Its rules live
-  // in elemental.js and its session in sessions/elemental-session.js, both of
-  // which are loaded only when a game of it is actually started.
-  ELEMENTAL: 'elemental',
 };
-
-/**
- * Modes whose position cannot be rebuilt by replaying its own move list.
- *
- * Elemental Chess is the only one so far: its powers take pieces off the board
- * and move a king to squares no move reaches, neither of which is a chess move
- * and neither of which a PGN can record. Games in these modes are saved and
- * restored by FEN, and storage.js skips the PGN cross-check it runs on
- * everything else — see validateGameRecord.
- */
-export const FEN_ONLY_MODES = [GAME_MODE.ELEMENTAL];
 
 /**
  * Roughly how long the bot may think, in ms.
@@ -261,8 +246,7 @@ export const CHAT_MAX_LENGTH = 160;
  *
  * **Raising it here means deploying the rules again.** Until they are
  * deployed, a longer name still works everywhere it never left the device —
- * a local, bot or elemental game — and is refused for
- * anything online.
+ * a local or bot game — and is refused for anything online.
  *
  * There is a limit at all, rather than none, for two reasons that have
  * nothing to do with taste. Online, the whole room record is rewritten on
@@ -320,36 +304,6 @@ export const CHAT_COOLDOWN_MS = 700;
  * until the timer caught up.
  */
 export const EMOTE_BUBBLE_MS = 5000;
-
-/**
- * How long a power's burst plays on the board, in ms.
- *
- * Long enough to read as a thing that happened rather than a dropped frame,
- * short enough that it is over before the player's next tap lands — the turn
- * does not pass when a power fires, so the very next thing they do is usually
- * move, and a burst still going when the piece starts sliding is two
- * animations arguing about the same square.
- *
- * Written once, here, and read by both boards. The flat one puts it on each
- * burst as `--cast-ms` and the stylesheet times every keyframe against that,
- * so the pieces that finish early do it by taking a stated fraction of this
- * rather than by carrying a second number to be kept in step by hand; the
- * WebGL one divides by it directly.
- */
-export const POWER_CAST_MS = 900;
-
-/**
- * How much later each square of the Cleanse wave goes off, per square of
- * distance from the bishop that cast it, in ms.
- *
- * Cleanse is the one power that touches the whole board, and sixty-four
- * squares flashing together reads as a rendering fault rather than as an
- * event. Staggering them by distance turns it into something travelling
- * outwards from the piece that caused it, which is both prettier and more
- * honest about where it came from. Seven squares is the furthest corner, so
- * the wave is over roughly a third of a second after it starts.
- */
-export const POWER_WAVE_STEP_MS = 46;
 
 // -------------------------------------------------------------------------
 // Friends, and who is about
