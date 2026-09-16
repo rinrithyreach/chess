@@ -11,6 +11,8 @@
 import {
   STORAGE_KEYS,
   RETIRED_STORAGE_KEYS,
+  RETIRED_BOT_NAMES,
+  BOT_NAME,
   STORAGE_VERSION,
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
@@ -341,6 +343,24 @@ function validateGameRecord(record) {
 }
 
 /**
+ * Give the bot's seat its plain name back, in a save that still has an old one.
+ *
+ * Here because every reader of a save comes through loadGame(): the resumed
+ * game, which finds the bot's side by matching this name, and the menu's
+ * Continue label, which prints it. Fixed once at the source, they agree, and
+ * neither names a strength the bot no longer has. Only in a bot game —
+ * between two people a name is whatever somebody typed.
+ */
+function withPlainBotSeat(game) {
+  if (game.vsBot !== true || !game.players) return game;
+  const players = Object.fromEntries(Object.entries(game.players).map(([color, player]) => [
+    color,
+    RETIRED_BOT_NAMES.includes(player?.name) ? { ...player, name: BOT_NAME } : player,
+  ]));
+  return { ...game, players };
+}
+
+/**
  * Load the saved game, or null if none exists or it fails validation.
  * A corrupt record is cleared so the app returns to a clean state instead of
  * offering a broken "Continue".
@@ -365,7 +385,7 @@ export function loadGame() {
   }
 
   log('Loaded saved game', record.game.status);
-  return record.game;
+  return withPlainBotSeat(record.game);
 }
 
 export function saveGame(game) {

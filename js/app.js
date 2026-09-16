@@ -589,7 +589,7 @@ async function boot() {
     },
 
     onStartGame: async ({
-      mode, whiteName, blackName, whiteAvatar, blackAvatar, botLevel,
+      mode, whiteName, blackName, whiteAvatar, blackAvatar,
     }) => {
       sound.unlock();
 
@@ -607,11 +607,7 @@ async function boot() {
         await controller.useSession(new BotSession());
         // Only the human's picture travels: the bot takes the other seat, and
         // bot-session.js builds that seat itself so it cannot inherit one.
-        // The level travels with it, and is the one thing that makes this
-        // game different from the last one.
-        await controller.newGame({
-          whiteName, whiteAvatar, mode: GAME_MODE.BOT, botLevel,
-        });
+        await controller.newGame({ whiteName, whiteAvatar, mode: GAME_MODE.BOT });
       } else {
         // Local Two Player: both seats on this device, both names typed.
         await controller.useSession(new LocalSession());

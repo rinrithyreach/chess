@@ -86,38 +86,30 @@ a stronger opponent. It runs in a Web Worker, so the board never freezes while
 it thinks. It punishes hanging pieces and short tactics, and will miss deeper
 combinations.
 
-**Three difficulties: Easy, Medium and Hard.** One bot at three settings of
-the two numbers its search already takes — a ladder of separate engines would
-be three times the code for a difference nobody asked for. `BOT_LEVELS` in
-`js/config.js` is the whole of it, so a level is a row in that list: a time
-budget, a depth ceiling, a name and a two-word hint.
+**Difficulty levels have been removed.** Player vs Bot offered Easy, Medium and
+Hard — one bot at three settings of the time budget and depth ceiling its search
+already takes. Gone: `BOT_LEVELS` and the two helpers that looked a level up,
+the Difficulty row on the New Game form, the level carried in the game state and
+written into every save, and the seat name that carried it, *Bot (Hard)*.
 
-The budget is what actually binds. The search deepens one ply at a time and
-plays the best move from the last depth that finished inside it, so more time
-is more plies wherever the position allows them; the depth ceiling moves with
-the budget, because a budget the search cannot spend is not a harder opponent.
-Medium is today's bot, unchanged, and reads `BOT_TIME_BUDGET_MS` and
-`BOT_MAX_DEPTH` by reference rather than repeating their values — which is
-what keeps "Medium is the bot you already know" true rather than true for now.
-Easy sits well below it so a first game is winnable; Hard well above, at about
-three seconds a move, which is a long time on a phone and is what the extra
-plies cost. The hint on the button says so rather than letting it arrive as a
-surprise.
+The bot plays at the one strength it had before there was a choice, which was
+Medium: `BOT_TIME_BUDGET_MS` and `BOT_MAX_DEPTH`, a 1.2-second budget a move
+and never deeper than four plies. The per-game strength field the search reads
+stays, for the reason it outlived the tournament ladder: a search that reads its
+budget off a field costs nothing, and is the shape a choice would need.
 
-**The level is part of the game, not a global.** It rides in the state, is
-written into the save record and is read back on resume — without that,
-continuing a Hard game after a refresh would hand the board back with the Easy
-bot thinking for it: the position right, the opponent quietly swapped. A level
-from a build with more of them resolves to Medium rather than to nothing,
-because a bot with no settings at all is a bot that cannot think rather than
-one of the wrong strength.
+**A game saved while levels existed still resumes**, at the one strength. The
+level in the record is ignored, and the seat's old name is given back as plain
+*Bot* when the record loads — in `storage.js`, because every reader of a save
+comes through there. So the card, the PGN headers and the menu's Continue label
+never name a strength that is not the one playing, and the resumed game can
+still find which side is the bot's, which it does by that name. Only in a bot
+game: between two people, a seat called *Bot (Hard)* is just what somebody
+typed.
 
-The bot's seat is **named after the level** — *Bot (Hard)* — so the player
-card, the PGN headers and the game-over dialog all say who you actually played.
-It is also the only place the choice is visible once the form has gone. A bot
-with no level chosen — a game resumed from a save written before there was a
-picker — stays plain *Bot*: claiming a level nobody chose would be worse than
-showing none.
+The `.time-picker` and `.time-option` classes went with the row. Built for
+Speed Chess's time controls and passed from picker to picker since, this was
+their last user.
 
 **Speed Chess has been removed**, and the chess clock with it — it was the
 only thing that ever had one. Gone: the mode, four time controls, the clock
@@ -132,9 +124,9 @@ a field on every game record, a branch in every session, and a shape the
 parts that stay get written around.
 
 Two things outlived it. The opponent picker — bot or a friend on this device
-— passed to Elemental Chess, and has since gone with that too; the
-`.time-option` classes it was drawn with now belong solely to the
-bot-difficulty row. And `BOT_MIN_THINK_MS`, the courtesy pause before the bot
+— passed to Elemental Chess, and has since gone with that too, as have the
+`.time-option` classes it was drawn with, which outlived both as the
+bot-difficulty row until that went as well. And `BOT_MIN_THINK_MS`, the courtesy pause before the bot
 replies, which used to be trimmed to whatever the clock could spare and is now
 simply the pause.
 
@@ -195,7 +187,7 @@ for nothing else by the end:
 
 The opponent picker went too. It was built for Speed Chess, outlived it as
 Elemental Chess's, and had no third user — so the `.time-option` classes it
-was drawn with now belong solely to the bot-difficulty row.
+was drawn with passed to the bot-difficulty row, and have since gone with that.
 
 **The bot is untouched.** Its strength was always a per-game field with the
 ordinary constants as its default, and only the elemental session ever reached
@@ -1448,7 +1440,7 @@ with zero console errors in every browser and viewport tested** — and
 nine more cover profile pictures, the room code, the mobile board and the
 capture trays, a further **183 assertions**, run against the
 real app in Chromium and the shipped security rules in the database emulator.
-Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, chat, emotes, friends and presence **110**, three bot difficulties **48**, long names **56**, a confirmation raised over a sheet **40**, renaming mid-game **48**, the emote bubble **14**, with **15** more run against the deployed site and the real Firebase project rather than a stand-in. A further **440** covered Elemental Chess — the variant, its powers panel, the powers being chosen, and the supers — and went with the mode; they are not counted here because there is nothing left for them to run against. The groups were run separately, so
+Pictures on online seats add **36 more**, the background setting **32**, hover feedback **20**, chat, emotes, friends and presence **110**, long names **56**, a confirmation raised over a sheet **40**, renaming mid-game **48**, the emote bubble **14**, with **15** more run against the deployed site and the real Firebase project rather than a stand-in. A further **440** covered Elemental Chess — the variant, its powers panel, the powers being chosen, and the supers — and went with the mode; they are not counted here because there is nothing left for them to run against. The groups were run separately, so
 the totals are reported separately rather than as one number:
 
 | Suite | Assertions | What it covers |
@@ -1478,7 +1470,6 @@ the totals are reported separately rather than as one number:
 | **The emote bubble (Chromium)** | **14** | **A duration, so it is measured rather than trusted: the bubble is fired and watched at 50ms intervals until it goes, and it has to still be there well past the old 2.6s and to leave within a small margin of the configured time — it lives 5,014ms against a configured 5,000. The stylesheet is checked to READ the duration rather than repeat it, no emote animation is left carrying a hard-coded one, every `var()` fallback matches the constant, and the custom property is confirmed on the root of a running page. Plus the things a longer bubble must not break: it still appears at once, carries the right glyph, and a second emote replays the animation instead of sitting still because the class was already on** |
 | **Renaming a player mid-game (Chromium ×2 + real project)** | **48** | **Two browsers in one real room. The control appears on exactly one card and it is the seat that device is sitting in — checked against the colour rather than the position — while the same card on the opponent's screen has no button at all. The name becomes a box holding the name it already had; Enter commits, the card updates, and the OTHER browser shows the new name without reloading. A move still plays afterwards, so the rename did not disturb the game. Escape abandons the edit instead of saving it, a blank name is refused with a reason, and the new name is written to the stored profile for the next room. The room is deleted afterwards, so the database is left as it was found. Then the offline modes, each checked for the cards it should offer rather than for a blanket answer: local two-player offers BOTH, and a bot game offers yours and not the bot's. In each, the rename goes in through the real control, lands on the card and in the game state, and survives a reload through the autosave. The bot's own seat refuses a rename asked for directly, and its name is untouched afterwards. And a local rename leaves the stored online profile alone, which is the one way this could have quietly changed who you are to your friends** |
 | **A confirmation over a sheet (Chromium)** | **40** | **Which of two dialogs is in front, asked the only way that means anything: `elementFromPoint` in the middle of the panel, on the Remove button, and in the corner of the screen. All three came back `modal-friends` before the fix — the question was up, drawn, and completely unreachable. Driven through the real × on a real friend row, with the row seeded rather than fetched, because which dialog is in front needs no database. The row carries whose it is for a screen reader, the dangerous button is toned dangerous and says "Remove" rather than "OK", and the sheet stays open underneath. Then the bookkeeping the stacking hid: cancelling closes the question and not the sheet, and leaves the page behind locked — it used to unlock under an open sheet — while Cancel still answers false, which is what stops the removal. Escape unwinds one layer at a time, the sheet coming back still open and still locking, and only the second press lets the page behind scroll. Confirming answers true. The same again over the CHAT sheet, which is also later in the markup, where the chat has to keep counting as open underneath: a message arriving while a confirmation sits over the log is not news. And the whole thing at 320, where both buttons are 44px and reachable by a finger, and the dialog fits without a sideways scroll. The seed being wiped mid-suite by the app's own social repaint is why the rows go back in before every press: the first press worked and the second found an empty list, which read exactly like a friend having been removed by CANCELLING** |
-| **Player vs Bot, at three difficulties (Chromium)** | **48** | **That the choice REACHES the search, and survives everything that could quietly drop it. The list first, read out of the shipped config: three levels in order, each thinking longer and allowed deeper than the one below, Medium the default and today's bot BY REFERENCE rather than by copied numbers — which is what keeps "the bot you already know" true rather than true for now. Then the picker: offered for Player vs Bot and nowhere else, Medium chosen for you in the class AND in aria-checked, one label per button saying what it means, 44px targets, and choosing Hard moving both the mark and the announcement. Then three real games, one per level, each checked for carrying its level in the state and naming the seat for it — the only place the choice is visible once the form has gone. Hard, being the one allowed the longest search, is made to actually answer. Then the half that is easy to get wrong: the level written into the save record, read back after a reload, and a level from a build that had more of them falling back to Medium rather than leaving a bot with no settings, which would be a bot that cannot think rather than one of the wrong strength. A bot with no level chosen is checked to stay plain "Bot", because claiming a difficulty nobody was offered is worse than showing none. Timings are deliberately not asserted: "Hard thinks longer" is true of a budget, not of a wall clock on a shared box** |
 | **Long names (Chromium)** | **56** | **The cap is one number and everything agrees with it: all four name boxes read it out of config, the four rules in `database.rules.json` carry it, the markup fallbacks match, and no `slice(0, 20)` is left anywhere — checked by reading the shipped files rather than by remembering. Then a 37-character name through the real form: typed whole, over the cap stopped AT the cap rather than let run, carried into the game intact, held whole in the card's DOM and offered in full on hover where the card clips it, and back whole after a reload. The card is measured at 320 and 390 — one line still, inside its own card, no sideways scroll. The stored profile keeps it at full length with Firebase cut off, which is where the cap actually lives. And the state every existing installation will be in the moment this ships: client at 120, deployed rules still at 20 — the friends hub still comes up, the box still shows the whole name, and the panel says plainly that the rules need deploying and names the file. Waited for rather than slept through, because a refused write costs a real round trip and a fixed wait landing early reads as "no hub at all" — which is exactly how this was briefly mistaken for a regression. Then the whole of it again with a name of MANY WORDS filled up to the cap rather than counted out to it, because a run of 120 x's proves the field holds 120 characters and nothing about whether a person could use it: fifteen words typed in full, reaching the seat with every word intact, clipped on the card rather than growing it, the whole sentence on hover, and at 320 and 390 still one line, still inside its own card, still no sideways scroll. Including through the box the complaint actually came from — the pencil on your own card, which gets the cap from config like the other four and takes a sentence without trimming it. And the three places a name is drawn are read out of the shipped CSS rather than trusted, because two of them only ever appear in a room with a second person in it. Then the refusal itself: a long name turned down online is called too long and told which file to deploy, a short one keeps the sentence that fits it, and the guess between them is made against a named floor rather than a bare 20. And last the pill that has to carry it, measured at 320 rather than looked at — a toast may use the width of the phone rather than half of it, is centred within it to the pixel, and the one naming a file stays on the screen instead of hanging off the side it was centred within. That measurement is the whole of how (16) was found** |
 | **Your picture from the friends panel (Chromium)** | **38** | **The picker is in your own card, says what it does, and imports a real PNG through the real pipeline. It is ONE picture: the same data URL lands on the online form’s picker, in storage and on the hub, setting it in either place shows in both, and clearing it in either clears both. It survives a reload. Then the same again with every remote Firebase request aborted — the hub up, not connected, its own copy of the picture null — where the picture has to stay put on both pickers and in storage, which is the bug that pass caught. Plus a regression pass proving the two seat pickers are still separate slots: a picture on Player 1 reaches the white seat and nothing else** |
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
@@ -1794,12 +1785,10 @@ being hidden by a rule that changed underneath it:
 | 30 | Play on a phone | The board reaches both edges of the screen; cards and controls keep their margins |
 | 31 | Pick a background in Settings | The whole page repaints at once — ground, cards, modals and all |
 | 32 | Reload after picking one | It is still there, and was there from the first frame rather than snapping in |
-| 33 | Choose Player vs Bot | A difficulty row appears with Medium already chosen |
-| 33b | Start on Hard, then reload and continue | The opponent card still reads Bot (Hard), not Bot (Medium) |
-| 34 | Open Friends from the menu | A six-character code appears; copy it |
-| 35 | Type your name in the Friends panel | It is remembered, and the New Game form offers the same name |
-| 36 | Turn Chat & Emotes off, then join a game | No chat button; nothing arrives and nothing can be sent |
-| 37 | Open Friends with nobody on the list | No Game invites section at all, and the empty line explains what to do |
+| 33 | Open Friends from the menu | A six-character code appears; copy it |
+| 34 | Type your name in the Friends panel | It is remembered, and the New Game form offers the same name |
+| 35 | Turn Chat & Emotes off, then join a game | No chat button; nothing arrives and nothing can be sent |
+| 36 | Open Friends with nobody on the list | No Game invites section at all, and the empty line explains what to do |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
 
@@ -2023,7 +2012,7 @@ the DOM**. Set it to `false` before shipping.
 | **3** | Clocks — 1 / 3 / 5 / 10 / 15 minute | Built as Speed Chess, then removed with it. Server-held time is the version worth having, which makes this Phase 8's problem |
 | **4** | Accounts — username, profile, match history, statistics | Partly — a name, a picture, a friend code, friends, presence and invitations to play all exist, on anonymous sign-in; no real accounts, history or statistics yet |
 | **5** | Competitive — ELO, leaderboard, matchmaking, spectators | Planned |
-| **6** | AI — opponent, difficulty levels, analysis, hints | Partly — the opponent and three difficulties exist; analysis and hints do not |
+| **6** | AI — opponent, difficulty levels, analysis, hints | Partly — the opponent exists. Difficulty levels were built, then removed; analysis and hints do not exist |
 | **7** | Advanced chess — PGN replay, opening recognition, analysis, blunder detection | Planned |
 | **8** | Deployment — server-side move validation (Cloud Functions), App Check, room cleanup, GitHub Pages / Firebase Hosting, mobile testing | Planned |
 

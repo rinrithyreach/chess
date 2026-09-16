@@ -107,66 +107,12 @@ export const GAME_MODE = {
  * so the wait is bounded everywhere, and a faster device simply gets a
  * stronger opponent rather than the same one sooner.
  *
- * This is the knob difficulty is turned with — see BOT_LEVELS below, where
- * these two numbers are Medium.
+ * This is the knob for difficulty, if levels are ever wanted.
  */
 export const BOT_TIME_BUDGET_MS = 1200;
 
 /** Never search deeper than this, however much budget is left. */
 export const BOT_MAX_DEPTH = 4;
-
-/**
- * How hard the bot plays: three settings of the two numbers it already takes.
- *
- * There is one bot, not three. A ladder of separate engines would be three
- * times the code for a difference nobody asked for, and the numbers the
- * search already reads are enough to make the difference real.
- *
- * `timeBudgetMs` is what actually binds. The search deepens one ply at a
- * time and plays the best move from the last depth that finished inside the
- * budget, so more time is more plies wherever the position allows them.
- * `maxDepth` is the ceiling that stops a quiet position being searched past
- * the point of usefulness, and it moves with the budget to keep the two in
- * step — a budget it cannot spend is not a harder opponent.
- *
- * Medium is today's bot, unchanged: the opponent anybody who has played this
- * app already knows. Easy sits well below it so a first game is winnable, and
- * Hard well above so choosing it means something.
- *
- * Hard is also a promise about waiting. Three seconds a move is a long time
- * on a phone and is meant to be — it is what the extra plies cost, and the
- * hint on the button says so rather than letting it arrive as a surprise.
- */
-export const BOT_LEVELS = [
-  { id: 'easy', label: 'Easy', hint: 'Misses tactics', timeBudgetMs: 200, maxDepth: 2 },
-  {
-    id: 'medium',
-    label: 'Medium',
-    hint: 'The usual bot',
-    timeBudgetMs: BOT_TIME_BUDGET_MS,
-    maxDepth: BOT_MAX_DEPTH,
-  },
-  { id: 'hard', label: 'Hard', hint: 'Thinks longer', timeBudgetMs: 3000, maxDepth: 6 },
-];
-
-/** What a player gets without choosing: the bot they already know. */
-export const DEFAULT_BOT_LEVEL = 'medium';
-
-/**
- * One level, or null.
- *
- * Resolved rather than trusted wherever it comes back from storage: a level
- * saved by a build that offered more of them must not leave a game with no
- * opponent settings at all, which would be a bot that cannot think rather
- * than a bot of the wrong strength.
- */
-export function botLevel(id) {
-  return BOT_LEVELS.find((level) => level.id === id) ?? null;
-}
-
-export function resolveBotLevel(id) {
-  return botLevel(id) ?? botLevel(DEFAULT_BOT_LEVEL);
-}
 
 /**
  * Shortest time the bot may appear to think, in ms.
@@ -179,6 +125,16 @@ export const BOT_MIN_THINK_MS = 450;
 
 /** Shown wherever the bot's seat needs a player name. */
 export const BOT_NAME = 'Bot';
+
+/**
+ * What the bot's seat was called by a build that let you choose its strength.
+ *
+ * A game saved then still carries one of these. storage.js gives that seat the
+ * plain name back as the record loads, so nothing reading a save afterwards
+ * has to know the bot was ever called anything else.
+ */
+export const RETIRED_BOT_NAMES = ['Easy', 'Medium', 'Hard']
+  .map((label) => `${BOT_NAME} (${label})`);
 
 // -------------------------------------------------------------------------
 // Talking to the other player

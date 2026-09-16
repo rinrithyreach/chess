@@ -26,8 +26,6 @@ import {
   BOT_MAX_DEPTH,
   BOT_MIN_THINK_MS,
   BOT_NAME,
-  botLevel,
-  resolveBotLevel,
   log,
   warn,
 } from '../config.js';
@@ -49,19 +47,14 @@ export const withBot = (Base) => class extends Base {
   #humanColor = WHITE;
 
   /**
-   * How hard this bot thinks, and which level that is.
+   * How hard this bot thinks.
    *
-   * Held per GAME rather than read from the constants at every search, so
-   * one bot can be three opponents. A null level is a bot nobody chose a
-   * level for — a game started without the picker, or one resumed from a save
-   * written before there was one — and it plays at the defaults under the
-   * plain name.
-   *
-   * The numbers are copied out rather than held by reference, so editing
-   * BOT_LEVELS cannot change the opponent in a game already under way.
+   * Held per GAME rather than read from the constants at every search. It has
+   * been several opponents out of one bot before, and is one opponent now —
+   * but a search that reads its own budget off a field is the shape that let
+   * it be several, and it costs nothing to keep.
    */
   #strength = { timeBudgetMs: BOT_TIME_BUDGET_MS, maxDepth: BOT_MAX_DEPTH };
-  #level = null;
 
   #worker = null;
   #workerFailed = false;
@@ -77,19 +70,14 @@ export const withBot = (Base) => class extends Base {
 
   async createGame(config = {}) {
     this.#humanColor = config.humanColor === BLACK ? BLACK : WHITE;
-    // Before the name is read: the level decides what the bot's seat is
-    // called.
-    this.#setLevel(config.botLevel ?? null);
 
-    const botName = this.#opponentName();
+    const botName = BOT_NAME;
     const state = await super.createGame({
       ...config,
       mode: GAME_MODE.BOT,
       // Whichever seat the bot is in gets its name, so every place that shows
       // a player name — cards, PGN headers, the game-over dialog — says who
-      // actually played without any of them knowing a bot exists. With a
-      // level chosen that name carries it, which is the only place the
-      // choice is visible once the form has gone.
+      // actually played without any of them knowing a bot exists.
       white: this.#humanColor === WHITE ? config.white : { name: botName },
       black: this.#humanColor === WHITE ? { name: botName } : config.black,
     });
@@ -105,39 +93,13 @@ export const withBot = (Base) => class extends Base {
     // app.js before any session exists to ask, and `mode` alone has been
     // ambiguous before — it is cheaper to keep saying so than to find out
     // again.
-    //
-    // The level rides along for the same reason: resuming a Hard game after
-    // a refresh must not hand the board back with the Easy bot thinking for
-    // it — the position right, the opponent quietly swapped.
-    return { ...state, botLevel: this.#level, vsBot: true };
-  }
-
-  /**
-   * Point this session at one level, or at the bot nobody chose.
-   *
-   * An unknown id resolves to the default rather than to nothing: a level
-   * saved by a build that offered more of them must leave a bot that can
-   * think, not one with no settings at all.
-   */
-  #setLevel(id) {
-    const level = id === null || id === undefined ? null : resolveBotLevel(id);
-    this.#level = level?.id ?? null;
-    this.#strength = level
-      ? { timeBudgetMs: level.timeBudgetMs, maxDepth: level.maxDepth }
-      : { timeBudgetMs: BOT_TIME_BUDGET_MS, maxDepth: BOT_MAX_DEPTH };
-  }
-
-  /** What the bot's seat is called: the level it is playing at, or just Bot. */
-  #opponentName() {
-    const level = botLevel(this.#level);
-    return level ? `${BOT_NAME} (${level.label})` : BOT_NAME;
+    return { ...state, vsBot: true };
   }
 
   async restoreGame(saved) {
-    // The level first, because it decides what the bot's seat is called and
-    // so has to be known before the names below are read.
-    this.#setLevel(saved?.botLevel ?? null);
-    const botName = this.#opponentName();
+    // A seat named by an older build has already been given the plain name
+    // by storage.js, so this one name finds the bot in any save.
+    const botName = BOT_NAME;
 
     // Which seat the human had is recoverable from the saved names, because
     // createGame put the bot's name in the bot's seat. Falling back to White
@@ -175,7 +137,7 @@ export const withBot = (Base) => class extends Base {
     // turn it is has to be re-derived rather than assumed.
     if (result.ok) {
       const state = this.getState();
-      const botName = this.#opponentName();
+      const botName = BOT_NAME;
       if (state.players?.[WHITE]?.name === botName) this.#humanColor = BLACK;
       else if (state.players?.[BLACK]?.name === botName) this.#humanColor = WHITE;
       this.#maybeMove();

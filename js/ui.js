@@ -25,8 +25,6 @@ import {
   BOARD_ZOOM_LEVELS,
   clampBoardZoom,
   GAME_MODE,
-  BOT_LEVELS,
-  DEFAULT_BOT_LEVEL,
   UI_STYLES,
   SELECTABLE_UI_STYLES,
   DEFAULT_UI_STYLE,
@@ -250,7 +248,6 @@ export class UI {
       'gameover-detail', 'btn-rematch', 'btn-gameover-new',
       'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
       'theme-picker', 'bg-picker',
-      'bot-fields', 'bot-picker',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
       // Phase 2 — online
@@ -461,31 +458,6 @@ export class UI {
       });
     }
 
-    // Difficulty. Same shape as every other picker here: one list in
-    // config.js decides what exists, and the markup holds none of it.
-    const levels = this.#dom['bot-picker'];
-    if (levels) {
-      levels.innerHTML = '';
-      BOT_LEVELS.forEach((level) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'time-option';
-        button.dataset.level = level.id;
-        button.setAttribute('role', 'radio');
-        const chosen = level.id === DEFAULT_BOT_LEVEL;
-        button.setAttribute('aria-checked', String(chosen));
-        if (chosen) button.classList.add('is-active');
-        button.innerHTML =
-          `<span class="time-option__label">${level.label}</span>`
-          + `<span class="time-option__name">${level.hint}</span>`;
-        // The hint is decoration beside the name for a sighted reader and
-        // the whole of what the button means for anybody else, so it is
-        // said once, joined up.
-        button.setAttribute('aria-label', `${level.label} — ${level.hint}`);
-        levels.append(button);
-      });
-    }
-
     // Background picker. Same shape as the board themes above, and for the
     // same reason: one list in config.js decides what exists, so a background
     // is a block of CSS and a row in that list, with no markup to add here.
@@ -538,7 +510,6 @@ export class UI {
     const bot = mode === GAME_MODE.BOT;
 
     if (this.#dom['online-fields']) this.#dom['online-fields'].hidden = !online;
-    if (this.#dom['bot-fields']) this.#dom['bot-fields'].hidden = !bot;
     if (this.#dom['btn-start-game']) this.#dom['btn-start-game'].hidden = online;
 
     const nameFields = this.#dom['form-new-game']
@@ -1376,12 +1347,6 @@ export class UI {
     this.openModal('gameover');
   }
 
-  /** Which difficulty the form is offering. */
-  #selectedBotLevel() {
-    const active = this.#dom['bot-picker']?.querySelector('.time-option.is-active');
-    return active?.dataset.level ?? DEFAULT_BOT_LEVEL;
-  }
-
   // -----------------------------------------------------------------------
   // Profile pictures
   // -----------------------------------------------------------------------
@@ -1944,7 +1909,6 @@ export class UI {
         blackName: this.#dom['input-black']?.value ?? '',
         whiteAvatar: this.#avatarFor('p1'),
         blackAvatar: this.#avatarFor('p2'),
-        botLevel: this.#selectedBotLevel(),
       });
     });
 
@@ -2223,20 +2187,6 @@ export class UI {
       const swatch = event.target.closest('.theme-swatch');
       if (!swatch) return;
       this.#call('onSettingChange', { boardTheme: swatch.dataset.theme });
-    });
-
-    // The difficulty row does not belong to the controller: what is chosen
-    // here is not a setting and not game state until a game starts with it.
-    // It was a loop over two of these; the other picker went with the mode
-    // that asked the question, and this is the same code with one left.
-    this.#dom['bot-picker']?.addEventListener('click', (event) => {
-      const option = event.target.closest('.time-option');
-      if (!option) return;
-      this.#dom['bot-picker'].querySelectorAll('.time-option').forEach((node) => {
-        const active = node === option;
-        node.classList.toggle('is-active', active);
-        node.setAttribute('aria-checked', String(active));
-      });
     });
 
     this.#dom['bg-picker']?.addEventListener('click', (event) => {

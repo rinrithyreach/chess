@@ -331,7 +331,6 @@ export class GameController {
     blackAvatar = null,
     mode = GAME_MODE.LOCAL,
     startFen,
-    botLevel = null,
   } = {}) {
     storage.clearGame();
     this.#resetView();
@@ -345,7 +344,6 @@ export class GameController {
       black: { name: blackName, avatar: blackAvatar },
       mode,
       startFen,
-      botLevel,
     });
 
     this.#started = true;
@@ -898,9 +896,6 @@ export class GameController {
       // beside the mode rather than folded into it: a save is read before any
       // session exists to ask, and the two have disagreed before.
       vsBot: this.#state.vsBot === true,
-      // Which level that bot was, so resuming restores the opponent and not
-      // merely the position.
-      botLevel: this.#state.botLevel ?? null,
       savedAt: Date.now(),
     });
   }

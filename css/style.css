@@ -1949,68 +1949,6 @@ body.is-modal-open {
   color: #f0cd85;
 }
 
-/* --------------------------------------------------------------------------
-   Choice picker
-
-   Two or more choices in a row, each a label over a note. Named for the
-   time controls it was built for; those went with Speed Chess, an opponent
-   picker inherited it and went with the variant, and the bot-difficulty row
-   is the one thing drawn with it now.
-   -------------------------------------------------------------------------- */
-
-.time-picker {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.5rem;
-}
-
-/* Three across rather than two-and-a-stray. The hints under the labels are
-   two words and wrap to a second line on a narrow phone, which is why the
-   options are a flex column and not a fixed height: the grid makes all three
-   as tall as the tallest, and they stay a row. */
-.time-picker--three {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.time-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  min-height: var(--tap);
-  padding: 0.55rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--text-muted);
-  font-family: inherit;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.time-option.is-active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--text);
-}
-
-.time-option__label {
-  font-size: 1rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.time-option__name {
-  color: var(--text-faint);
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.time-option.is-active .time-option__name {
-  color: var(--accent);
-}
-
 /* ==========================================================================
    Hover motion
 
@@ -2069,8 +2007,7 @@ body.is-modal-open {
   .promotion__choice:hover,
   .style-option:hover,
   .theme-swatch:hover,
-  .bg-swatch:hover,
-  .time-option:hover {
+  .bg-swatch:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow);
   }
@@ -2096,8 +2033,7 @@ body.is-modal-open {
      take away the mark that says so, hence the :not. */
   .style-option:hover:not(.is-active),
   .theme-swatch:hover:not(.is-active),
-  .bg-swatch:hover:not(.is-active),
-  .time-option:hover:not(.is-active) {
+  .bg-swatch:hover:not(.is-active) {
     border-color: var(--border-strong);
     color: var(--text);
   }
@@ -2147,8 +2083,7 @@ body.is-modal-open {
 .promotion__choice:active,
 .style-option:active,
 .theme-swatch:active,
-.bg-swatch:active,
-.time-option:active {
+.bg-swatch:active {
   transform: translateY(1px);
   box-shadow: none;
   transition-duration: 0.07s;
@@ -2163,8 +2098,7 @@ body.is-modal-open {
 .promotion__choice:focus-visible,
 .style-option:focus-visible,
 .theme-swatch:focus-visible,
-.bg-swatch:focus-visible,
-.time-option:focus-visible {
+.bg-swatch:focus-visible {
   transform: translateY(-2px);
 }
 
@@ -2765,8 +2699,7 @@ body.is-modal-open {
   .emote:focus-visible,
   .room-bar__chat:hover,
   .room-bar__chat:active,
-  .room-bar__chat:focus-visible,
-.time-option:focus-visible {
+  .room-bar__chat:focus-visible {
     transform: none !important;
   }
 
