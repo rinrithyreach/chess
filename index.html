@@ -210,15 +210,28 @@
         </div>
 
         <!--
-          The seven elements. Written out rather than built from ELEMENTS in
-          js/elemental.js, because this is the one place in the app that has to
-          read as prose before a game starts — and because the same table is
-          rendered from config into the power bar during the game, where being
-          generated is worth more than being readable in the source.
+          The elements, and the loadout that decides which of them come.
+
+          Both lists are built in ui.js from the ELEMENTS table rather than
+          written out here, which is the opposite of what this block used to
+          do. Back when there were seven of them and they never changed, prose
+          in the markup was worth more than a loop; there are seventeen now and
+          a player picks between them, so a hand-written copy would be a second
+          roster to keep in step with the first — and the one that drifted
+          would be the one the player reads before choosing.
         -->
         <div class="elemental-fields" id="elemental-fields" hidden>
           <div class="setting setting--stack">
-            <span class="setting__label" id="elements-label">The seven elements</span>
+            <span class="setting__label" id="loadout-label">Your pawns</span>
+            <p class="loadout__hint" id="loadout-hint">
+              Seventeen elements, sixteen pieces. Your back rank is settled —
+              choose which eight elements ride your pawns.
+            </p>
+            <ul class="loadout" id="loadout-list" aria-labelledby="loadout-label"></ul>
+            <p class="loadout__count" id="loadout-count" role="status"></p>
+          </div>
+          <div class="setting setting--stack">
+            <span class="setting__label" id="elements-label">The seventeen elements</span>
             <ul class="elements" id="elements-list" aria-labelledby="elements-label"></ul>
           </div>
           <p class="elements__note">

@@ -609,7 +609,7 @@ async function boot() {
     },
 
     onStartGame: async ({
-      mode, whiteName, blackName, whiteAvatar, blackAvatar, opponent, botLevel,
+      mode, whiteName, blackName, whiteAvatar, blackAvatar, opponent, botLevel, loadout,
     }) => {
       sound.unlock();
 
@@ -637,6 +637,11 @@ async function boot() {
           whiteAvatar,
           blackAvatar: vsBot ? null : blackAvatar,
           mode: GAME_MODE.ELEMENTAL,
+          // Both sides play with the same sixteen. One loadout rather than two
+          // is a fairness decision before it is a screen-space one: seventeen
+          // elements against a different sixteen would be a match-up rather
+          // than a game, and the bot has nowhere to choose from anyway.
+          loadout,
         });
         ui.showScreen('game');
         return;

@@ -92,12 +92,35 @@ const ELEMENT_GLYPHS = {
   nature: '🌿',
   shadow: '🌑',
   light: '✨',
+  metal: '⚙️',
+  void: '🕳️',
+  sun: '☀️',
+  moon: '🌙',
+  blood: '🩸',
+  spirit: '👻',
+  gravity: '🌀',
+  time: '⏳',
+  crystal: '💎',
+  space: '🌌',
 };
 
+/**
+ * The effects, in glyphs that do not collide with the element ones.
+ *
+ * An effect outranks the element on a square, so the two are never drawn
+ * together — but they ARE read together, one square after another, and a
+ * player who has learned that ⚙️ means "this is the Metal rook" should not
+ * find the same picture meaning "this piece is armoured" next door. Hence a
+ * wall for armour rather than the cog, and a facet for crystal rather than the
+ * gem.
+ */
 const EFFECT_GLYPHS = {
   frozen: '🧊',
   shield: '🛡️',
   vines: '🌿',
+  armour: '🧱',
+  crystal: '💠',
+  silenced: '🚫',
 };
 
 /**

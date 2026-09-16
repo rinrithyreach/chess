@@ -358,6 +358,7 @@ export class GameController {
     mode = GAME_MODE.LOCAL,
     startFen,
     botLevel = null,
+    loadout = null,
   } = {}) {
     storage.clearGame();
     this.#resetView();
@@ -372,6 +373,9 @@ export class GameController {
       mode,
       startFen,
       botLevel,
+      // Which elements this match is being played with. Ignored by every
+      // session but the elemental one, which is the only one that has any.
+      loadout,
     });
 
     this.#started = true;
@@ -888,6 +892,19 @@ export class GameController {
       const used = result.used ?? {};
       const destroyed = used.destroyed ?? [];
 
+      // A rebound is the one outcome a player cannot read off the board. The
+      // power went off, something of THEIRS came apart, and the piece they
+      // aimed at is standing there untouched — which without a word looks
+      // like the power having misfired rather than like the enemy's crystal
+      // doing exactly what it was laid down to do.
+      if (used.rebounded) {
+        const thrown = ELEMENTS[used.rebounded];
+        this.#toast(
+          `💠 The crystal threw ${thrown?.power ?? 'that power'} straight back`,
+          'warn',
+        );
+      }
+
       // One noise, not two. A power that took pieces off the board is a blast
       // and nothing else; playing the shimmer underneath it as well just
       // muddies the one sound that was carrying the news.
@@ -1286,14 +1303,20 @@ export class GameController {
       // Which level that bot was, so resuming restores the opponent and not
       // merely the position.
       botLevel: this.#state.botLevel ?? null,
-      // Charges, effects and the ply they expire against. None of it is
-      // derivable from the position — a spent pawn looks exactly like a
-      // loaded one — so without this a reload would hand both players a full
-      // set of powers back.
+      // Charges, elements, effects and the ply they expire against. None of
+      // it is derivable from the position — a spent pawn looks exactly like a
+      // loaded one, and which element a piece carries stopped being readable
+      // off its type the moment there were seventeen of them for sixteen
+      // pieces — so without this a reload would hand both players a full set
+      // of powers back, and the wrong ones.
       elemental: this.#state.elemental
         ? {
           ply: this.#state.elemental.ply,
           charges: this.#state.elemental.charges,
+          elements: this.#state.elemental.elements,
+          loadout: this.#state.elemental.loadout,
+          graveyard: this.#state.elemental.graveyard,
+          lastMove: this.#state.elemental.lastMove,
           effects: this.#state.elemental.effects,
           powerPly: this.#state.elemental.powerUsed ? this.#state.elemental.ply : -1,
         }

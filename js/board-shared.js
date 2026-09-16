@@ -129,6 +129,9 @@ const EFFECT_WORDS = {
   frozen: 'frozen',
   shield: 'shielded',
   vines: 'vines',
+  armour: 'armoured',
+  crystal: 'crystal shielded',
+  silenced: 'silenced',
 };
 
 /**

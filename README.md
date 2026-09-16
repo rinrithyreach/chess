@@ -162,17 +162,71 @@ grants one power that the piece may use **once in the whole match**:
 
 | | Piece | Power | Reach |
 |---|---|---|---|
-| 🔥 Fire | Pawn | **Burn** — every enemy piece on the eight squares around that pawn is destroyed | beside one of your pawns — *and free whenever one captures* |
+| 🔥 Fire | Pawn | **Burn** — every enemy piece on the eight squares around that pawn is destroyed | beside your Fire pawn — *and free whenever it captures* |
 | 💧 Water | Dark-squared bishop | **Water Shield** — any one of your pieces cannot be captured for a turn | anywhere |
-| ⚡ Lightning | Knight | **Chain Attack** — the enemy you pick is destroyed, and the bolt arcs on to the best enemy a knight's move from THERE | a knight's move from one of your knights — *and free whenever one captures* |
-| ❄️ Ice | Rook | **Freeze** — any one enemy piece cannot move for a turn | anywhere |
+| ⚡ Lightning | Queen's knight | **Chain Attack** — the enemy you pick is destroyed, and the bolt arcs on to the best enemy a knight's move from THERE | a knight's move from your Lightning knight — *and free whenever it captures* |
+| ❄️ Ice | Queen's rook | **Freeze** — any one enemy piece cannot move for a turn | anywhere |
 | 🌿 Nature | Queen | **Vines** — any empty square cannot be entered or crossed for a turn | anywhere |
 | 🌑 Shadow | King | **Teleport** — to any empty square where it would be safe, once a match | anywhere safe |
 | ✨ Light | Light-squared bishop | **Cleanse** — clears every effect on the board; while charged, holds the enemy king's teleport shut | the whole board |
+| ⚙️ Metal | King's rook | **Bulwark** — one of your pieces cannot be destroyed, frozen, silenced or dragged for a turn. It can still be *captured* | anywhere |
+| 🕳️ Void | King's knight | **Silence** — one enemy piece keeps its charge and may not spend it for a turn | anywhere, *the enemy king included* |
+| ☀️ Sun | Pawn | **Solar Flare** — the first enemy on a line out of the pawn is destroyed, and your nearest spent piece gets its power back | three squares down any of the eight lines |
+| 🌙 Moon | Pawn | **Tide** — every enemy on one rank is pulled a square back towards their own side | any rank with room behind it |
+| 🩸 Blood | Pawn | **Bloodletting** — the pawn dies where it stands and takes an enemy piece with it | anywhere — *anything up to a rook* |
+| 👻 Spirit | Pawn | **Revive** — the piece you lost most recently stands back up, spent | any empty square in your own half |
+| 🌀 Gravity | Pawn | **Pull** — one enemy piece is dragged a square towards your pawn | anywhere with an empty square on the near side |
+| ⏳ Time | Pawn | **Rewind** — the move they just played is put back, and the turn they spent on it is gone | their last move, if it took nothing |
+| 💎 Crystal | Pawn | **Prism** — one of your pieces cannot be captured, and a power aimed at it rebounds onto its caster | anywhere |
+| 🌌 Space | Pawn | **Displace** — your pawn changes places with any other piece of yours | anywhere but the king |
 
-Six piece types, seven elements, and the bishops are what makes that work: a
-bishop never leaves the colour of squares it started on, so the pair splits
-permanently into one Water bishop and one Light bishop a side.
+### The loadout
+
+**Seventeen elements, sixteen pieces.** They do not fit, and that is the game
+rather than a problem with it: before a match you choose which eight of the
+nine pawn elements you are bringing, and the one you leave out sits it out.
+
+The back rank is settled — one rook is Ice and the other Metal, one knight is
+Lightning and the other Void, the bishops split by the colour of square they
+are stuck on for the whole game, and the queen and king are Nature and Shadow.
+Only slots with more elements than squares get a chooser, so today that is the
+pawns and only the pawns; add an eighteenth element to `ELEMENTS` in
+[`js/elemental.js`](js/elemental.js) and it appears in the picker on its own,
+with no other code needing to hear about it.
+
+Both sides play the same sixteen. One loadout rather than two is a fairness
+decision before it is a screen-space one: seventeen elements against a
+different sixteen would be a match-up rather than a game.
+
+This is also what ended the rule the variant started with. An element used to
+be a pure function of piece and square — pawns were Fire, rooks were Ice, and
+the bishops split by shade — which meant nothing had to be carried across a
+move, a capture or a save. It is a lovely rule with exactly one failing: it can
+only ever name as many elements as there are kinds of piece, which is seven.
+Elements are tracked per piece now, by the same bookkeeping the charges already
+needed, and they travel with a piece through a capture, a castle, a teleport, a
+swap, a drag and a promotion. A Fire pawn that reaches the eighth rank is a
+Fire queen.
+
+### Three of the seventeen were asked for in terms chess does not have
+
+Armour that reduces damage, health to spend on a stronger attack, a move taken
+back. There are no hit points on a chessboard and no damage numbers, so each of
+those is written as the nearest thing the board can actually say:
+
+- **Metal** — "armour boost / reduce damage" became *proof against powers, and
+  nothing else*. An armoured piece cannot be burned, struck, frozen, silenced
+  or dragged, and can still be taken by an ordinary move. That last clause is
+  the whole reason it is not simply a second Water Shield.
+- **Blood** — "sacrifice HP, boost attack" became *a piece for a piece, at any
+  range*. The Blood pawn dies where it stands; what it buys is a reach no other
+  power has. It is the one power paid for twice, which is why the queen is
+  beyond it until the super drops that cap.
+- **Crystal** — "reflect damage, create shield" became *a shield that throws
+  powers back*. Aim a power squarely at a crystal piece and the power is spent,
+  nothing happens to the piece, and the caster is destroyed instead. Catch one
+  in a blast and it simply does not burn — the rebound is for the square you
+  pointed at, or every wide power would become a coin toss.
 
 ### The supers
 
@@ -180,13 +234,23 @@ permanently into one Water bishop and one Light bishop a side.
 
 | | Power | Super |
 |---|---|---|
-| 🔥 Fire | Burn — one pawn's ring | **Firestorm** — *every* charged pawn of yours in contact erupts at once, and each of them is spent |
+| 🔥 Fire | Burn — one pawn's ring | **Firestorm** — *every* charged pawn of yours in contact erupts at once, whatever element it carried, and each is spent |
 | 💧 Water | Water Shield — one piece | **Tidal Guard** — every piece you have is shielded for a turn |
 | ⚡ Lightning | Chain Attack — two pieces | **Thunderstorm** — the bolt arcs twice more: three pieces |
 | ❄️ Ice | Freeze — one piece | **Deep Freeze** — that piece and every enemy touching it |
 | 🌿 Nature | Vines — one square | **Overgrowth** — a three-by-three thicket |
 | 🌑 Shadow | Teleport — the king, to an empty square | **Shadow Swap** — the king changes places with any piece of yours |
 | ✨ Light | Cleanse — clears every effect | **Dawn** — clears every effect *and* gives a spent piece its charge back |
+| ⚙️ Metal | Bulwark — one piece armoured | **Ironclad** — your whole army is proof against powers for a turn |
+| 🕳️ Void | Silence — one piece shut | **Nullify** — their whole army is silenced, and every effect *they* laid is swept away while yours stand |
+| ☀️ Sun | Solar Flare — one line | **Solstice** — all eight lines fire at once, and every ally touching the pawn is recharged |
+| 🌙 Moon | Tide — one rank | **Spring Tide** — the entire enemy army is drawn back a square |
+| 🩸 Blood | Bloodletting — up to a rook | **Bloodrite** — the same bargain with the cap gone: the queen is on the table |
+| 👻 Spirit | Revive — the last piece lost, spent | **Resurrection** — the *best* piece you have lost, and it comes back charged |
+| 🌀 Gravity | Pull — one piece, one square | **Singularity** — everything of theirs within two squares falls inward |
+| ⏳ Time | Rewind — their last move | **Stasis** — the rewind, *and* every enemy standing in your half is frozen |
+| 💎 Crystal | Prism — one piece | **Refraction** — your whole army turns to crystal for a turn |
+| 🌌 Space | Displace — swap with one of yours | **Wormhole** — your pawn opens on any empty square and shoves the enemies around it aside |
 
 Every ordinary power is free — fire it and still play your turn — which is
 what stops the powers being a second game bolted on beside the chess. A super

@@ -160,6 +160,9 @@ const ELEMENTAL_HIGHLIGHT = {
   frozen: { color: 0x7ec8ff, opacity: 0.5 },
   shield: { color: 0x56aaff, opacity: 0.5 },
   vines: { color: 0x60be6e, opacity: 0.5 },
+  armour: { color: 0x9aa3b0, opacity: 0.5 },
+  crystal: { color: 0xa8f0e0, opacity: 0.5 },
+  silenced: { color: 0x6b5a80, opacity: 0.5 },
   aim: { color: 0xe8b44c, opacity: 0.65 },
   charged: { color: 0xffe0a0, opacity: 0.55 },
 };
@@ -187,6 +190,16 @@ const ELEMENTAL_CAST = {
   nature: { color: 0x6cca76, ring: 0xcef6be },
   shadow: { color: 0x3a2068, ring: 0xa880f8, inward: true },
   light: { color: 0xffd67a, ring: 0xfffcf0 },
+  metal: { color: 0x8e99a8, ring: 0xdfe6ef },
+  void: { color: 0x2a1f3d, ring: 0x8a6fc4, inward: true },
+  sun: { color: 0xffb02a, ring: 0xfff3c4 },
+  moon: { color: 0x7f8fd0, ring: 0xdfe4ff, inward: true },
+  blood: { color: 0xc42b3a, ring: 0xff9aa4 },
+  spirit: { color: 0x9fd8c8, ring: 0xf0fffa, inward: true },
+  gravity: { color: 0x4a3f8f, ring: 0xb0a6ff, inward: true },
+  time: { color: 0xd9b05a, ring: 0xfff0cc },
+  crystal: { color: 0x59d6c0, ring: 0xd8fff6 },
+  space: { color: 0x2b2050, ring: 0x9f8cff },
 };
 
 /**

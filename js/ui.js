@@ -40,7 +40,15 @@ import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
 // Small, pure and free of any engine, so the rules card and the power bar can
 // be built from the same table the variant's rules are written against —
 // rather than from a second copy of them kept in step by hand.
-import { ELEMENTS, ELEMENT_ORDER, SUPERS } from './elemental.js';
+import {
+  ELEMENTS,
+  ELEMENT_ORDER,
+  SLOT_CANDIDATES,
+  SLOT_SIZE,
+  SUPERS,
+  CONTESTED_SLOTS,
+  defaultLoadout,
+} from './elemental.js';
 
 /**
  * The second line of a row in the powers panel: who holds it, and why you can
@@ -60,6 +68,7 @@ import { ELEMENTS, ELEMENT_ORDER, SUPERS } from './elemental.js';
 function powerLine(info, entry, { mine, used }) {
   if (!mine) return info.piece;
   if (!entry || !entry.squares.length) return `${info.piece} · all spent`;
+  if (entry.blockedBy === 'void') return `${info.piece} · silenced`;
   if (entry.blockedBy) return `${info.piece} · held shut`;
   if (used) return `${info.piece} · one power a turn`;
   if (!entry.ready.length) {
@@ -167,6 +176,22 @@ export class UI {
    */
   #powersOpen = false;
   #powerRows = null;
+
+  /**
+   * The elements this side is bringing, while the New Game form is open.
+   *
+   * Held here rather than read back off the chips, because the chips are the
+   * picture and this is the fact: a slot that is one short has to be able to
+   * say so, and counting ticked buttons would make the answer depend on a
+   * render having happened.
+   */
+  #loadout = new Set(defaultLoadout());
+
+  /** Built once — the chips must not be replaced under a thumb mid-tap. */
+  #loadoutBuilt = false;
+
+  /** Which elements the game in progress contains. Null until a turn is ours. */
+  #carried = null;
 
   /** Which card is currently showing a name box, if either. */
   #renaming = null;
@@ -286,6 +311,7 @@ export class UI {
       'bot-fields', 'bot-picker',
       'opponent-fields', 'opponent-picker', 'opponent-bot-hint',
       'mode-elemental', 'elemental-fields', 'elements-list',
+      'loadout-list', 'loadout-count', 'loadout-hint',
       'powerbar', 'power-glyph', 'power-name', 'power-hint', 'btn-power',
       'powerbar-super', 'super-name', 'super-hint', 'btn-super',
       'btn-powers-toggle', 'powers-list',
@@ -556,6 +582,10 @@ export class UI {
         elements.append(item);
       });
     }
+
+    // After the card, not before: the first paint greys the rows the loadout
+    // left out, and it cannot grey rows that have not been made yet.
+    this.#buildLoadout();
 
     // Background picker. Same shape as the board themes above, and for the
     // same reason: one list in config.js decides what exists, so a background
@@ -1271,6 +1301,10 @@ export class UI {
     }
 
     const element = ELEMENTS[power.element];
+    if (power.blockedBy === 'void') {
+      say(element.emoji, power.info.power, 'The Void has it by the throat');
+      return;
+    }
     if (power.blockedBy) {
       say(element.emoji, power.info.power, 'Their Light bishop holds it shut');
       return;
@@ -1409,10 +1443,31 @@ export class UI {
     const mine = held.size > 0;
     const used = Boolean(state.elemental.powerUsed);
 
+    // Which elements this game contains at all. Read off the board rather
+    // than off the loadout, because the board is the thing that knows: a game
+    // restored from a save has a loadout the panel never saw chosen, and a
+    // hand-loaded position has none.
+    //
+    // Only settled while it is your turn, since getArsenal() is empty on the
+    // other side's. Held from the last turn it was known, so the panel does
+    // not shed half its rows every time the bot thinks.
+    if (mine) {
+      this.#carried = new Set(
+        this.#controller.getArsenal().filter((row) => row.carried).map((row) => row.element),
+      );
+    }
+
     ELEMENT_ORDER.forEach((id) => {
       const info = ELEMENTS[id];
       const row = this.#powerRows.get(id);
       if (!row) return;
+
+      // A row for a power nobody brought is a promise the board cannot keep.
+      // Hidden rather than greyed: "all spent" and "never here" are different
+      // things and only one of them is worth a line.
+      const carried = !this.#carried || this.#carried.has(id);
+      row.li.hidden = !carried;
+      if (!carried) return;
 
       const entry = held.get(id) ?? null;
       const count = entry ? entry.squares.length : null;
@@ -1483,7 +1538,7 @@ export class UI {
       li.append(item);
       list.append(li);
 
-      this.#powerRows.set(id, { item, who, count });
+      this.#powerRows.set(id, { li, item, who, count });
     });
 
     const note = document.createElement('li');
@@ -1712,6 +1767,146 @@ export class UI {
    * beside the time controls and shares their look. The time controls have
    * gone; the class stays, being what this picker is drawn with.
    */
+  /**
+   * The loadout picker: which elements this side is bringing.
+   *
+   * There are seventeen elements and sixteen pieces, so somebody has to be
+   * left behind, and this is where that is decided. Only the CONTESTED slots
+   * get a chooser — the ones with more elements than squares — which today is
+   * the pawns and only the pawns. Everything on the back rank is settled and
+   * is shown in the rules card below rather than as a row of chips that cannot
+   * be unticked, because a control with exactly one legal state is not a
+   * control, it is a label pretending to be one.
+   *
+   * Built once, from the same table the game reads. Add a second queen element
+   * to ELEMENTS and a queen chooser appears here on its own.
+   */
+  #buildLoadout() {
+    const list = this.#dom['loadout-list'];
+    if (!list || this.#loadoutBuilt) return;
+    this.#loadoutBuilt = true;
+    list.textContent = '';
+
+    this.#loadout = new Set(defaultLoadout());
+
+    CONTESTED_SLOTS.forEach((slot) => {
+      SLOT_CANDIDATES[slot].forEach((id) => {
+        const element = ELEMENTS[id];
+        const over = SUPERS[id];
+
+        const li = document.createElement('li');
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'loadout__chip';
+        chip.dataset.element = id;
+        chip.dataset.slot = slot;
+        // The rule and its super, on the control itself. This is the moment a
+        // player decides between them and it is the only moment they can, so
+        // making them read the card underneath first would be asking them to
+        // choose and then explaining what they chose.
+        chip.title = `${element.detail}\n\n✦ ${over.power}: ${over.detail}`;
+
+        const glyph = document.createElement('span');
+        glyph.className = 'loadout__glyph';
+        glyph.textContent = element.emoji;
+        glyph.setAttribute('aria-hidden', 'true');
+
+        const name = document.createElement('span');
+        name.className = 'loadout__name';
+        name.textContent = element.name;
+
+        const power = document.createElement('span');
+        power.className = 'loadout__power';
+        power.textContent = element.power;
+
+        chip.append(glyph, name, power);
+        li.append(chip);
+        list.append(li);
+      });
+    });
+
+    list.addEventListener('click', (event) => {
+      const chip = event.target.closest('.loadout__chip');
+      if (chip) this.#toggleLoadout(chip.dataset.element, chip.dataset.slot);
+    });
+
+    this.#paintLoadout();
+  }
+
+  /**
+   * Tick or untick one element.
+   *
+   * Untick freely; tick only while the slot has room. The alternative — ticking
+   * a ninth pawn element and having the picker silently drop one of the eight
+   * already chosen — would mean a player's own earlier choice disappearing
+   * under their thumb with nothing to say which one went.
+   */
+  #toggleLoadout(id, slot) {
+    if (!id || !ELEMENTS[id]) return;
+
+    if (this.#loadout.has(id)) {
+      this.#loadout.delete(id);
+    } else {
+      const taken = SLOT_CANDIDATES[slot].filter((other) => this.#loadout.has(other)).length;
+      if (taken >= SLOT_SIZE[slot]) {
+        this.toast(`Eight ${slot === 'pawn' ? 'pawns' : 'pieces'} — drop one first`);
+        return;
+      }
+      this.#loadout.add(id);
+    }
+
+    this.#paintLoadout();
+  }
+
+  /** Draw the chips, and say how many are still to be chosen. */
+  #paintLoadout() {
+    const list = this.#dom['loadout-list'];
+    const count = this.#dom['loadout-count'];
+    if (!list) return;
+
+    let short = 0;
+    CONTESTED_SLOTS.forEach((slot) => {
+      const taken = SLOT_CANDIDATES[slot].filter((id) => this.#loadout.has(id)).length;
+      short += SLOT_SIZE[slot] - taken;
+    });
+
+    list.querySelectorAll('.loadout__chip').forEach((chip) => {
+      const on = this.#loadout.has(chip.dataset.element);
+      chip.dataset.on = String(on);
+      chip.setAttribute('aria-pressed', String(on));
+    });
+
+    // Said as what is left to do rather than as what has been done, because
+    // the only number that changes what the player does next is the shortfall.
+    if (count) {
+      count.textContent = short > 0
+        ? `Choose ${short} more`
+        : 'Ready — the one you left out sits this match out';
+      count.dataset.short = String(short > 0);
+    }
+
+    // The rules card greys the elements not coming, so the list below the
+    // picker is always a list of what this game actually contains.
+    const elements = this.#dom['elements-list'];
+    elements?.querySelectorAll('.element').forEach((row) => {
+      const id = row.dataset.element;
+      const contested = CONTESTED_SLOTS.includes(ELEMENTS[id]?.slot);
+      row.dataset.out = String(contested && !this.#loadout.has(id));
+    });
+  }
+
+  /**
+   * The elements this game will be played with.
+   *
+   * A short loadout is filled in rather than refused: normalizeLoadout() tops
+   * every slot up from the elements that were not picked, so a player who
+   * ticks nothing gets the default sixteen and a game rather than a form that
+   * will not submit.
+   */
+  #selectedLoadout() {
+    return [...(this.#loadout ?? new Set(defaultLoadout()))];
+  }
+
   #selectedOpponent() {
     const active = this.#dom['opponent-picker']?.querySelector('.time-option.is-active');
     return active?.dataset.opponent ?? 'bot';
@@ -2260,6 +2455,7 @@ export class UI {
         blackAvatar: this.#avatarFor('p2'),
         opponent: this.#selectedOpponent(),
         botLevel: this.#selectedBotLevel(),
+        loadout: this.#selectedLoadout(),
       });
     });
 
