@@ -262,7 +262,7 @@ export class UI {
       'modal-draw-offer', 'draw-offer-text', 'btn-draw-accept', 'btn-draw-decline',
       'modal-opponent-left', 'btn-leave-room',
       // Chat, emotes and friends
-      'set-chat', 'btn-chat', 'chat-unread',
+      'set-chat', 'setting-chat', 'btn-chat', 'chat-unread',
       'modal-chat', 'chat-log', 'chat-empty', 'emote-bar',
       'chat-form', 'chat-input', 'btn-chat-send',
       'top-emote', 'bottom-emote',
@@ -1197,6 +1197,11 @@ export class UI {
     const modal = this.#dom[`modal-${name}`];
     if (!modal) return;
 
+    // The chat switch is only shown where it can do anything. Decided here
+    // rather than in render(), because this panel opens from the menu too,
+    // where there is no game and render() returns early.
+    if (name === 'settings') this.#renderChatSetting();
+
     this.#lastFocused = document.activeElement;
     modal.hidden = false;
     // Force a frame so the CSS transition runs from the hidden state.
@@ -1455,6 +1460,27 @@ export class UI {
   // -----------------------------------------------------------------------
   // Settings
   // -----------------------------------------------------------------------
+
+  /**
+   * Show the chat switch only where flipping it does something.
+   *
+   * Chat and emotes are online-only: the button is gated on a room code and
+   * the emote bar lives inside the chat sheet, so in a local or bot game
+   * there is nothing for the setting to turn on. Left on the panel it was a
+   * switch that moved and changed nothing — the same broken promise the chat
+   * button avoids by hiding rather than refusing.
+   *
+   * Gated on the game screen as well as the state, because #lastSnapshot is
+   * never cleared: after leaving an online game it can still say `online`,
+   * which would bring the row back on a menu that has no game at all.
+   */
+  #renderChatSetting() {
+    const row = this.#dom['setting-chat'];
+    if (!row) return;
+
+    const inGame = this.#dom['screen-game']?.classList.contains('is-active');
+    row.hidden = !(inGame && this.#lastSnapshot?.state?.online);
+  }
 
   syncSettings(settings) {
     const map = {

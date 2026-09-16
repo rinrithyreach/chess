@@ -553,7 +553,11 @@
         <input type="checkbox" id="set-autoflip" class="switch">
       </div>
 
-      <div class="setting">
+      <!--
+        Online only, and hidden everywhere else — see #renderChatSetting().
+        Starts hidden so it cannot flash on the way to that decision.
+      -->
+      <div class="setting" id="setting-chat" hidden>
         <label class="setting__label" for="set-chat">Chat &amp; Emotes</label>
         <input type="checkbox" id="set-chat" class="switch">
       </div>
