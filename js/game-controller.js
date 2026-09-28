@@ -781,6 +781,34 @@ export class GameController {
     return result;
   }
 
+  /**
+   * Change the name on a seat, mid-game.
+   *
+   * Which seats may be renamed is the session's call, by the same rule as
+   * which pieces this device may move: online the seat it is sitting in,
+   * against a bot yours and never the bot's, locally both. A seat outside
+   * that is refused with a reason rather than quietly ignored.
+   */
+  async renameSeat(color, name) {
+    if (!this.#session.setSeatName) return { ok: false, error: 'Not this game' };
+
+    const result = await this.#session.setSeatName(name, color);
+    if (!result.ok) {
+      this.#toast(result.error ?? 'Could not change that name', 'warn');
+      return result;
+    }
+
+    // Online, the name IS your identity to everybody else, so it is kept for
+    // the next room. Locally the two names belong to the game in front of you
+    // — they are typed fresh on the form each time, and quietly overwriting
+    // your online profile because you renamed Player 2 would be a surprise.
+    if (this.#state?.online) storage.saveProfile({ name: result.name });
+
+    this.#toast(`Now playing as ${result.name}`);
+    this.#emitChange();
+    return result;
+  }
+
   // -----------------------------------------------------------------------
   // View state
   // -----------------------------------------------------------------------
