@@ -563,11 +563,18 @@ export const DEFAULT_PLAYER_NAMES = {
  * measured four carried less than two pixels each. The motion had no room to
  * be anything but a jump.
  *
- * At 260ms the same move gets sixteen frames and twelve of them carry real
- * distance. The one thing that does key off this — the game-over dialog in
- * app.js — is written as `ANIMATION_MS + 120`, so it follows on its own.
+ * At 260ms the same move got sixteen frames and twelve of them carried real
+ * distance — enough to be motion, still quick enough to miss. At 400ms it gets
+ * twenty-four, and a move is something you watch travel rather than notice
+ * afterwards. Still under BOT_MIN_THINK_MS, so the bot's reply never sets off
+ * before your own move has landed.
+ *
+ * The things that key off this follow on their own: the game-over dialog in
+ * app.js is written as `ANIMATION_MS + 120`, and the capture timing below is
+ * derived from it. The 3D board's camera swing deliberately is not — see
+ * #applyCamera.
  */
-export const ANIMATION_MS = 260;
+export const ANIMATION_MS = 400;
 
 /**
  * Easing for the piece slide.

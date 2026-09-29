@@ -1045,13 +1045,14 @@ export class Board3D {
       from: this.#camera.position.clone(),
       to: target,
       start: performance.now(),
-      // Longer than a move: the whole view is turning, and at move speed it
-      // reads as a glitch rather than a deliberate change of seat.
+      // Longer than a move once was: the whole view is turning, and at move
+      // speed it read as a glitch rather than a deliberate change of seat.
       //
-      // The multiplier was 2.4 against a 180ms move. The move is 260ms now
-      // and a flip has no reason to have got longer with it, so this is
-      // retuned to land in the same 430ms it always took.
-      duration: Math.round(ANIMATION_MS * 1.65),
+      // A number of its own rather than a multiple of ANIMATION_MS. It was
+      // 2.4x a 180ms move, then 1.65x a 260ms one — retuned each time the
+      // move changed, only to land on the same 430ms it always took. A flip
+      // has no reason to follow the move, so it no longer pretends to.
+      duration: 430,
     };
   }
 
@@ -1260,10 +1261,9 @@ export class Board3D {
       this.#refreshBoardTexture();
     }
 
-    const move =
-      options.animateMove && this.#animationsEnabled && !prefersReducedMotion()
-        ? options.animateMove
-        : null;
+    // Only the game's own Animations setting turns this off, not the device's
+    // reduced-motion preference — see prefersReducedMotion() for why.
+    const move = options.animateMove && this.#animationsEnabled ? options.animateMove : null;
 
     const board = boardFromFen(state.fen);
 
@@ -1837,7 +1837,7 @@ export class Board3D {
     if (!group) return;
     this.#pieces.delete(square);
 
-    if (!this.#animationsEnabled || prefersReducedMotion()) {
+    if (!this.#animationsEnabled) {
       this.#releasePiece(group);
       return;
     }
@@ -1875,7 +1875,7 @@ export class Board3D {
     if (!group) return;
     const home = this.#squareToWorld(square);
 
-    if (!this.#animationsEnabled || prefersReducedMotion()) {
+    if (!this.#animationsEnabled) {
       group.position.copy(home);
       this.#needsRender = true;
       return;

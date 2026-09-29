@@ -27,7 +27,6 @@ import {
   boardFromFen,
   describeSquare,
   squareShade,
-  prefersReducedMotion,
 } from './board-shared.js';
 
 /**
@@ -245,10 +244,9 @@ export class Board {
     const { state, view } = snapshot;
     if (!state) return;
 
-    const move =
-      options.animateMove && this.#animationsEnabled && !prefersReducedMotion()
-        ? options.animateMove
-        : null;
+    // Only the game's own Animations setting turns this off, not the device's
+    // reduced-motion preference — see prefersReducedMotion() for why.
+    const move = options.animateMove && this.#animationsEnabled ? options.animateMove : null;
 
     // A captured piece has to be photographed BEFORE the squares repaint,
     // because the repaint is what erases it. Cheap, and only on captures.

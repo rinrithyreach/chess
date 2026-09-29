@@ -646,6 +646,13 @@ above its square and drops onto it. A captured piece is held until the piece
 taking it is most of the way across, then displaced, so the two are one event
 rather than a square emptying itself and then being landed on.
 
+Every move is seen travelling, in every mode — yours, the bot's, and your
+opponent's arriving over the network — and it takes 400ms, long enough to
+watch rather than merely notice. That holds on a device that asks for reduced
+motion too: the pieces answer to **Settings → Animations** alone, which is the
+one switch that stops them. The camera swinging round on a flip or a zoom is
+the exception, and still follows the device, because it moves the whole view.
+
 Dragging follows the pointer continuously rather than snapping the piece to the
 centre of whichever square it is over, and a piece released onto a square it
 cannot legally reach is animated back rather than teleported. The timings live
@@ -733,7 +740,8 @@ mouse and does nothing for Tab is telling half the room it is not for them.
 
 **Accessibility** — real `<button>` elements, ARIA labels on every square,
 arrow-key board navigation with a roving tabindex, visible focus rings, and
-`prefers-reduced-motion` support.
+`prefers-reduced-motion` support — for everything except the moving pieces,
+which follow the in-game Animations switch instead.
 
 ---
 

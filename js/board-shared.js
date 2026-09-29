@@ -11,9 +11,8 @@
  *
  * Nothing in this file touches the DOM, WebGL, or the chess rules. The one
  * browser API it does reach for is `matchMedia`, for the motion preference —
- * which lives here for the same reason as everything else in the file: both
- * boards have to agree on what "reduced motion" means, and they were agreeing
- * by keeping a copy of the check each.
+ * kept here, beside the rest, so there is one definition of what "reduced
+ * motion" means rather than a copy of the check in each board.
  */
 
 import { FILES, RANKS, WHITE } from './config.js';
@@ -30,7 +29,14 @@ export const PIECE_NAMES = {
 /**
  * Whether the player has asked their system for less motion.
  *
- * Consulted by both boards before they animate anything.
+ * Consulted before the 3D board swings its camera — a flip, a zoom — and
+ * deliberately NOT before a piece moves. A move is the game showing you what
+ * just happened, and every one is meant to be seen travelling, including on a
+ * phone or PC that has reduced motion switched on. So piece motion answers to
+ * the game's own Settings → Animations switch alone, which is where somebody
+ * who wants the pieces to stay still turns them off. The camera is different:
+ * it moves the whole view, which is the motion this preference exists for,
+ * and a flip loses nothing by being cut.
  *
  * Checked live rather than cached, and checked in SCRIPT rather than left to
  * CSS. The `prefers-reduced-motion` block in style.css only neutralises CSS
