@@ -33,10 +33,12 @@ export const PIECE_NAMES = {
  * deliberately NOT before a piece moves. A move is the game showing you what
  * just happened, and every one is meant to be seen travelling, including on a
  * phone or PC that has reduced motion switched on. So piece motion answers to
- * the game's own Settings → Animations switch alone, which is where somebody
- * who wants the pieces to stay still turns them off. The camera is different:
- * it moves the whole view, which is the motion this preference exists for,
- * and a flip loses nothing by being cut.
+ * nothing at all. There was a Settings → Animations switch for somebody who
+ * wanted the pieces to stay still, and it was removed: it was on for
+ * everyone, and a board whose pieces jump from square to square is a worse
+ * board, not a quieter one. The camera is different: it moves the whole
+ * view, which is the motion this preference exists for, and a flip loses
+ * nothing by being cut.
  *
  * Checked live rather than cached, and checked in SCRIPT rather than left to
  * CSS. The `prefers-reduced-motion` block in style.css only neutralises CSS

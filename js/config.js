@@ -361,12 +361,15 @@ export const INVITE_TTL_MS = 180_000;
  * deep against 41px for a near one; at 70 they are 42px and 46px, and the
  * far one is all but the 44px touch target this app uses everywhere else.
  *
- * And since the pieces were made tall it does a third thing, which is now the
- * main one. From 56 degrees a piece is drawn most of a square beyond its own
- * foot and stands in front of whatever is behind it; from 70 a pawn stays
- * inside its own tile and a queen's crown covers a sixth of the one behind.
- * A player who would rather see the squares than see the pieces standing up
- * is one press from that.
+ * What raising the camera costs is the pieces, since they were made tall. A
+ * piece is drawn as tall as the cosine of the angle it is seen from, and the
+ * near rank — the player's own — is seen from four degrees higher than the
+ * middle of the board. Measured on a 390px phone, a king on the near rank is
+ * 46px high at Fit and was 24px at Large; a pawn was 14px. Large was offered
+ * on those terms for a while, as the level for a player who would rather see
+ * the squares than see the pieces standing up, and what it showed was a
+ * board of lids: six kinds of disc seen from above, which is the very thing
+ * the tall set was made to get away from. It has both now. See `lean`.
  *
  * Two levels. There was a third, Max, from 84 degrees — almost straight down
  * — and it has been removed. The index is what is stored, so a device that
@@ -382,10 +385,35 @@ export const INVITE_TTL_MS = 180_000;
  * stay: it is the visible front edge of the slab, and clipping it makes the
  * board look broken. Seen from higher up it is closer to being just a margin,
  * so Large lets the frame crop half of it.
+ *
+ * `lean` is how far the pieces are tipped back, away from the camera, in
+ * degrees. It is how Large has pieces that stand up on squares that are seen
+ * from above.
+ *
+ * 14 is 70 less 56: the pieces are tipped back by exactly what the camera
+ * was raised. A piece tipped that far is seen from the angle it is seen from
+ * at Fit, so it is drawn as it is at Fit — a king on the near rank 45px high
+ * on that 390px phone against 46, where it was 24 — while the board under it
+ * is drawn from 70 degrees, with the deeper squares. Away from the camera is
+ * straight up the picture, so on the screen it does not read as leaning at
+ * all. It reads as a piece standing up.
+ *
+ * Two other ways were tried first. Making the pieces taller: height is
+ * multiplied by the cosine and the near rank has the least of it to
+ * multiply, so at 1.63 times the height the far king was 58px and the near
+ * one 40, the wrong way round. And shearing them, each level slid back with
+ * the foot left flat: the right height on every rank, but a piece with the
+ * side of one seen from 56 degrees and the top of one seen from 70, a round
+ * ring of a crown on a tall body, and it looked wrong. See #standPiece in
+ * board-3d.js.
+ *
+ * The far rank's heads are further up the frame for it, and the frame has to
+ * hold them. See #cameraSeat in board-3d.js for how that was found room
+ * without making a square any smaller.
  */
 export const BOARD_ZOOM_LEVELS = [
-  { id: 'fit', label: 'Fit', elevation: 56, rim: 1, hint: 'The cinematic angle' },
-  { id: 'large', label: 'Large', elevation: 70, rim: 0.5, hint: 'Bigger, still clearly 3D' },
+  { id: 'fit', label: 'Fit', elevation: 56, rim: 1, lean: 0, hint: 'The cinematic angle' },
+  { id: 'large', label: 'Large', elevation: 70, rim: 0.5, lean: 14, hint: 'Bigger squares, pieces just as tall' },
 ];
 
 /**
@@ -560,7 +588,6 @@ export const DEFAULT_SETTINGS = {
   boardZoom: DEFAULT_BOARD_ZOOM,
   boardTheme: 'classic',
   background: DEFAULT_BACKGROUND,
-  animations: true,
   // Chat and emotes together, because they are one pipe and somebody who
   // wants quiet wants quiet. Off means nothing arrives and nothing can be
   // sent — and the panel says so, rather than swallowing what you type.

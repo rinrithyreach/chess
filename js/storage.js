@@ -130,7 +130,6 @@ export function loadSettings() {
   // than this one should land on the nearest, not silently reset the player's
   // preference to the default.
   if (source.boardZoom !== undefined) merged.boardZoom = clampBoardZoom(source.boardZoom);
-  if (typeof source.animations === 'boolean') merged.animations = source.animations;
   if (typeof source.chat === 'boolean') merged.chat = source.chat;
   if (VALID_THEME_IDS.includes(source.boardTheme)) merged.boardTheme = source.boardTheme;
   // Resolved rather than checked: an id from a build with more backgrounds

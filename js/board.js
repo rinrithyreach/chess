@@ -75,8 +75,6 @@ export class Board {
   #onSquareActivate = () => {};
   #lastRendered = new Map();
 
-  #animationsEnabled = true;
-
   #focusedSquare = 'e1';
 
   /**
@@ -203,10 +201,6 @@ export class Board {
     this.#applyOrientation();
   }
 
-  setAnimationsEnabled(enabled) {
-    this.#animationsEnabled = Boolean(enabled);
-  }
-
   /**
    * Zoom, deliberately doing nothing.
    *
@@ -237,9 +231,10 @@ export class Board {
     const { state, view } = snapshot;
     if (!state) return;
 
-    // Only the game's own Animations setting turns this off, not the device's
-    // reduced-motion preference — see prefersReducedMotion() for why.
-    const move = options.animateMove && this.#animationsEnabled ? options.animateMove : null;
+    // Nothing turns this off. Not the device's reduced-motion preference —
+    // see prefersReducedMotion() for why — and not a setting of the game's
+    // own, which there was and no longer is.
+    const move = options.animateMove ?? null;
 
     // A captured piece has to be photographed BEFORE the squares repaint,
     // because the repaint is what erases it. Cheap, and only on captures.

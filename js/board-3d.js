@@ -3,7 +3,7 @@
  * A WebGL chessboard, drop-in interchangeable with the DOM one in board.js.
  *
  * It implements exactly the same public contract — constructor(root),
- * onSquareActivate, setOrientation, setAnimationsEnabled, render — plus
+ * onSquareActivate, setOrientation, render — plus
  * dispose(), because unlike a DOM board this one owns a GPU context that has
  * to be handed back when the player switches skins. app.js swaps between the
  * two knowing nothing about either's internals.
@@ -141,7 +141,8 @@ const HIGHLIGHT = {
  * otherwise be one flat silhouette in the body colour. `shaft` and `blade`
  * are the pawn's spear, and they swap between the sides: a pale shaft with a
  * darker point for White, a dark shaft with a pale point for Black, so the
- * point shows against whichever tile is behind it.
+ * point shows against whichever tile is behind it. `eye` is the knight's,
+ * and is dark on both sides: a horse with pale eyes is not a friendly one.
  *
  * It is ONE material. Clay is clay whatever the pigment, so the colours are
  * baked into the geometry as vertex colours and every piece on the board is
@@ -152,11 +153,11 @@ const HIGHLIGHT = {
 const CLAY = {
   w: {
     body: '#fbf6ee', accent: '#f8b6a0', trim: '#f7b93a', alt: '#c3c7d8',
-    shaft: '#a9aec4', blade: '#7f859d',
+    shaft: '#a9aec4', blade: '#7f859d', eye: '#4d5166',
   },
   b: {
     body: '#65646f', accent: '#7cc474', trim: '#f7b93a', alt: '#83828f',
-    shaft: '#4d4c57', blade: '#a9a8b4',
+    shaft: '#4d4c57', blade: '#a9a8b4', eye: '#2d2c34',
   },
 };
 
@@ -298,74 +299,152 @@ const ring = (radius, tube, y, segments) =>
     .translate(0, y, 0);
 
 /**
- * The knight's head, assembled from solids.
+ * A limb: a bar of clay rolled out along a line, fatter in one place and
+ * thinner in another, and pressed a little flat.
  *
- * Two earlier attempts extruded a horse's silhouette and neither read as a
- * horse on the board, for the same reason: the silhouette lives in a vertical
- * plane, and this camera looks down at it from between 56 and 70 degrees. A
- * vertical plane seen from 56 degrees keeps about half its height on screen;
- * from 70 it keeps a third. The profile is the part you cannot see, which
- * makes it the wrong place to put the identity of the piece.
+ * Each station is [x, y, deep, wide]: where the middle of the bar is, in the
+ * plane the piece is drawn in, and half its thickness there — `deep` in that
+ * plane, across the line of the bar, and `wide` out of it, towards the
+ * viewer. The bar passes smoothly through every station and so does its
+ * thickness. Both ends are closed.
  *
- * What identifies a knight from above is the plan view: a cranium with two
- * ears behind it and a muzzle projecting forward, clear of the base. So the
- * head is built as those parts — a neck, a cranium, a jaw, a muzzle, two ears
- * — each a primitive, positioned in world units rather than fractions of
- * anything, because a horse's head has proportions and they are not the
- * piece's proportions. The mane is returned separately because it is a
- * different colour of clay.
- *
- * Everything faces -X. Black's knights are mirrored by the group's
- * userData.faces, so the two sides look at each other.
- *
- * Segment counts are deliberately modest. A knight's head is about a fortieth
- * of a phone screen and the merge is non-indexed, so every segment here is
- * paid for in duplicated vertices.
+ * It is what a lathe cannot make. Every other piece in the set is turned
+ * about its own axis and a horse's neck has none: it leans, it arches, and
+ * the head comes off it at an angle. Stacked balls and cylinders were how
+ * the knight was first made, and it showed every join.
  */
-function knightSolids() {
-  const place = (geometry, position, rotation, scale) => geometry.applyMatrix4(
-    new THREE.Matrix4().compose(
-      new THREE.Vector3(...position),
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rotation ?? [0, 0, 0]))),
-      new THREE.Vector3(...(scale ?? [1, 1, 1])),
-    ),
+function limb(stations, around, along) {
+  const line = new THREE.CatmullRomCurve3(
+    stations.map(([x, y]) => new THREE.Vector3(x, y, 0)),
+  );
+  const girth = new THREE.CatmullRomCurve3(
+    stations.map(([, , deep, wide]) => new THREE.Vector3(deep, wide, 0)),
   );
 
-  const head = [
-    // Rises out of the pedestal and leans forward, as a horse's neck does.
-    // Thicker than a horse's: a thin neck is the first thing clay would lose.
-    place(new THREE.CylinderGeometry(0.175, 0.24, 0.42, 16, 1), [-0.035, 0.45, 0], [0, 0, 0.22]),
-    // The skull, stretched hard along X. A horse's skull is long: at anything
-    // near round, it and the muzzle read as a ball with a snout stuck on.
-    place(new THREE.SphereGeometry(0.2, 16, 12), [-0.115, 0.745, 0], null, [1.42, 1, 0.95]),
-    // The cheek and jaw, slung below and behind. Without it the head is a
-    // ball with a snout on it, which is a dog.
-    place(new THREE.SphereGeometry(0.5, 12, 8), [-0.13, 0.615, 0], [0, 0, 0.22], [0.4, 0.28, 0.29]),
-    // Muzzle, projecting forward and only slightly down. It is what puts the
-    // nose out past the edge of the base, and that overhang is the whole of
-    // what says "knight" when you are looking straight down at the board.
-    place(new THREE.CapsuleGeometry(0.118, 0.17, 4, 12), [-0.335, 0.69, 0], [0, 0, 1.76], [1, 1, 0.95]),
-    // Ears, splayed slightly apart and swept back. Fat upright cones make a
-    // rabbit; these are short and rounded off.
-    place(new THREE.ConeGeometry(0.06, 0.18, 8), [0.03, 0.975, 0.085], [0.2, 0, -0.36]),
-    place(new THREE.ConeGeometry(0.06, 0.18, 8), [0.03, 0.975, -0.085], [-0.2, 0, -0.36]),
+  const position = [];
+  for (let i = 0; i <= along; i += 1) {
+    // Both curves are read by the same fraction of the way through the
+    // stations, not by distance, so a thickness stays with its station.
+    const t = i / along;
+    const at = line.getPoint(t);
+    const heading = line.getTangent(t);
+    const { x: deep, y: wide } = girth.getPoint(t);
+    for (let k = 0; k < around; k += 1) {
+      const angle = (k / around) * Math.PI * 2;
+      const across = Math.cos(angle) * deep;
+      position.push(
+        at.x - heading.y * across,
+        at.y + heading.x * across,
+        Math.sin(angle) * wide,
+      );
+    }
+  }
+  const first = line.getPoint(0);
+  const last = line.getPoint(1);
+  position.push(first.x, first.y, 0, last.x, last.y, 0);
+
+  const index = [];
+  for (let i = 0; i < along; i += 1) {
+    for (let k = 0; k < around; k += 1) {
+      const a = i * around + k;
+      const b = i * around + ((k + 1) % around);
+      index.push(a, b, a + around, b, b + around, a + around);
+    }
+  }
+  const start = (along + 1) * around;
+  const final = along * around;
+  for (let k = 0; k < around; k += 1) {
+    const next = (k + 1) % around;
+    index.push(start, next, k, start + 1, final + k, final + next);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/**
+ * The knight: a horse's neck and head, in the parts they are made of.
+ *
+ * Drawn in profile, facing -X, with every number in squares. Black's knights
+ * are turned about with the rest of Black's pieces (see #makePiece), so the
+ * two sides' horses face opposite ways along the rank.
+ *
+ * The neck and the head are a limb each, and that is the difference from
+ * the knight this replaces, which was a cylinder, three stretched balls and
+ * a capsule: a cranium, a jaw and a muzzle that each showed where they
+ * stopped, with a neck that entered its pedestal on a hard sawn edge. It had
+ * been built for a camera that looked nearly straight down, when the plan
+ * view was all there was to recognise a knight by. The pieces have since
+ * been stood up and are seen from the side as much as from above, and from
+ * the side it was a lump with a ball on the front of it.
+ *
+ * What is kept from that version is its one sound idea. The muzzle still
+ * reaches forward past the edge of the foot, because from above that
+ * overhang is what says "knight"; and the mane is still stepped rather than
+ * smooth, because one smooth ridge down the back of a neck is a handle.
+ *
+ * The parts are returned by the pigment they take.
+ */
+function knightSolids(seg) {
+  const around = Math.max(10, seg >> 1);
+  const squash = (geometry, [sx, sy, sz], lean, [x, y, z]) => geometry
+    .scale(sx, sy, sz)
+    .rotateZ(lean)
+    .translate(x, y, z);
+
+  const coat = [
+    // The neck. Broad where it leaves the pedestal, which is the chest, and
+    // arched at the back, narrowing to the poll.
+    limb([
+      [0.0, 0.36, 0.25, 0.215],
+      [0.03, 0.56, 0.235, 0.2],
+      [0.07, 0.78, 0.2, 0.18],
+      [0.065, 0.97, 0.168, 0.158],
+      [0.02, 1.09, 0.13, 0.13],
+    ], around, 12),
+    // The head: from the back of the skull, forward and down to the nose.
+    // Deepest at the cheek and a good third narrower at the muzzle — a head
+    // the same depth all the way along is a dog's.
+    limb([
+      [0.14, 1.085, 0.085, 0.095],
+      [0.055, 1.105, 0.155, 0.148],
+      [-0.07, 1.085, 0.178, 0.156],
+      [-0.2, 1.015, 0.152, 0.136],
+      [-0.31, 0.945, 0.128, 0.12],
+      [-0.4, 0.89, 0.12, 0.116],
+      [-0.455, 0.855, 0.085, 0.09],
+    ], around, 16),
+    // The cheek, slung under the eye: the round of a horse's jaw.
+    squash(new THREE.SphereGeometry(1, around, 10), [0.16, 0.165, 0.152], 0.5, [-0.04, 0.985, 0]),
+    // Ears, pricked and a little apart.
+    ...[1, -1].map((hand) => new THREE.ConeGeometry(0.064, 0.17, 10)
+      .rotateX(hand * 0.22)
+      .rotateZ(0.2)
+      .translate(0.05, 1.3, hand * 0.09)),
   ];
 
-  // The mane: three flattened lobes stepping down the back of the neck. One
-  // smooth ridge reads as a handle, and the steps are what make it hair.
+  // The mane: a crest of tufts down the back of the neck, each overlapping
+  // the one below, and a forelock between the ears.
+  const tuft = (x, y, lean, size) => squash(
+    new THREE.SphereGeometry(1, 12, 8), [0.105 * size, 0.07 * size, 0.062], lean, [x, y, 0],
+  );
   const mane = [
-    { y: 0.85, x: 0.125, s: [0.15, 0.16, 0.115] },
-    { y: 0.675, x: 0.185, s: [0.16, 0.175, 0.122] },
-    { y: 0.49, x: 0.205, s: [0.15, 0.17, 0.115] },
-  ].map((lobe) => place(new THREE.SphereGeometry(0.5, 10, 7), [lobe.x, lobe.y, 0], [0, 0, -0.2], lobe.s));
+    tuft(0.165, 1.185, -0.75, 1),
+    tuft(0.235, 1.065, -1.1, 1.08),
+    tuft(0.265, 0.93, -1.4, 1.12),
+    tuft(0.265, 0.79, -1.65, 1.1),
+    tuft(0.245, 0.655, -1.85, 1.02),
+    tuft(0.215, 0.535, -2.0, 0.9),
+    squash(new THREE.SphereGeometry(1, 12, 8), [0.1, 0.055, 0.06], 0.35, [-0.03, 1.265, 0]),
+  ];
 
-  // The head keeps the numbers it was modelled at and is then set on its
-  // pedestal whole: a little larger, and a fifth of a square higher. Retyping
-  // every position for a taller piece would be thirty chances to bend a head
-  // that already reads as a horse.
-  [...head, ...mane].forEach((solid) => solid.scale(1.12, 1.12, 1.12).translate(0, 0.21, 0));
+  const eyes = [1, -1].map((hand) => new THREE.SphereGeometry(0.034, 10, 8)
+    .translate(-0.115, 1.125, hand * 0.136));
 
-  return { head, mane };
+  return { coat, mane, eyes };
 }
 
 /**
@@ -410,12 +489,15 @@ function pieceRecipe(type, seg) {
       ];
 
     case 'n': {
-      const { head, mane } = knightSolids();
+      const { coat, mane, eyes } = knightSolids(seg);
       return [
         ['body', lump(0.4, 0.4, 0, 0.11, 0.05, seg)],
-        ['body', lump(0.3, 0.25, 0.09, 0.53, 0.04, seg)],
-        ...head.map((g) => ['alt', g]),
+        ['body', lump(0.31, 0.275, 0.09, 0.4, 0.04, seg)],
+        // The band every piece above a rook wears, here as a collar.
+        ['trim', ring(0.25, 0.052, 0.41, seg)],
+        ...coat.map((g) => ['alt', g]),
         ...mane.map((g) => ['accent', g]),
+        ...eyes.map((g) => ['eye', g]),
       ];
     }
 
@@ -542,7 +624,6 @@ export class Board3D {
   #root;
   #onSquareActivate = () => {};
   #orientation = 'white';
-  #animationsEnabled = true;
   #theme = 'classic';
   #focusedSquare = 'e1';
   #disposed = false;
@@ -587,6 +668,19 @@ export class Board3D {
    */
   #moving = new Map(); // square -> animation record
   #cameraSpin = null;
+  /**
+   * How far the pieces are leaning away from the camera, now, in degrees.
+   *
+   * A zoom level's `lean`, or on the way from one level's to the next while
+   * the camera swings between them. See BOARD_ZOOM_LEVELS for what it is for
+   * and #standPiece for how it is put on.
+   */
+  #lean = 0;
+  /**
+   * How far down its frame the picture has been slid, as a fraction of the
+   * frame's height. See #cameraSeat, which decides it, and #slideView.
+   */
+  #drop = 0;
   #needsRender = true;
   #frame = null;
   /**
@@ -807,8 +901,10 @@ export class Board3D {
     key.shadow.mapSize.set(1024, 1024);
     // Wide enough for the top of a king on a corner square: the light leans,
     // so a tall piece at the edge reaches further across its view than the
-    // board does.
-    const s = HALF + RIM + 1.1;
+    // board does — and further again where the piece leans as well, by as
+    // much as the zoom level that leans them most puts a king's head over.
+    const lean = Math.max(...BOARD_ZOOM_LEVELS.map((level) => level.lean ?? 0));
+    const s = HALF + RIM + 1.1 + Math.sin(THREE.MathUtils.degToRad(lean)) * PIECE_HEIGHT.k;
     key.shadow.camera.left = -s;
     key.shadow.camera.right = s;
     key.shadow.camera.top = s;
@@ -1078,6 +1174,20 @@ export class Board3D {
    * distance scaled until the widest of them sits inside the frame with a
    * margin. Two or three passes converge, because projected size is very
    * nearly inversely proportional to distance.
+   *
+   * The answer is a place to sit and a `drop`: how far the picture is slid
+   * down its frame from there. The camera looks at the middle of the board,
+   * and the middle of the board is not the middle of what has to be seen —
+   * above the far rank there are the heads of the pieces standing on it, and
+   * below the near one only the front of the slab. Where the board fills the
+   * frame's height, at Large, that difference is all the room there is: the
+   * far king's crown would be the thing the board is shrunk to fit, with the
+   * same amount going spare under the near rank. So what has to fit from top
+   * to bottom is the picture's height, and the picture is then slid to where
+   * it fits. At Fit the board is wide and short in its frame, nothing is
+   * near the top or the bottom, and the drop comes out as nothing.
+   *
+   * @returns {{position: THREE.Vector3, drop: number}}
    */
   #cameraSeat(side) {
     // Elevation is the zoom. Foreshortening means the board projects to
@@ -1111,33 +1221,71 @@ export class Board3D {
         corners.push(new THREE.Vector3(x, BOARD_Y, z));
       }
     }
+    // Its head is where this level leans it to — away from the camera, which
+    // is up the frame. See `lean` in BOARD_ZOOM_LEVELS.
+    const lean = THREE.MathUtils.degToRad(level.lean ?? 0);
+    const up = PIECE_HEIGHT.k * Math.cos(lean);
+    const back = -side * PIECE_HEIGHT.k * Math.sin(lean);
     for (const x of [-stand, stand]) {
       for (const z of [-stand, stand]) {
-        corners.push(new THREE.Vector3(x, BOARD_Y + PIECE_HEIGHT.k, z));
+        corners.push(new THREE.Vector3(x, BOARD_Y + up, z + back));
       }
     }
 
+    // Measured with the picture where the lens puts it, whatever slide the
+    // camera is wearing at the moment.
     const probe = this.#camera.clone();
+    probe.clearViewOffset();
     let distance = 12;
+    let drop = 0;
     for (let pass = 0; pass < 6; pass += 1) {
       probe.position.copy(direction).multiplyScalar(distance);
       probe.lookAt(0, 0, 0);
       probe.updateMatrixWorld(true);
       probe.updateProjectionMatrix();
 
-      let extent = 0;
+      let across = 0;
+      let top = -Infinity;
+      let bottom = Infinity;
       for (const corner of corners) {
         const ndc = corner.clone().project(probe);
-        extent = Math.max(extent, Math.abs(ndc.x), Math.abs(ndc.y));
+        across = Math.max(across, Math.abs(ndc.x));
+        top = Math.max(top, ndc.y);
+        bottom = Math.min(bottom, ndc.y);
       }
+      // Half the picture's height, not its further edge from the middle: it
+      // is about to be slid to where it fits.
+      const extent = Math.max(across, (top - bottom) / 2);
       if (!Number.isFinite(extent) || extent <= 0) break;
 
       const correction = extent / FRAME_FILL;
+      // No further than it takes to bring the edge that is over back inside.
+      // The frame is two units high in these coordinates, hence the halves.
+      const over = top / correction - FRAME_FILL;
+      const under = bottom / correction + FRAME_FILL;
+      drop = over > 0 ? over / 2 : Math.min(0, under) / 2;
       if (Math.abs(correction - 1) < 0.005) break;
       distance *= correction;
     }
 
-    return direction.multiplyScalar(distance);
+    return { position: direction.multiplyScalar(distance), drop };
+  }
+
+  /**
+   * Slide the picture down a camera's frame by `drop` of the frame's height.
+   *
+   * Done in the lens, as the offset three.js keeps for drawing one view
+   * across several screens, and not by pointing the camera somewhere else.
+   * Everything that asks where a thing is drawn or what a press is on asks
+   * through the camera's projection, so it all follows without being told;
+   * and the camera goes on looking at the middle of the board, which is what
+   * a flip swings it round.
+   */
+  #slideView(camera, drop) {
+    // The offset is where the window sits in a taller picture, so it runs
+    // the other way from the picture.
+    if (drop) camera.setViewOffset(1, 1, 0, -drop, 1, 1);
+    else camera.clearViewOffset();
   }
 
   /**
@@ -1162,14 +1310,14 @@ export class Board3D {
    */
   #placeGroundShadow(seat) {
     const probe = this.#camera.clone();
-    probe.position.copy(seat);
+    probe.position.copy(seat.position);
     probe.lookAt(0, 0, 0);
     probe.updateMatrixWorld(true);
-    probe.updateProjectionMatrix();
+    this.#slideView(probe, seat.drop);
 
     // The two bottom corners of the slab on the side nearest the camera, a
     // little in from the ends: the tray's corners are rounded.
-    const near = (Math.sign(seat.z) || 1) * (HALF + RIM);
+    const near = (Math.sign(seat.position.z) || 1) * (HALF + RIM);
     const reach = HALF + RIM - 0.25;
     const corners = [-reach, reach]
       .map((x) => new THREE.Vector3(x, BOARD_Y - TRAY_DEPTH, near).project(probe));
@@ -1191,19 +1339,28 @@ export class Board3D {
    */
   #applyCamera(animate = true) {
     const side = this.#orientation === 'white' ? 1 : -1;
-    const target = this.#cameraSeat(side);
-    this.#placeGroundShadow(target);
+    const seat = this.#cameraSeat(side);
+    const lean = (BOARD_ZOOM_LEVELS[this.#zoom] ?? BOARD_ZOOM_LEVELS[0]).lean ?? 0;
+    this.#placeGroundShadow(seat);
 
-    if (!animate || !this.#animationsEnabled || prefersReducedMotion()) {
-      this.#camera.position.copy(target);
+    if (!animate || prefersReducedMotion()) {
+      this.#camera.position.copy(seat.position);
       this.#camera.lookAt(0, 0, 0);
+      this.#setView(seat.drop, lean);
       this.#needsRender = true;
       return;
     }
 
     this.#cameraSpin = {
       from: this.#camera.position.clone(),
-      to: target,
+      to: seat.position,
+      // The slide and the pieces' lean go with the camera, so that a change
+      // of board size is one motion: the view tips up and the pieces stay
+      // standing in it. A flip changes neither amount.
+      dropFrom: this.#drop,
+      dropTo: seat.drop,
+      leanFrom: this.#lean,
+      leanTo: lean,
       // Set by the first frame that draws it. See the note on time in #loop.
       start: null,
       // Longer than a move once was: the whole view is turning, and at move
@@ -1215,6 +1372,71 @@ export class Board3D {
       // has no reason to follow the move, so it no longer pretends to.
       duration: 430,
     };
+  }
+
+  /**
+   * Put the camera's slide and the pieces' lean where a seat has them.
+   *
+   * The two things about a view that are not where the camera is. Called
+   * after the camera has been put where it is going, because the lean is
+   * away from wherever that is: a flip changes neither amount, and still has
+   * to turn every piece's lean round the board with the camera, a frame at a
+   * time. With no lean there is nothing to turn.
+   */
+  #setView(drop, lean) {
+    if (drop !== this.#drop) {
+      this.#drop = drop;
+      this.#slideView(this.#camera, drop);
+    }
+    if (lean !== this.#lean || lean !== 0) {
+      this.#lean = lean;
+      this.#pieceGroup?.children.forEach((group) => this.#standPiece(group));
+    }
+  }
+
+  /**
+   * Stand a piece the way the board is drawing them: leaning away from the
+   * camera by #lean, or bolt upright when that is nothing.
+   *
+   * Tipped back whole, about a hinge under the middle of its foot. A piece
+   * tipped back by as many degrees as the camera has been raised is seen
+   * from exactly the angle it was seen from before the camera went up, so
+   * it looks as it did: the same height, the same crown, the same everything.
+   * That is the whole point of it. See `lean` in BOARD_ZOOM_LEVELS.
+   *
+   * It was a shear first: each level of the piece slid back and otherwise
+   * left alone, which keeps the foot flat on its tile and is the tidier
+   * piece of geometry. It also looked wrong. A sheared piece has the height
+   * of one seen from the side and the top of one seen from above — a
+   * queen's crown a full round ring on a tall body — and the board that had
+   * it came back as "tall but not nice", which those round tops are taken
+   * to be what was meant. What the hinge costs is the foot, which is no
+   * longer flat: its front edge is a tenth of a square off the board and
+   * its back edge as far into it. From this high up that is a pixel, under
+   * the piece's own shadow.
+   *
+   * Three things about where it goes. It is on the mesh inside the piece
+   * and not on the piece, so that the turn and the scale the rest of this
+   * file gives a piece are left alone. It is in the piece's own bearings,
+   * so for a black piece, which has been turned about to face the white
+   * ones, "away from the camera" is the other way. And the camera's
+   * direction is taken across the board only — which way round the board
+   * it is, not how high.
+   */
+  #standPiece(group) {
+    const body = group.children[0];
+    if (!body) return;
+    const { x, z } = this.#camera.position;
+    const away = Math.hypot(x, z) || 1;
+    // Flat on the board and square across the camera's line of sight, the
+    // way round that takes the head away from the camera — and then carried
+    // into the piece's own bearings by undoing the turn the piece actually
+    // has, read off the piece rather than assumed from its colour.
+    const hinge = new THREE.Vector3(-z / away, 0, x / away)
+      .applyQuaternion(group.quaternion.clone().invert());
+    body.matrixAutoUpdate = false;
+    body.matrix.makeRotationAxis(hinge, THREE.MathUtils.degToRad(this.#lean));
+    body.matrixWorldNeedsUpdate = true;
   }
 
   #resize() {
@@ -1248,10 +1470,6 @@ export class Board3D {
     this.#applyCamera(true);
     this.#applyA11yOrder();
     this.#refreshBoardTexture();
-  }
-
-  setAnimationsEnabled(enabled) {
-    this.#animationsEnabled = Boolean(enabled);
   }
 
   /**
@@ -1461,9 +1679,10 @@ export class Board3D {
       this.#refreshBoardTexture();
     }
 
-    // Only the game's own Animations setting turns this off, not the device's
-    // reduced-motion preference — see prefersReducedMotion() for why.
-    const move = options.animateMove && this.#animationsEnabled ? options.animateMove : null;
+    // Nothing turns this off. Not the device's reduced-motion preference —
+    // see prefersReducedMotion() for why — and not a setting of the game's
+    // own, which there was and no longer is.
+    const move = options.animateMove ?? null;
 
     const board = boardFromFen(state.fen);
 
@@ -1648,6 +1867,20 @@ export class Board3D {
       let group = this.#pieces.get(square);
       if (!group) {
         group = this.#makePiece(piece);
+        // Turned to face the other side as it is made, and before it is
+        // stood: the lean is worked out from which way the piece is turned.
+        //
+        // The turn used to be given further down, with the position, to a
+        // piece that is not being animated — and a piece that has just moved
+        // is a new one, made here, that IS being animated. So every black
+        // piece crossed the board facing White's way and stayed like that
+        // until something else redrew the board: a knight looking backwards,
+        // a pawn with its spear in the other hand. With a lean it was worse
+        // than backwards. The lean was put on for a piece that had been
+        // turned, on one that had not, so it tipped towards the camera
+        // instead of away, and at Large a black piece bowed as it moved.
+        group.rotation.y = group.userData.faces === -1 ? Math.PI : 0;
+        this.#standPiece(group);
         this.#pieceGroup.add(group);
         this.#pieces.set(square, group);
       }
@@ -1663,7 +1896,6 @@ export class Board3D {
       const animating = (move && move.to === square) || this.#moving.has(square);
       if (!animating) {
         group.position.set(world.x, BOARD_Y, world.z);
-        group.rotation.y = group.userData.faces === -1 ? Math.PI : 0;
         group.scale.setScalar(1);
       } else {
         group.position.y = BOARD_Y;
@@ -1819,11 +2051,6 @@ export class Board3D {
     if (!group) return;
     this.#pieces.delete(square);
 
-    if (!this.#animationsEnabled) {
-      this.#releasePiece(group);
-      return;
-    }
-
     // Held until the piece taking it is nearly there, then displaced — the
     // two motions end on the same frame. See CAPTURE_FADE_DELAY. Counted
     // from the same first frame as the piece taking it, which is what keeps
@@ -1859,12 +2086,6 @@ export class Board3D {
     const group = this.#pieces.get(square);
     if (!group) return;
     const home = this.#squareToWorld(square);
-
-    if (!this.#animationsEnabled) {
-      group.position.copy(home);
-      this.#needsRender = true;
-      return;
-    }
 
     // Where the piece is NOW is not good enough. Releasing over a square the
     // piece cannot reach still counts as touching that square, so the app
@@ -2050,6 +2271,10 @@ export class Board3D {
         Math.sin(angle) * radius,
       );
       this.#camera.lookAt(0, 0, 0);
+      this.#setView(
+        spin.dropFrom + (spin.dropTo - spin.dropFrom) * k,
+        spin.leanFrom + (spin.leanTo - spin.leanFrom) * k,
+      );
       if (t >= 1) this.#cameraSpin = null;
       this.#needsRender = true;
     }
@@ -2488,6 +2713,8 @@ export class Board3D {
       theme: this.#theme,
       orientation: this.#orientation,
       zoom: this.#zoom,
+      lean: this.#lean,
+      drop: this.#drop,
       /**
        * What the renderer decided about this device, and what it did with it.
        *
@@ -2546,7 +2773,14 @@ export class Board3D {
         if (!group) return null;
         const rect = this.#canvas.getBoundingClientRect();
         const height = PIECE_HEIGHT[group.userData.piece[1]] ?? PIECE_HEIGHT.p;
-        const ndc = group.position.clone().setY(group.position.y + height * 0.8).project(this.#camera);
+        // On the axis as it is drawn, which leans: see #standPiece.
+        const lean = THREE.MathUtils.degToRad(this.#lean);
+        const up = height * 0.8 * Math.cos(lean);
+        const away = Math.hypot(this.#camera.position.x, this.#camera.position.z) || 1;
+        const back = (-height * 0.8 * Math.sin(lean)) / away;
+        const ndc = group.position.clone()
+          .add(new THREE.Vector3(this.#camera.position.x * back, up, this.#camera.position.z * back))
+          .project(this.#camera);
         return {
           x: rect.left + ((ndc.x + 1) / 2) * rect.width,
           y: rect.top + ((1 - ndc.y) / 2) * rect.height,

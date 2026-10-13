@@ -122,7 +122,6 @@ async function boot() {
     applyBoardStyle(snapshot.settings.uiStyle);
 
     board.setOrientation(snapshot.orientation);
-    board.setAnimationsEnabled(snapshot.settings.animations);
     board.setZoom(snapshot.settings.boardZoom);
     board.render(snapshot, { animateMove: pendingAnimation });
     pendingAnimation = null;
@@ -570,7 +569,6 @@ async function boot() {
   function repaint() {
     const snapshot = controller.getSnapshot();
     board.setOrientation(snapshot.orientation);
-    board.setAnimationsEnabled(snapshot.settings.animations);
     board.setZoom(snapshot.settings.boardZoom);
     board.render(snapshot);
     ui.render(snapshot);

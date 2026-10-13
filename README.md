@@ -563,15 +563,16 @@ the first, and the second was given to the squares: the board is now fitted to
 the canvas rim to rim, which on a phone is the edge of the screen. So the
 column is as slim as the broadest piece allows — 3.4% of the board's width,
 a fraction rather than a number of pixels because the margin it stands in is
-a fraction too — and Large, which crops half the rim, is padded by what it is
-short. Measured on a 412px phone, to the tiles of the near rank, with the
-tray clearing them at both levels, and checked the same way at 320, 360 and
+a fraction too — and Large, where the board fills the canvas by its height
+and leaves a little less at the sides, is padded by what it is short.
+Measured on a 412px phone, to the tiles of the near rank, with the tray
+clearing them at both levels, and checked the same way at 320, 360 and
 390px:
 
 | Level | Tiles drawn | Padding per side | Margin per side | Tray | Overlap |
 | --- | --- | --- | --- | --- | --- |
 | Fit (default) | 382px | none | 14.8px | 14px | none |
-| Large | 384px | 6px | 14.1px | 14px | none |
+| Large | 383px | 5px | 14.4px | 14px | none |
 
 The piles come from the **move history**, not from comparing the position
 against a full starting set. That distinction is the whole correctness story: a
@@ -674,11 +675,21 @@ draw calls with one shared material, where separately coloured parts would
 have been three or four apiece.
 
 The knight is the exception: a horse's head is not a surface of revolution, and
-after two attempts it is not an extruded silhouette either. It is built from
-primitive solids — neck, cranium, jaw, muzzle, two ears, and three mane lobes
-in the accent colour — placed and baked in with the rest. See *Things that
-went wrong* for why the silhouette approach could not work on a board seen
-from above.
+after two attempts it is not an extruded silhouette either. Its neck and its
+head are a **limb** each — a bar of clay rolled out along a curved line, fatter
+at the chest and the cheek, thinner at the poll and the muzzle, and pressed a
+little flat — with a jaw, two pricked ears, a mane of overlapping tufts in the
+accent colour, a forelock, two dark eyes, and the gold band the other pieces
+wear, as a collar. It is still drawn in profile, so White's horses look one way
+along the rank and Black's the other, and the muzzle still reaches past the
+edge of the foot, which is what says "knight" from above.
+
+It was a fourth go. The third was built from primitive solids — a cylinder for
+the neck, stretched balls for cranium and jaw, a capsule for the muzzle, three
+lobes of mane — when the camera looked almost straight down and the plan view
+was all there was to recognise a piece by. Stood up and seen from the side it
+was a lump with a ball on the front, and each part showed where it stopped. See
+*Things that went wrong* for the first three.
 
 **The pieces are tall.** A king stands nearly two squares high on a foot less
 than one across, which is about what a tournament set is, and a pawn a little
@@ -792,9 +803,13 @@ rather than a square emptying itself and then being landed on.
 Every move is seen travelling, in every mode — yours, the bot's, and your
 opponent's arriving over the network — and it takes 400ms, long enough to
 watch rather than merely notice. That holds on a device that asks for reduced
-motion too: the pieces answer to **Settings → Animations** alone, which is the
-one switch that stops them. The camera swinging round on a flip or a zoom is
-the exception, and still follows the device, because it moves the whole view.
+motion too, and there is no switch in the game that stops them either. There
+was one, **Settings → Animations**, and it has been removed: it was on for
+everyone, and a move that is not seen travelling is a piece that vanishes from
+one square and appears on another. A device that had it switched off gets the
+animation back, because the stored value is no longer read. The camera
+swinging round on a flip or a zoom is the exception, and still follows the
+device, because it moves the whole view.
 
 A move is timed by the frame's own clock and counts from the first frame it is
 drawn in. The time a browser hands to a frame steps by exactly one frame each
@@ -839,11 +854,45 @@ It evens the squares out too. At the low angle a far-rank square is 35px deep
 against 41px for a near one; at Large they are 42px and 46px. Each level is
 measured square by square through the live camera.
 
-And since the pieces were made tall it does a third thing, which is now the
-main one. From 56 degrees a piece stands in front of whatever is behind it;
-from 70 a pawn stays inside its own tile and a queen's crown covers about a
-sixth of the one behind. A player who would rather see the squares than see
-the pieces standing up is one press from that.
+**The pieces stand up at Large as well**, and that took a trick. What raising
+the camera costs is the pieces: one is drawn as tall as the cosine of the angle
+it is seen from, and the near rank — the player's own — is seen from four
+degrees higher than the middle of the board. On a 390px phone a king on the
+near rank is 46px high at Fit and was 24px at Large; a pawn was 14px. Large was
+offered on those terms for a while, as the level for a player who would rather
+see the squares, and what it showed was a board of lids: six kinds of disc
+seen from above, the thing the tall set was made to get away from.
+
+So at Large the pieces **lean**: each is tipped back, away from the camera, by
+14 degrees — exactly what the camera was raised, 70 less 56. A piece tipped
+that far is seen from the angle it is seen from at Fit, so it is drawn as it
+is at Fit, on a board drawn from 70 degrees. Away from the camera is straight
+up the picture, so on the screen it does not read as a lean at all. It reads
+as a piece standing up: the near king is 45px, the far one 54px, a pawn 25px,
+on squares the size they were. The lean goes round the board with the camera
+on a flip, and comes on with the swing of the camera when the size is changed.
+
+It was the third thing tried. Making the pieces taller is the wrong tool:
+height is multiplied by that cosine and the near rank has the least of it to
+multiply, so 1.63 times the height drew the far king 58px and the near one
+40px. Shearing them — each level slid back, the foot left flat on its tile —
+gave every rank the right height and was the tidier geometry, and it looked
+wrong: a sheared piece has the side of one seen from 56 degrees and the top of
+one seen from 70, a full round ring of a crown on a tall body. That went as far
+as being shown, and came back as "tall but not nice", which the round tops are
+taken to be what was meant. Tipping the whole piece
+costs the foot, whose front edge is now a tenth of a square off the board and
+its back edge as far into it; from this high up that is a pixel, under the
+piece's own shadow.
+
+The far rank's heads are further up the frame for it, in a frame the board
+already filled. The camera looks at the middle of the board, which is not the
+middle of what has to be seen — heads above the far rank, only the front of
+the slab below the near one — so the picture is now fitted by its height and
+then slid down the frame to where it fits, 2% of it at Large and nothing at
+Fit. That left the board a little to spare at the sides, which was given to
+the canvas out of the padding beside it: a near square is 45 x 44px before
+and after.
 
 There was a third step, *Max*, looking almost straight down from 84 degrees.
 It has been removed. The setting is stored as a step number, so a device that
@@ -890,7 +939,7 @@ and fall back to the default.
 
 **Interface** — start screen, new-game setup, waiting room with the shareable
 code, responsive game screen, friends panel, chat sheet, settings (sound,
-board theme, animations, chat and emotes),
+board theme, chat and emotes),
 custom confirmation modals, toasts, and a collapsible move history.
 
 **Every control answers the pointer** — hovering any button lifts it 2px,
@@ -916,7 +965,7 @@ mouse and does nothing for Tab is telling half the room it is not for them.
 **Accessibility** — real `<button>` elements, ARIA labels on every square,
 arrow-key board navigation with a roving tabindex, visible focus rings, and
 `prefers-reduced-motion` support — for everything except the moving pieces,
-which follow the in-game Animations switch instead.
+which are always shown travelling.
 
 ---
 
@@ -1236,7 +1285,7 @@ The rules that keep this maintainable:
 
 ### Why orientation and settings are *not* session state
 
-Board orientation, sound, theme, background and animations are per-device display
+Board orientation, sound, theme and background are per-device display
 preferences. In online play each phone orients the board for its own player,
 so these belong to the controller, not to the shared game state. Keeping them
 out of the session means the session snapshot is exactly what a future
@@ -1554,8 +1603,7 @@ Five independent `localStorage` keys are used so a corrupt game never costs
 you your preferences:
 
 - `chess-arena:game` — the current game
-- `chess-arena:settings` — sound, board theme, background, animations, chat
-  and emotes
+- `chess-arena:settings` — sound, board theme, background, chat and emotes
 - `chess-arena:avatars` — the remembered profile picture for each New Game seat
 - `chess-arena:profile` — the name this device plays online under, and the
   friend code it claimed
@@ -2038,6 +2086,62 @@ being hidden by a rule that changed underneath it:
    And the first move of a game had two or three long frames in its first
    eight, the renderer running hot for the first time; warming it up when
    the board appears leaves one.
+24. **At Large the pieces were lids.** Reported as "on large make all chess
+   straight tall, easy to play". Large raises the camera to 70 degrees to
+   make the squares deeper, and a piece is drawn as tall as the cosine of
+   the angle it is seen from: the player's own king was 24px high on a 390px
+   phone against 46px at Fit, and a pawn 14px. From above the six kinds are
+   six discs, and the tall set existed to stop exactly that. It had been
+   written down as the price of the level, which is how a fault gets kept.
+
+   The pieces are now tipped back at Large by the 14 degrees the camera was
+   raised, so each is seen as it is at Fit: 45px for that king, on squares
+   the same size. Two wrong answers came first. Stretching them helps the
+   far rank and not the near one, the wrong way round. Shearing them got
+   the heights right and the pieces wrong — the top of a piece seen from
+   above on the side of one seen from the front — and that board was
+   reported back as "tall but not fit, feel like not nice". See *Board
+   size* above for all three, and for the room the far rank's heads then
+   needed in the frame.
+25. **The knight was a lump.** Reported as "chess knight not nice". Entry
+   10 is how it came to be built from a cylinder, three stretched balls and
+   a capsule, and why that was right at the time: the camera looked nearly
+   straight down, and a muzzle overhanging the foot was the only thing that
+   said "knight" from there. Then the set was made tall and the pieces were
+   stood up, and nobody went back to the one piece that had been designed
+   for the view from above. From the side it was a ball with a snout, three
+   toes for a mane, and a neck that went into its pedestal on a sawn edge.
+
+   It is two limbs now, a neck and a head, each a bar rolled along a curve
+   with its thickness changing as it goes, which is what a lathe and a box
+   of primitives cannot make between them. The overhang is kept — 0.1 of a
+   square past the foot, measured the same way as before — and so is the
+   stepped mane. See *The knight is the exception* above.
+26. **A black piece bowed as it moved, at Large — and had been travelling
+   backwards at every size for as long as there had been a 3D board.**
+   Reported as "on large, when chess move, bend down". Black's pieces are
+   turned about to face White's, and the turn was given in the same breath
+   as the position, to a piece that is not being animated. But a piece that
+   has just moved is a new one, made for its new square, and it is the one
+   piece that *is* being animated. So it was never turned: it crossed the
+   board facing White's way and stayed like that until something else
+   redrew the board — a knight looking backwards, a pawn with its spear in
+   the other hand, then a jump round when the next square was pressed.
+   Nobody had noticed, on five of the six kinds because they are round.
+
+   The lean at Large is what made it visible. It is worked out for a piece
+   that has been turned and was being put on one that had not, so it tipped
+   the piece towards the camera instead of away: every black piece that
+   moved fell forward on its face and lay there until the next press.
+
+   The piece is turned as it is made, before it is stood, and the lean now
+   reads the turn off the piece itself instead of assuming it from the
+   colour, so the two cannot disagree again. Checked through sixteen moves,
+   an undo, a promotion to a black knight, a flip and a change of size, at
+   both sizes and both ways round, in flight and landed: every piece leans
+   away from the camera and every knight faces the way its side does. The
+   same check on the build before the fix fails at both sizes — on the lean
+   at Large, and on the knights at Fit, which is the published game.
 
 ### Manual checklist
 
@@ -2230,7 +2334,9 @@ the DOM**. Set it to `false` before shipping.
 
     The other cost is new with the tall set and is the larger one. At Fit a
     piece is drawn over the lower part of the tile behind it: a pawn's head
-    covers about a quarter of it, a queen's crown about two thirds. A press on
+    covers about a quarter of it, a queen's crown about two thirds. At Large
+    it is the same by a little less, the pieces being drawn as tall there and
+    the squares deeper. A press on
     the covered part is a press on that piece. The board reaches past an
     opponent's piece that cannot be taken, and past one of your own only to
     pick up another piece, never to play a move — so to move to a square
@@ -2239,8 +2345,8 @@ the DOM**. Set it to `false` before shipping.
 
     None of this is a trap: the Size control switches between the two levels
     and says which one you are on, so a player who finds the back rank fiddly,
-    or wants more of every square in view, is one tap from Large, and the
-    choice is remembered. Every square is reachable at both levels regardless
+    or wants deeper squares, is one tap from Large, and the choice is
+    remembered. Every square is reachable at both levels regardless
     — picking is a raycast against real geometry, and the middle of every
     empty tile is verified to be that tile at each of them.
 5. **PGN import is not implemented.** Export and clipboard copy work; the

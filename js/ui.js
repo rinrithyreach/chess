@@ -261,7 +261,7 @@ export class UI {
       'btn-confirm-ok', 'btn-confirm-cancel', 'btn-confirm-alt',
       'modal-gameover', 'gameover-icon', 'gameover-title', 'gameover-result',
       'gameover-detail', 'btn-rematch', 'btn-gameover-new',
-      'modal-settings', 'set-sound', 'set-animations',
+      'modal-settings', 'set-sound',
       'theme-picker', 'bg-picker',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
@@ -1562,7 +1562,6 @@ export class UI {
   syncSettings(settings) {
     const map = {
       'set-sound': 'sound',
-      'set-animations': 'animations',
       'set-chat': 'chat',
     };
     Object.entries(map).forEach(([id, key]) => {
@@ -2292,7 +2291,6 @@ export class UI {
     // --- Settings ---
     const settingInputs = {
       'set-sound': 'sound',
-      'set-animations': 'animations',
       'set-chat': 'chat',
     };
     Object.entries(settingInputs).forEach(([id, key]) => {
