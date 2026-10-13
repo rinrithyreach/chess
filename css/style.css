@@ -2,41 +2,131 @@
    style.css — design tokens, app shell, screens, controls, modals, toasts
    ========================================================================== */
 
+/*
+   Fredoka, shipped with the site rather than fetched from a font host.
+
+   The look leans on it harder than a typeface usually gets leaned on: the
+   headings are white letters outlined in ink, and that only reads as lettering
+   — rather than as text with a border round it — in a face whose strokes are
+   as round and as heavy as the outline. A system font here is legible and
+   wrong.
+
+   One variable file covers every weight from 300 to 700, split the way the
+   foundry splits it so a page in English fetches 30KB and never asks for the
+   second file. Names typed in another script fall through to the system font
+   behind it, which is the right answer for a name. SIL Open Font Licence; the
+   licence travels with the files in assets/fonts.
+*/
+@font-face {
+  font-family: "Fredoka";
+  font-style: normal;
+  font-weight: 300 700;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("../assets/fonts/fredoka-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Fredoka";
+  font-style: normal;
+  font-weight: 300 700;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("../assets/fonts/fredoka-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
-  /* Surfaces */
-  --bg: #0f1115;
-  --bg-glow: #1c2130;
-  --bg-elevated: #161922;
-  --panel: #1b1f2a;
-  --panel-soft: #212636;
-  --border: #2a3040;
-  --border-strong: #3a4257;
+  /* The ground: a lawn, in the two greens of its check. */
+  --bg: #7cd957;
+  --bg-glow: #8be366;
 
-  /* Text */
-  --text: #eef1f7;
-  --text-muted: #98a2b6;
-  --text-faint: #6b7488;
+  /* Clay. Panels are cream slabs standing on the lawn, and each step down
+     this list is the same clay pressed a little harder. */
+  --bg-elevated: #fffaee;
+  --panel: #fff6e2;
+  --panel-soft: #fbeac6;
+  --border: #edd6a8;
+  --border-strong: #dcb877;
+  /* Inside a cream panel: the paler clay a field or an option is cut from. */
+  --well: #fffdf7;
 
-  /* Accents */
-  --accent: #e8b44c;
-  --accent-soft: rgba(232, 180, 76, 0.14);
-  --accent-text: #1a1405;
-  --danger: #e5594d;
-  --danger-soft: rgba(229, 89, 77, 0.15);
-  --success: #4fc98a;
-  --info: #6ba7f0;
+  /* Text: cocoa on cream. --ink is what lettering is outlined in when it
+     stands directly on the grass, and the colour of small print there. */
+  --text: #4b2e1a;
+  --text-muted: #7b593c;
+  --text-faint: #a48563;
+  --ink: #3a2314;
+
+  /* Accents. Blue acts, gold marks, red warns. Each has the darker tone its
+     slab shows along the bottom edge. */
+  --accent: #ffb92e;
+  --accent-deep: #d6860a;
+  --accent-soft: rgba(255, 185, 46, 0.24);
+  --accent-text: #4b2e1a;
+  --blue: #33a8f7;
+  --blue-deep: #1c78cf;
+  --blue-soft: #e4f3ff;
+  --danger: #f2574b;
+  --danger-deep: #bd382e;
+  --danger-soft: rgba(242, 87, 75, 0.16);
+  --success: #45b942;
+  --success-deep: #2f8f2f;
+  --info: #33a8f7;
 
   /* Shape */
-  --radius-sm: 8px;
-  --radius: 14px;
-  --radius-lg: 20px;
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-lg: 26px;
 
-  /* Depth */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.55);
+  /* Depth. A slab shows its side along the bottom edge, and the shadow it
+     throws on grass is green rather than grey. */
+  --slab-side: #dcb877;
+  --ground-shadow: rgba(33, 84, 14, 0.3);
+  --gloss: inset 0 2px 0 rgba(255, 255, 255, 0.75);
+  --shadow-sm: 0 3px 0 var(--slab-side);
+  --shadow: var(--gloss), 0 5px 0 var(--slab-side), 0 11px 14px var(--ground-shadow);
+  --shadow-lg: var(--gloss), 0 8px 0 var(--slab-side), 0 26px 44px rgba(20, 58, 6, 0.45);
 
-  --font: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  /* Lettering that stands on the grass: white, outlined in ink, with a drop
+     below it. Drawn as a ring of text-shadows rather than a text stroke,
+     which is centred on the edge of the glyph and eats the letter wherever
+     paint-order is not honoured for HTML text. */
+  --outline:
+    2px 0 0 var(--ink),
+    1.41px 1.41px 0 var(--ink),
+    0 2px 0 var(--ink),
+    -1.41px 1.41px 0 var(--ink),
+    -2px 0 0 var(--ink),
+    -1.41px -1.41px 0 var(--ink),
+    0 -2px 0 var(--ink),
+    1.41px -1.41px 0 var(--ink),
+    0 4px 0 var(--ink),
+    1.5px 3.5px 0 var(--ink),
+    -1.5px 3.5px 0 var(--ink);
+  --outline-lg:
+    3px 0 0 var(--ink),
+    2.77px 1.15px 0 var(--ink),
+    2.12px 2.12px 0 var(--ink),
+    1.15px 2.77px 0 var(--ink),
+    0 3px 0 var(--ink),
+    -1.15px 2.77px 0 var(--ink),
+    -2.12px 2.12px 0 var(--ink),
+    -2.77px 1.15px 0 var(--ink),
+    -3px 0 0 var(--ink),
+    -2.77px -1.15px 0 var(--ink),
+    -2.12px -2.12px 0 var(--ink),
+    -1.15px -2.77px 0 var(--ink),
+    0 -3px 0 var(--ink),
+    1.15px -2.77px 0 var(--ink),
+    2.12px -2.12px 0 var(--ink),
+    2.77px -1.15px 0 var(--ink),
+    0 6px 0 var(--ink),
+    2.5px 5.5px 0 var(--ink),
+    -2.5px 5.5px 0 var(--ink);
+
+  --font: "Fredoka", "Baloo 2", "Nunito", ui-rounded, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 
   /* Minimum comfortable touch target */
   --tap: 44px;
@@ -71,14 +161,14 @@ body {
    `data-bg` — before first paint by the inline script in index.html, and again
    by the app once settings load.
 
-   Each block redefines the SURFACE ladder only, and keeps the lightness steps
-   the default sets: base, glow, elevated, panel, panel-soft, then the two
-   borders. Text and accent tokens are deliberately not listed. They are what
-   carry contrast against every one of these, and a background is no reason to
-   renegotiate that — which is also what keeps adding a background to a block
-   of seven values rather than an audit of the whole stylesheet.
+   Each block redefines the SURFACE ladder only: the ground and its second
+   tone, then elevated, panel, panel-soft and the two borders. Text and accent
+   tokens are deliberately not listed. They are what carry contrast against
+   every one of these, and a background is no reason to renegotiate that —
+   which is also what keeps adding a background to a block of seven values
+   rather than an audit of the whole stylesheet.
 
-   Midnight has a block even though `:root` already says the same thing, and
+   Meadow has a block even though `:root` already says the same thing, and
    the duplication is deliberate. `:root` is the fallback for a page with no
    `data-bg` at all — script blocked, storage unreadable — while this block is
    what the attribute selects, and what a SWATCH needs: a swatch cannot inherit
@@ -87,23 +177,20 @@ body {
    the shape a second one would slot into. The two must be changed together.
    -------------------------------------------------------------------------- */
 
-:root[data-bg="midnight"],
-.bg-swatch__preview[data-bg="midnight"] {
-  --bg: #0f1115;
-  --bg-glow: #1c2130;
-  --bg-elevated: #161922;
-  --panel: #1b1f2a;
-  --panel-soft: #212636;
-  --border: #2a3040;
-  --border-strong: #3a4257;
+:root[data-bg="meadow"],
+.bg-swatch__preview[data-bg="meadow"] {
+  --bg: #7cd957;
+  --bg-glow: #8be366;
+  --bg-elevated: #fffaee;
+  --panel: #fff6e2;
+  --panel-soft: #fbeac6;
+  --border: #edd6a8;
+  --border-strong: #dcb877;
 }
 
 body {
   min-height: 100vh;
   min-height: 100dvh;
-  background:
-    radial-gradient(1100px 600px at 50% -10%, var(--bg-glow) 0%, transparent 60%),
-    var(--bg);
   color: var(--text);
   font-family: var(--font);
   font-size: 16px;
@@ -111,10 +198,50 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
+  font-weight: 500;
+  background-color: var(--bg);
+  background-image: repeating-conic-gradient(var(--bg-glow) 0% 25%, transparent 0% 50%);
+  background-size: 112px 112px;
 }
 
 body.is-modal-open {
   overflow: hidden;
+}
+
+/*
+   What grows at the edges of the lawn.
+
+   A bush in two of the corners, so the ground is somewhere rather than a
+   pattern. All of it is gradients on one fixed layer behind the page:
+   no images to fetch, nothing in the DOM, and nothing a pointer can land on.
+   Each bush is three circles — the body, a paler one for the side the light
+   is on, and a small highlight — which is the same three tones every piece
+   on the board is shaded with.
+
+   Kept to the corners, and kept to things big enough to be read as what they
+   are. Flowers were tried: a dot of white six pixels across cannot be placed
+   by percentage or by offset without landing beside a card on some phone, and
+   a dot beside a card is a rendering fault, not a flower.
+*/
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    /* top-left bush */
+    radial-gradient(circle at 46px 34px, rgba(255, 255, 255, 0.34) 0 9px, transparent 10px),
+    radial-gradient(circle at 62px 46px, #6fd04b 0 44px, transparent 45px),
+    radial-gradient(circle at 18px 78px, #63c640 0 58px, transparent 59px),
+    radial-gradient(circle at 128px 8px, #63c640 0 50px, transparent 51px),
+    radial-gradient(circle at 20px 10px, #54b534 0 104px, transparent 105px),
+    /* bottom-right bush */
+    radial-gradient(circle at calc(100% - 70px) calc(100% - 66px), rgba(255, 255, 255, 0.3) 0 10px, transparent 11px),
+    radial-gradient(circle at calc(100% - 56px) calc(100% - 50px), #6fd04b 0 50px, transparent 51px),
+    radial-gradient(circle at calc(100% - 140px) calc(100% - 4px), #63c640 0 56px, transparent 57px),
+    radial-gradient(circle at calc(100% - 6px) calc(100% - 118px), #63c640 0 52px, transparent 53px),
+    radial-gradient(circle at calc(100% - 16px) calc(100% - 8px), #54b534 0 118px, transparent 119px);
 }
 
 /* ==========================================================================
@@ -138,56 +265,63 @@ body.is-modal-open {
    ========================================================================== */
 
 .btn {
+  /* A slab of clay: a face, a side, and how much of the side is showing.
+     A variant changes the two colours and nothing else; the hover and the
+     press at the end of this file change the depth. */
+  --face: var(--panel);
+  --side: var(--slab-side);
+  --depth: 5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   min-height: var(--tap);
   padding: 0.7rem 1.15rem;
-  border: 1px solid var(--border-strong);
+  border: 0;
   border-radius: var(--radius);
-  background: var(--panel-soft);
+  background: var(--face);
+  box-shadow:
+    var(--gloss),
+    0 var(--depth) 0 var(--side),
+    0 calc(var(--depth) + 5px) 10px var(--ground-shadow);
   color: var(--text);
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+  transition: background 0.15s ease, transform 0.08s ease;
 }
+
+/* One brightening for every variant, rather than a hover colour for each:
+   a blue slab, a red one and a cream one all answer the pointer the same way
+   and none of them has to be told how. */
 
 .btn:hover:not(:disabled) {
-  background: #29304291;
-  border-color: var(--border-strong);
-}
-
-.btn:active:not(:disabled) {
-  transform: translateY(1px);
+  filter: brightness(1.05);
 }
 
 .btn:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btn--primary {
-  background: linear-gradient(180deg, #f0c163, var(--accent));
-  border-color: #f3cd83;
-  color: var(--accent-text);
+  --face: var(--blue);
+  --side: var(--blue-deep);
+  color: #fff;
+  text-shadow: 0 1.5px 0 rgba(14, 70, 130, 0.55);
 }
 
-.btn--primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #f5cd7d, #edbc5b);
-}
+/* "Ghost" is from when the page was dark and this button was an outline on
+   it. An outline cannot be read on grass, so it is a plain cream slab now —
+   the same clay as the base button, named for what it is used for: the
+   answer that is not the main one. */
 
 .btn--ghost {
-  background: transparent;
-  border-color: var(--border);
+  --face: var(--panel);
+  --side: var(--slab-side);
   color: var(--text);
-}
-
-.btn--ghost:hover:not(:disabled) {
-  background: var(--panel-soft);
 }
 
 .btn--block {
@@ -195,16 +329,17 @@ body.is-modal-open {
 }
 
 .btn[data-tone="danger"] {
-  background: linear-gradient(180deg, #ec6d61, var(--danger));
-  border-color: #ef7e73;
+  --face: var(--danger);
+  --side: var(--danger-deep);
   color: #fff;
+  text-shadow: 0 1.5px 0 rgba(120, 20, 14, 0.5);
 }
 
 .btn__meta {
   display: block;
   width: 100%;
   margin-top: 0.15rem;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 0.76rem;
   font-weight: 500;
 }
@@ -215,24 +350,30 @@ body.is-modal-open {
 }
 
 .icon-btn {
+  --face: var(--panel);
+  --side: var(--slab-side);
+  --depth: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: var(--tap);
   height: var(--tap);
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
+  border: 0;
+  border-radius: 14px;
+  background: var(--face);
+  box-shadow:
+    var(--gloss),
+    0 var(--depth) 0 var(--side),
+    0 calc(var(--depth) + 5px) 10px var(--ground-shadow);
+  color: var(--text);
   font-size: 1.25rem;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .icon-btn:hover {
-  background: var(--panel-soft);
-  color: var(--text);
+  filter: brightness(1.05);
 }
 
 /*
@@ -253,7 +394,7 @@ body.is-modal-open {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid var(--blue-deep);
   outline-offset: 2px;
 }
 
@@ -284,20 +425,24 @@ body.is-modal-open {
   width: 96px;
   height: 96px;
   margin-bottom: 1.5rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 28px;
-  background: linear-gradient(160deg, var(--panel-soft), var(--panel));
-  box-shadow: var(--shadow);
-  color: var(--accent);
+  border: 0;
+  border-radius: 30px;
+  background: var(--accent);
+  box-shadow: var(--gloss), 0 7px 0 var(--accent-deep), 0 16px 20px var(--ground-shadow);
+  color: #fff;
   font-size: 3.2rem;
   line-height: 1;
+  text-shadow: var(--outline);
 }
 
 .menu__title {
   margin: 0;
   font-size: clamp(2rem, 9vw, 2.75rem);
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: #fff;
+  text-shadow: var(--outline-lg);
 }
 
 .menu__actions {
@@ -328,14 +473,23 @@ body.is-modal-open {
 
 .setup__title {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.6rem;
   font-weight: 700;
+  color: #fff;
+  text-shadow: var(--outline);
 }
+
+/* The form is a slab of its own. Its labels and hints are small print, and
+   small print cannot stand on grass the way a heading can. */
 
 .setup__form {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .field {
@@ -351,7 +505,7 @@ body.is-modal-open {
   color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
@@ -367,13 +521,15 @@ body.is-modal-open {
   width: 100%;
   min-height: var(--tap);
   padding: 0.7rem 0.9rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--well);
   color: var(--text);
   font-family: inherit;
   font-size: 1rem;
   transition: border-color 0.15s ease;
+  box-shadow: inset 0 3px 0 rgba(150, 105, 40, 0.1);
+  font-weight: 500;
 }
 
 .field__input::placeholder {
@@ -381,7 +537,7 @@ body.is-modal-open {
 }
 
 .field__input:focus {
-  border-color: var(--accent);
+  border-color: var(--blue);
   outline: none;
 }
 
@@ -422,9 +578,9 @@ body.is-modal-open {
   height: 100%;
   padding: 0;
   overflow: hidden;
-  border: 1px dashed var(--border-strong);
+  border: 2px dashed var(--border-strong);
   border-radius: 50%;
-  background: var(--panel);
+  background: var(--well);
   color: var(--text-faint);
   font-family:
     "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2",
@@ -437,12 +593,12 @@ body.is-modal-open {
 }
 
 .avatar-picker__btn:hover {
-  border-color: var(--accent);
+  border-color: var(--blue);
   color: var(--text-muted);
 }
 
 .avatar-picker__btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid var(--blue-deep);
   outline-offset: 2px;
 }
 
@@ -468,8 +624,8 @@ body.is-modal-open {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--blue);
+  color: #fff;
   font-size: 0.8rem;
   font-weight: 700;
   line-height: 1;
@@ -495,9 +651,9 @@ body.is-modal-open {
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 1px solid var(--border-strong);
+  border: 2px solid var(--border-strong);
   border-radius: 50%;
-  background: var(--panel-soft);
+  background: var(--panel);
   color: var(--text-muted);
   font-size: 0.9rem;
   line-height: 1;
@@ -516,7 +672,7 @@ body.is-modal-open {
 }
 
 .avatar-picker__clear:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid var(--blue-deep);
   outline-offset: 2px;
 }
 
@@ -549,17 +705,18 @@ body.is-modal-open {
   gap: 0.85rem;
   min-height: var(--tap);
   padding: 0.85rem 1rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--well);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 3px 0 var(--border);
 }
 
 .mode input {
   width: 18px;
   height: 18px;
-  accent-color: var(--accent);
+  accent-color: var(--blue);
   flex: none;
 }
 
@@ -573,7 +730,7 @@ body.is-modal-open {
 }
 
 .mode__desc {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 0.82rem;
 }
 
@@ -585,8 +742,9 @@ body.is-modal-open {
   new mode is highlighted correctly without anybody remembering anything.
 */
 .mode:not(.mode--disabled):has(input:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  box-shadow: 0 3px 0 var(--blue);
 }
 
 .mode--disabled {
@@ -642,7 +800,7 @@ body.is-modal-open {
 .field__input--code {
   flex: 1;
   min-width: 0;
-  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-family: inherit;
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: 0.34em;
@@ -673,8 +831,8 @@ body.is-modal-open {
   width: 46px;
   height: 46px;
   margin-bottom: 1.5rem;
-  border: 3px solid var(--border-strong);
-  border-top-color: var(--accent);
+  border: 5px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
 }
@@ -685,14 +843,17 @@ body.is-modal-open {
 
 .waiting__title {
   margin: 0 0 0.4rem;
-  font-size: 1.4rem;
+  font-size: 1.6rem;
   font-weight: 750;
+  color: #fff;
+  text-shadow: var(--outline);
 }
 
 .waiting__hint {
   margin: 0 0 1.5rem;
-  color: var(--text-muted);
+  color: var(--ink);
   font-size: 0.92rem;
+  font-weight: 600;
 }
 
 .room-code {
@@ -714,13 +875,14 @@ body.is-modal-open {
   /* Padding gives way before the code does: at a large text size the fixed
      1.1rem was costing 40px of the very space the code needed. */
   padding: 0.6rem clamp(0.45rem, 3vw, 1.1rem);
-  border: 1px solid var(--accent);
+  border: 0;
   border-radius: var(--radius);
-  background: var(--accent-soft);
+  background: var(--accent);
+  box-shadow: var(--gloss), 0 5px 0 var(--accent-deep), 0 11px 14px var(--ground-shadow);
 }
 
 .room-code__value {
-  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-family: inherit;
   /*
     Shrinks with the viewport, so a narrow phone gets a code that fits rather
     than one that runs off the edge. The rem floor keeps it legible and keeps
@@ -735,7 +897,7 @@ body.is-modal-open {
   /* Matches the tracking, because the trailing space on the last character
      would otherwise push the code off-centre. */
   text-indent: clamp(0.12em, 2.5vw, 0.3em);
-  color: var(--accent);
+  color: var(--text);
 
   /*
     Wrap rather than vanish.
@@ -759,13 +921,21 @@ body.is-modal-open {
 
 .waiting__note {
   margin: 0 0 2rem;
-  color: var(--text-faint);
+  color: var(--ink);
   font-size: 0.86rem;
   line-height: 1.6;
 }
 
 .waiting__note strong {
-  color: var(--text-muted);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* A slab shows its side below it, so two stacked with no gap read as one
+   thick button. The form and the menu space theirs with `gap`; this column
+   is centred text with two buttons at the end of it. */
+.waiting .btn + .btn {
+  margin-top: 0.85rem;
 }
 
 /* --- In-game room bar --- */
@@ -775,22 +945,24 @@ body.is-modal-open {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 0.45rem 0.9rem;
-  border-bottom: 1px solid var(--border);
+  margin: 0.35rem auto 0;
+  padding: 0.35rem 0.45rem 0.35rem 1rem;
   font-size: 0.8rem;
+  width: min(560px, calc(100% - 1.5rem));
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: var(--gloss), 0 4px 0 var(--slab-side), 0 9px 12px var(--ground-shadow);
 }
 
 .room-bar__code {
-  color: var(--text-faint);
+  color: var(--text-muted);
   letter-spacing: 0.04em;
 }
 
 .room-bar__code strong {
-  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-family: inherit;
   letter-spacing: 0.16em;
-  color: var(--text-muted);
+  color: var(--text);
 }
 
 .room-bar__status {
@@ -811,7 +983,7 @@ body.is-modal-open {
 
 .room-bar__status[data-state="live"] .room-bar__dot {
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(79, 201, 138, 0.16);
+  box-shadow: 0 0 0 3px rgba(69, 185, 66, 0.25);
 }
 
 .room-bar__status[data-state="connecting"] .room-bar__dot,
@@ -827,32 +999,43 @@ body.is-modal-open {
 
 .room-bar__status[data-state="away"],
 .room-bar__status[data-state="offline"] {
-  color: #ff9d94;
+  color: var(--danger-deep);
 }
 
 /* ==========================================================================
    Game screen shell
    ========================================================================== */
 
+/* The header fades out rather than ending. A bar with an edge reads as a
+   strip laid across the lawn; this one only has to keep its two buttons and
+   the title legible over whatever scrolls beneath them. */
+
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  background: rgba(15, 17, 21, 0.85);
-  backdrop-filter: blur(8px);
+  padding: 0.5rem 0.7rem 1rem;
+  background: linear-gradient(180deg, rgba(108, 204, 72, 0.96) 50%, rgba(108, 204, 72, 0));
   position: sticky;
   top: 0;
   z-index: 20;
 }
 
 .app-header__title {
-  font-size: 0.85rem;
+  font-size: 1.05rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
-  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  color: #fff;
+  text-shadow: var(--outline);
+}
+
+/* The two ends of the header are the blue tiles: the same chunky square the
+   controls under the board are, so "things you press" are one colour. */
+.app-header .icon-btn {
+  --face: var(--blue);
+  --side: var(--blue-deep);
+  color: #fff;
 }
 
 .game {
@@ -881,15 +1064,18 @@ body.is-modal-open {
   align-items: center;
   gap: 0.75rem;
   padding: 0.6rem 0.85rem;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius);
   background: var(--panel);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: box-shadow 0.2s ease, background 0.2s ease;
+  box-shadow: var(--shadow);
 }
 
 .player-card.is-active {
-  border-color: var(--accent);
-  background: linear-gradient(90deg, var(--accent-soft), var(--panel) 60%);
+  background: linear-gradient(90deg, #ffe6a3, var(--panel) 62%);
+  /* The ring, and the side the ring stands on: the card to move is a gold
+     slab, not a gold line drawn round a cream one. */
+  box-shadow: var(--gloss), 0 0 0 3px var(--accent), 0 5px 0 3px var(--accent-deep), 0 13px 16px var(--ground-shadow);
 }
 
 .player-card__avatar {
@@ -903,20 +1089,20 @@ body.is-modal-open {
   height: 38px;
   flex: none;
   overflow: hidden;
-  border: 1px solid var(--border-strong);
+  border: 2px solid var(--border-strong);
   border-radius: 50%;
   font-size: 1.3rem;
   line-height: 1;
 }
 
 .player-card__avatar[data-color="w"] {
-  background: #f2f2ee;
-  color: #22252d;
+  background: #fbf6ee;
+  color: #4b2e1a;
 }
 
 .player-card__avatar[data-color="b"] {
-  background: #23262f;
-  color: #e9ecf2;
+  background: #65646f;
+  color: #fff;
 }
 
 /*
@@ -936,11 +1122,11 @@ body.is-modal-open {
 }
 
 .player-card__avatar[data-color="w"]:has(.player-card__photo:not([hidden])) {
-  border-color: #f2f2ee;
+  border-color: #fff;
 }
 
 .player-card__avatar[data-color="b"]:has(.player-card__photo:not([hidden])) {
-  border-color: #565d72;
+  border-color: #65646f;
 }
 
 .player-card__info {
@@ -951,7 +1137,7 @@ body.is-modal-open {
 }
 
 .player-card__name {
-  font-weight: 650;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -982,10 +1168,10 @@ body.is-modal-open {
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: 50%;
   background: none;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 0.72rem;
   line-height: 1;
   cursor: pointer;
@@ -994,9 +1180,9 @@ body.is-modal-open {
 
 .player-card__rename:hover,
 .player-card__rename:focus-visible {
-  color: var(--text);
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--blue-deep);
+  border-color: var(--blue);
+  background: var(--blue-soft);
 }
 
 /*
@@ -1008,12 +1194,12 @@ body.is-modal-open {
   width: 100%;
   min-width: 0;
   padding: 0.15rem 0.4rem;
-  border: 1px solid var(--accent);
+  border: 2px solid var(--blue);
   border-radius: calc(var(--radius) * 0.5);
-  background: var(--panel);
+  background: var(--well);
   color: var(--text);
   font: inherit;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 /*
@@ -1030,7 +1216,7 @@ body.is-modal-open {
 
 .player-card__color {
   flex: none;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 0.78rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1051,14 +1237,14 @@ body.is-modal-open {
    than the full-bleed change had just won back.
 
    It does not have to cost anything, because the canvas is already not full of
-   board. The camera reserves headroom for a king standing on the far rank, so
-   at the low angle the board is drawn across about 84% of the canvas and the
-   rest is empty sky either side: 32px of it on a 390px phone, against a 26px
-   column. The tray goes there, for free.
+   tiles. The camera keeps the board's rim in frame, so at the low angle the
+   tiles are drawn across 93% of the canvas and the rest is rim and a sliver
+   of lawn either side: 14.8px of it on a 412px phone. The tray goes there,
+   for free.
 
-   That margin shrinks as the camera rises — 23px at Large, 12px at Max — so
-   the board-area takes real padding at Max, where there is no longer room to
-   borrow. See [data-zoom] below.
+   That margin shrinks as the camera rises — to 8px at Large — so the
+   board-area takes a little real padding there to make up the difference.
+   See [data-zoom] in board.css.
 */
 .capture-tray {
   position: absolute;
@@ -1066,15 +1252,16 @@ body.is-modal-open {
   flex-direction: column;
   align-items: center;
   /*
-    20px, which is the margin the camera leaves at the MIDDLE zoom — the
-    tightest level the tray still has to fit inside. Sizing to the widest
-    level instead put 3px of captured pieces on top of the a-file.
-
-    The default level has half as much again to spare, and a piece portrait is
-    a picture rather than a letterform: it needs the pixels far more than a
-    glyph does. So that level gets the wider tray — see board.css.
+    A thirtieth of the board's width: 14px on a 412px phone, which is the
+    margin the camera leaves beside the near rank at the default zoom and
+    is also just what the broadest piece, the knight, needs. A fraction
+    rather than a number of pixels, because that margin is a fraction of
+    the canvas — a fixed 20px was right on one phone and three pixels onto
+    the h-file on a narrower one. Capped, so a wide screen does not blow
+    the portraits up with it. Where the camera leaves less the board-area
+    is padded to make it up — see board.css.
   */
-  width: 20px;
+  width: min(3.4%, 14px);
   padding: 6px 0;
   border-radius: 999px;
   /*
@@ -1083,9 +1270,15 @@ body.is-modal-open {
     loose. It hugs the pile rather than running the board's full height —
     an empty full-height panel is just a stripe.
   */
-  background: rgba(255, 255, 255, 0.06);
+  /* A groove in the lawn rather than a panel on it: mid-dark, so a white
+     piece and a charcoal one both stand out of it. */
+  background: rgba(33, 84, 14, 0.28);
   /* Decoration over a board that is tapped: never intercept a move. */
   pointer-events: none;
+  /* A portrait is drawn wider than the column and only its empty margin
+     overhangs — but an overhang off the right-hand tray is past the edge of
+     the page, and the page would scroll sideways to show it. */
+  overflow: hidden;
 }
 
 /* Nothing taken yet means nothing to show, not an empty pill. */
@@ -1131,15 +1324,29 @@ body.is-modal-open {
 
    Square, because the portrait is framed to the tallest piece in the set — so
    a pawn genuinely occupies less of its tile than a king does, exactly as it
-   does on the board. The overlap is a percentage because these are images with
-   no font size to hang an em off; percentage margins resolve against the
-   column's width, which is the same number as the tile's height here.
+   does on the board.
+
+   And more than twice as wide as the column it is in. The pieces are tall,
+   so a square portrait of one is mostly empty either side: the broadest, the
+   knight, fills under half its width. Drawn to the column's own width a king
+   is a mark 6px across. Drawn at 30px and centred it is 27px high and 12px
+   across, and the knight's 14px is still inside a 14px column — which is
+   where the column's width comes from. The part that overhangs is the empty
+   part.
+
+   The width and the margins are percentages of the column, so the portrait
+   scales with it on a narrower phone. The overlap tucks each piece behind
+   the last by about the empty space above and below it, so a full pile of
+   fifteen is 293px on a 412px phone and 257px on a 360px one, and fits
+   beside the board at both zooms.
 */
 .capture--piece {
   display: block;
-  width: 100%;
+  flex: none;
+  width: 214%;
+  max-width: none;
   height: auto;
-  margin-bottom: -30%;
+  margin: 0 -57% -86%;
 }
 
 .capture--piece:last-child {
@@ -1157,17 +1364,17 @@ body.is-modal-open {
   glance which pile you are looking at.
 */
 .capture[data-color="w"] {
-  color: #f4f4f0;
+  color: #fff;
 }
 
 .capture[data-color="b"] {
-  color: #94a1bd;
+  color: #2f2e35;
 }
 
 /* Only ever shown on the side that is actually ahead. */
 .player-card__edge {
   flex: none;
-  color: var(--accent);
+  color: var(--accent-deep);
   font-size: 0.78rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1177,12 +1384,13 @@ body.is-modal-open {
   flex: none;
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  box-shadow: 0 2px 0 var(--accent-deep);
 }
 
 /* ==========================================================================
@@ -1201,14 +1409,16 @@ body.is-modal-open {
 }
 
 .status__text {
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  color: #fff;
+  text-shadow: var(--outline);
 }
 
 .status.is-over .status__text {
-  color: var(--accent);
+  color: #ffd65c;
 }
 
 .status__badge {
@@ -1221,18 +1431,18 @@ body.is-modal-open {
 }
 
 .status__badge[data-tone="check"] {
-  background: var(--danger-soft);
-  color: #ff8b81;
+  background: var(--danger);
+  color: #fff;
   animation: pulse 1.4s ease-in-out infinite;
 }
 
 .status__badge[data-tone="win"] {
-  background: rgba(79, 201, 138, 0.14);
-  color: var(--success);
+  background: var(--success);
+  color: #fff;
 }
 
 .status__badge[data-tone="draw"] {
-  background: var(--panel-soft);
+  background: var(--panel);
   color: var(--text-muted);
 }
 
@@ -1263,11 +1473,13 @@ body.is-modal-open {
   flex-direction: column;
   gap: 0.15rem;
   padding: 0.5rem 0.3rem;
-  border-color: var(--border);
-  background: var(--panel);
   font-size: 0.74rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  --face: var(--blue);
+  --side: var(--blue-deep);
+  color: #fff;
+  text-shadow: 0 1.5px 0 rgba(14, 70, 130, 0.55);
 }
 
 .btn--control span {
@@ -1288,19 +1500,20 @@ body.is-modal-open {
 .btn--locked {
   position: relative;
   cursor: not-allowed;
-  border-color: var(--border);
-  background: var(--panel);
-  color: var(--text-faint);
-  opacity: 0.55;
+  color: #8ba283;
+  opacity: 1;
+  /* Clay left out to dry: the same slab with the colour gone out of it. */
+  --face: #dfead6;
+  --side: #b3c6a7;
+  text-shadow: none;
 }
 
 .btn--locked:hover,
 .btn--locked:active,
 .btn--locked:focus {
   /* A locked control must not move or light up under the finger. */
-  border-color: var(--border);
-  background: var(--panel);
   transform: none;
+  filter: none;
 }
 
 /*
@@ -1389,7 +1602,7 @@ body.is-modal-open {
 }
 
 .history__row:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(150, 105, 40, 0.07);
 }
 
 .history__num {
@@ -1441,7 +1654,7 @@ body.is-modal-open {
 .modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(6, 8, 12, 0.72);
+  background: rgba(22, 60, 10, 0.62);
   backdrop-filter: blur(3px);
   opacity: 0;
   transition: opacity 0.2s ease;
@@ -1458,7 +1671,7 @@ body.is-modal-open {
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
   padding: 1.5rem;
-  border: 1px solid var(--border-strong);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
@@ -1479,8 +1692,8 @@ body.is-modal-open {
 
 .modal__title {
   margin: 0 0 0.5rem;
-  font-size: 1.25rem;
-  font-weight: 750;
+  font-size: 1.4rem;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 
@@ -1519,20 +1732,23 @@ body.is-modal-open {
   width: 68px;
   height: 68px;
   margin: 0 auto 0.9rem;
-  border: 1px solid var(--border-strong);
+  border: 0;
   border-radius: 50%;
-  background: var(--panel);
-  color: var(--accent);
+  background: var(--accent);
+  color: #fff;
   font-size: 2.2rem;
   line-height: 1;
+  box-shadow: var(--gloss), 0 5px 0 var(--accent-deep);
+  text-shadow: var(--outline);
 }
 
 .gameover__result {
   margin: 0 0 0.35rem;
   color: var(--accent);
-  font-size: 1.5rem;
+  font-size: 1.7rem;
   font-weight: 800;
   letter-spacing: 0.04em;
+  text-shadow: var(--outline);
 }
 
 /* Promotion picker */
@@ -1550,18 +1766,23 @@ body.is-modal-open {
   gap: 0.25rem;
   min-height: 76px;
   padding: 0.6rem 0.25rem;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--face);
   color: var(--text);
   font-family: inherit;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
+  --face: var(--well);
+  --side: var(--slab-side);
+  --depth: 4px;
+  box-shadow: var(--gloss),
+    0 var(--depth) 0 var(--side),
+    0 calc(var(--depth) + 5px) 10px var(--ground-shadow);
 }
 
 .promotion__choice:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  --face: var(--blue-soft);
 }
 
 .promotion__choice:active {
@@ -1579,18 +1800,17 @@ body.is-modal-open {
 
 .promotion__glyph[data-color="w"] {
   color: #f7f7f4;
-  text-shadow: 0 0 1px #10121a, 0 1px 0 #10121a, 1px 0 0 #10121a,
-               0 -1px 0 #10121a, -1px 0 0 #10121a;
+  text-shadow: 0 0 1px var(--ink), 0 1px 0 var(--ink), 1px 0 0 var(--ink),
+               0 -1px 0 var(--ink), -1px 0 0 var(--ink);
 }
 
 .promotion__glyph[data-color="b"] {
-  color: #1d1f27;
-  text-shadow: 0 0 1px #c9cedb, 0 1px 0 #c9cedb, 1px 0 0 #c9cedb,
-               0 -1px 0 #c9cedb, -1px 0 0 #c9cedb;
+  color: #4d4c54;
+  text-shadow: none;
 }
 
 .promotion__name {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 0.7rem;
   letter-spacing: 0.04em;
 }
@@ -1626,13 +1846,13 @@ body.is-modal-open {
 /* Accessible toggle built from a native checkbox */
 .switch {
   position: relative;
-  width: 46px;
-  height: 26px;
+  width: 50px;
+  height: 28px;
   flex: none;
   margin: 0;
   border-radius: 999px;
   background: var(--panel-soft);
-  border: 1px solid var(--border-strong);
+  border: 2px solid var(--border-strong);
   appearance: none;
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease;
@@ -1643,21 +1863,22 @@ body.is-modal-open {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: var(--text-faint);
+  background: #fff;
   transition: transform 0.18s ease, background 0.18s ease;
+  box-shadow: 0 2px 0 rgba(120, 80, 30, 0.28);
 }
 
 .switch:checked {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+  background: var(--success);
+  border-color: var(--success-deep);
 }
 
 .switch:checked::after {
-  transform: translateX(20px);
-  background: var(--accent);
+  transform: translateX(22px);
+  background: #fff;
 }
 
 /* --------------------------------------------------------------------------
@@ -1677,9 +1898,9 @@ body.is-modal-open {
   gap: 0.3rem;
   min-height: var(--tap);
   padding: 0.6rem 0.4rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--well);
   color: var(--text-muted);
   font-family: inherit;
   cursor: pointer;
@@ -1687,7 +1908,7 @@ body.is-modal-open {
 }
 
 .style-option.is-active {
-  border-color: var(--accent);
+  border-color: var(--blue);
   color: var(--text);
 }
 
@@ -1696,16 +1917,15 @@ body.is-modal-open {
   width: 100%;
   height: 34px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 0;
   overflow: hidden;
 }
 
 /* Flat checkerboard for Classic. */
 .style-option__preview[data-style="classic"] {
-  background:
-    linear-gradient(135deg, #ecd8b6 0 25%, #b07d4f 25% 50%, #ecd8b6 50% 75%, #b07d4f 75% 100%)
+  background: linear-gradient(135deg, #f9e4b7 0 25%, #b97a4f 25% 50%, #f9e4b7 50% 75%, #b97a4f 75% 100%)
       0 0 / 14px 14px,
-    #1b1f2a;
+    var(--bg);
 }
 
 
@@ -1733,26 +1953,27 @@ body.is-modal-open {
   gap: 0.4rem;
   min-height: var(--tap);
   padding: 0.5rem 0.3rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--well);
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .theme-swatch.is-active {
-  border-color: var(--accent);
+  border-color: var(--blue);
   color: var(--text);
+  background: var(--blue-soft);
 }
 
 .theme-swatch__preview {
   width: 100%;
   height: 26px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -1776,9 +1997,9 @@ body.is-modal-open {
   gap: 0.35rem;
   min-height: var(--tap);
   padding: 0.5rem 0.4rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--well);
   color: var(--text-muted);
   font-family: inherit;
   cursor: pointer;
@@ -1786,7 +2007,7 @@ body.is-modal-open {
 }
 
 .bg-swatch.is-active {
-  border-color: var(--accent);
+  border-color: var(--blue);
   color: var(--text);
 }
 
@@ -1794,13 +2015,14 @@ body.is-modal-open {
   The swatch is the game screen in miniature — ground, a player card, the gold
   pip — rather than a paint chip.
 
-  The paint chip was the obvious thing and it was wrong. Every one of these
-  grounds is within a few points of black, so a 30px rectangle of pure ground
-  is four black boxes: honest about the colour, useless at telling anyone what
-  they are choosing. What separates these backgrounds on a real screen is never
-  the ground alone, it is the ground SEEN AGAINST the cards and the accent
-  sitting on it — so the swatch shows that instead, and the hue arrives as
-  contrast rather than as a wash nobody can see.
+  The paint chip was the obvious thing and it was wrong. When there were four
+  of these they were all within a few points of black, and a 30px rectangle of
+  pure ground was four black boxes: honest about the colour, useless at
+  telling anyone what they were choosing. What separates one background from
+  another on a real screen is never the ground alone, it is the ground SEEN
+  AGAINST the cards and the accent sitting on it — so the swatch shows that
+  instead. There is one background now and no picker is drawn, but this is
+  what a second one would be shown as.
 
   The gradient is in percentages rather than the body's pixel radii, which is
   what lets one rule serve a 44px preview and a phone screen alike.
@@ -1810,11 +2032,9 @@ body.is-modal-open {
   width: 100%;
   height: 44px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 0;
   overflow: hidden;
-  background:
-    radial-gradient(120% 150% at 50% -20%, var(--bg-glow) 0%, transparent 70%),
-    var(--bg);
+  background: repeating-conic-gradient(var(--bg-glow) 0% 25%, var(--bg) 0% 50%) 0 0 / 22px 22px;
 }
 
 /* The player card: the surface that carries this background's hue at a size
@@ -1826,9 +2046,9 @@ body.is-modal-open {
   right: 12%;
   bottom: 20%;
   height: 38%;
-  border: 1px solid var(--border-strong);
-  border-radius: 3px;
-  background: var(--panel-soft);
+  border: 0;
+  border-radius: 4px;
+  background: var(--panel);
 }
 
 /* The "to move" pip, so the swatch also says what does NOT change: the accent
@@ -1888,13 +2108,13 @@ body.is-modal-open {
      side of the screen. */
   overflow-wrap: anywhere;
   padding: 0.6rem 1rem;
-  border: 1px solid var(--border-strong);
+  border: 0;
   border-radius: 999px;
-  background: rgba(28, 32, 43, 0.96);
-  box-shadow: var(--shadow);
-  color: var(--text);
-  font-size: 0.86rem;
-  font-weight: 550;
+  background: var(--ink);
+  box-shadow: 0 4px 0 #1f1109, 0 10px 14px var(--ground-shadow);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 600;
   text-align: center;
   opacity: 0;
   transform: translateY(10px);
@@ -1907,13 +2127,15 @@ body.is-modal-open {
 }
 
 .toast[data-tone="error"] {
-  border-color: var(--danger);
-  color: #ffb0a8;
+  color: #fff;
+  background: var(--danger);
+  box-shadow: 0 4px 0 var(--danger-deep), 0 10px 14px var(--ground-shadow);
 }
 
 .toast[data-tone="warn"] {
-  border-color: #7a6633;
-  color: #f0cd85;
+  color: var(--accent-text);
+  background: var(--accent);
+  box-shadow: 0 4px 0 var(--accent-deep), 0 10px 14px var(--ground-shadow);
 }
 
 /* ==========================================================================
@@ -1921,9 +2143,15 @@ body.is-modal-open {
 
    How every control answers a pointer, in one place rather than each
    component inventing its own. Three things happen together: the control
-   lifts, a shadow opens under it, and on the two solid buttons a sheen
-   crosses the face — the button's own gradient seen through a moving
-   highlight, rather than another colour change.
+   lifts, more of its side shows under it, and on the two solid buttons a
+   sheen crosses the face.
+
+   Lifting and pressing are the same quantity going two ways. A slab's
+   shadow is drawn from `--depth`, how much of its side is showing, so a
+   hover raises the face and deepens the side by the same two pixels and a
+   press drops the face onto its own base. The foot of the button never
+   moves, which is what makes it read as one solid thing being pushed rather
+   than a picture of a button sliding about.
 
    LAST in the file on purpose. These selectors are no more specific than the
    component rules they extend — `.theme-swatch:hover` against
@@ -1939,13 +2167,14 @@ body.is-modal-open {
 .style-option,
 .theme-swatch,
 .bg-swatch {
-  transition:
-    background 0.18s ease,
+  transition: background 0.18s ease,
     border-color 0.18s ease,
     color 0.18s ease,
-    box-shadow 0.24s ease,
+    filter 0.18s ease,
+    box-shadow 0.2s cubic-bezier(0.34, 1.26, 0.64, 1),
     /* A little overshoot on the way up. Not much: a control that springs past
-       its own resting place reads as loose rather than responsive. */
+       its own resting place reads as loose rather than responsive. The shadow
+       takes the same curve, or the side would arrive after the face did. */
     transform 0.2s cubic-bezier(0.34, 1.26, 0.64, 1);
 }
 
@@ -1976,27 +2205,10 @@ body.is-modal-open {
   .theme-swatch:hover,
   .bg-swatch:hover {
     transform: translateY(-2px);
-    box-shadow: var(--shadow);
+    --depth: 7px;
   }
 
-  /*
-     The accent buttons glow in their own colour. A gold button casting a grey
-     shadow looks stuck to the page rather than lifted off it.
-
-     `.btn` is repeated only to win: the generic rule above carries two :not()
-     clauses and so outranks a plain `.btn--primary:hover`, which left the gold
-     buttons wearing the grey shadow. Matching its weight and coming later is
-     what settles it.
-  */
-  .btn.btn--primary:hover:not(:disabled) {
-    box-shadow: 0 10px 24px rgba(232, 180, 76, 0.3);
-  }
-
-  .btn.btn[data-tone="danger"]:hover:not(:disabled) {
-    box-shadow: 0 10px 24px rgba(229, 89, 77, 0.32);
-  }
-
-  /* A picker that is the chosen one wears a gold outline. Hovering it must not
+  /* A picker that is the chosen one wears a blue outline. Hovering it must not
      take away the mark that says so, hence the :not. */
   .style-option:hover:not(.is-active),
   .theme-swatch:hover:not(.is-active),
@@ -2051,8 +2263,8 @@ body.is-modal-open {
 .style-option:active,
 .theme-swatch:active,
 .bg-swatch:active {
-  transform: translateY(1px);
-  box-shadow: none;
+  transform: translateY(3px);
+  --depth: 2px;
   transition-duration: 0.07s;
 }
 
@@ -2090,12 +2302,13 @@ body.is-modal-open {
   height: 20px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--danger);
+  color: #fff;
   font-size: 0.7rem;
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--panel);
 }
 
 /* The badge is positioned against the button, so the button has to be the
@@ -2117,21 +2330,21 @@ body.is-modal-open {
      the same icon needs. */
   padding: 0;
   flex: none;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 50%;
-  background: var(--panel);
+  background: var(--blue);
   /* Inherited by the icon through `fill: currentColor`, so the bubble
      darkens on hover with the border and the two stay in step. There is no
      font-size here any more: the button held an emoji once and now holds a
      drawn shape with its own dimensions, and the badge sets its own. */
-  color: var(--text-muted);
+  color: #fff;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+  box-shadow: var(--gloss), 0 3px 0 var(--blue-deep);
 }
 
 .room-bar__chat:hover {
-  background: var(--panel-soft);
-  border-color: var(--border-strong);
+  background: #4bb4fb;
 }
 
 .room-bar__chat:active {
@@ -2161,10 +2374,10 @@ body.is-modal-open {
   min-width: 2.3rem;
   height: 2.3rem;
   padding: 0 0.45rem;
-  border: 1px solid var(--border-strong);
+  border: 0;
   border-radius: 999px;
-  background: var(--panel-soft);
-  box-shadow: var(--shadow);
+  background: #fff;
+  box-shadow: 0 3px 0 var(--slab-side), 0 8px 12px var(--ground-shadow);
   font-size: 1.3rem;
   line-height: 1;
   /* Decoration on top of a card that is not interactive anyway — but the
@@ -2269,15 +2482,15 @@ body.is-modal-open {
   align-self: flex-start;
   max-width: 84%;
   padding: 0.4rem 0.6rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel);
+  background: var(--well);
 }
 
 .chat__row[data-who="me"] {
   align-self: flex-end;
-  border-color: rgba(232, 180, 76, 0.3);
-  background: var(--accent-soft);
+  border-color: #a9d8fb;
+  background: var(--blue-soft);
 }
 
 .chat__who {
@@ -2285,7 +2498,7 @@ body.is-modal-open {
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--text-muted);
   /* One line, like every other place a name is drawn. This is the smallest
      type in the app and it is in capitals with letters held apart, so a
      long name sets four lines of shouting above a message reading "hi" and
@@ -2323,7 +2536,7 @@ body.is-modal-open {
 }
 
 .friends__status[data-tone="error"] {
-  color: var(--danger);
+  color: var(--danger-deep);
 }
 
 /* ------------------------------------------------------------- emote row -- */
@@ -2341,9 +2554,9 @@ body.is-modal-open {
   place-items: center;
   min-height: var(--tap);
   padding: 0.3rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel);
+  background: var(--well);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
 }
@@ -2380,9 +2593,9 @@ body.is-modal-open {
   align-items: flex-start;
   gap: 0.75rem;
   padding: 0.85rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--well);
 }
 
 /*
@@ -2467,9 +2680,9 @@ body.is-modal-open {
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 0.6rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel);
+  background: var(--well);
 }
 
 .friend__avatar {
@@ -2483,10 +2696,10 @@ body.is-modal-open {
   height: 36px;
   flex: none;
   overflow: hidden;
-  border: 1px solid var(--border-strong);
+  border: 2px solid var(--border-strong);
   border-radius: 50%;
-  background: #23262f;
-  color: #e9ecf2;
+  background: #65646f;
+  color: #fff;
   font-size: 1.2rem;
   line-height: 1;
 }
@@ -2551,7 +2764,7 @@ body.is-modal-open {
 }
 
 .friend__status[data-state="playing"] {
-  color: var(--accent);
+  color: var(--accent-deep);
 }
 
 .friend__status[data-state="playing"]::before {
@@ -2603,7 +2816,7 @@ body.is-modal-open {
 }
 
 .friend--invite .friend__note {
-  color: var(--accent);
+  color: var(--accent-deep);
 }
 
 /* Accept and Decline sit in a row that also holds a name and a face, so they

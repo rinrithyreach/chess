@@ -122,7 +122,6 @@ async function boot() {
     applyBoardStyle(snapshot.settings.uiStyle);
 
     board.setOrientation(snapshot.orientation);
-    board.setShowCoordinates(snapshot.settings.showCoordinates);
     board.setAnimationsEnabled(snapshot.settings.animations);
     board.setZoom(snapshot.settings.boardZoom);
     board.render(snapshot, { animateMove: pendingAnimation });
@@ -571,7 +570,6 @@ async function boot() {
   function repaint() {
     const snapshot = controller.getSnapshot();
     board.setOrientation(snapshot.orientation);
-    board.setShowCoordinates(snapshot.settings.showCoordinates);
     board.setAnimationsEnabled(snapshot.settings.animations);
     board.setZoom(snapshot.settings.boardZoom);
     board.render(snapshot);

@@ -381,8 +381,8 @@ export class LocalSession {
   }
 
   #syncHeaders() {
-    this.#engine.setHeader('Event', 'Chess zin two bc zin — Local Game');
-    this.#engine.setHeader('Site', 'Chess zin two bc zin');
+    this.#engine.setHeader('Event', 'Chess — Local Game');
+    this.#engine.setHeader('Site', 'Chess');
     this.#engine.setHeader('Date', new Date().toISOString().slice(0, 10).replace(/-/g, '.'));
     this.#engine.setHeader('White', this.#players[WHITE].name);
     this.#engine.setHeader('Black', this.#players[BLACK].name);

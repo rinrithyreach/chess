@@ -3,10 +3,10 @@
  * A WebGL chessboard, drop-in interchangeable with the DOM one in board.js.
  *
  * It implements exactly the same public contract — constructor(root),
- * onSquareActivate, setOrientation, setShowCoordinates, setAnimationsEnabled,
- * render — plus dispose(), because unlike a DOM board this one owns a GPU
- * context that has to be handed back when the player switches skins. app.js
- * swaps between the two knowing nothing about either's internals.
+ * onSquareActivate, setOrientation, setAnimationsEnabled, render — plus
+ * dispose(), because unlike a DOM board this one owns a GPU context that has
+ * to be handed back when the player switches skins. app.js swaps between the
+ * two knowing nothing about either's internals.
  *
  * Why WebGL and not CSS 3D: an earlier CSS skin (since removed) put the board
  * in a `preserve-3d` transform, and Chromium's compositor then hit-tested
@@ -16,18 +16,19 @@
  * Here, picking is done by raycasting against the real geometry, so what you
  * click is by construction what you see.
  *
- * Pieces are generated, not loaded. Chess pieces are surfaces of revolution,
- * which is precisely what LatheGeometry produces, so a profile of a dozen
- * points gives a real turned piece with correct silhouette and shading — no
- * model files, no asset pipeline, nothing to keep in sync with the repo. The
- * knight is the exception (a horse's head is not rotationally symmetric) and
- * is extruded from a 2D outline instead.
+ * Pieces are generated, not loaded, and they are clay: each one is a stack of
+ * rounded lumps — a foot, a body, a band, whatever it wears on top — lathed
+ * from a few numbers apiece and pressed into one mesh. No model files, no
+ * asset pipeline, nothing to keep in sync with the repo. The knight is the
+ * exception (a horse's head is not a surface of revolution) and is assembled
+ * from a handful of primitive solids instead. See pieceRecipe.
  *
  * Performance notes:
- *   - The 64 squares are ONE mesh with a generated chequer texture, not 64
- *     meshes. Highlights are pooled overlay planes. That keeps the whole board
- *     to well under a hundred draw calls, which is what makes it viable on a
- *     phone.
+ *   - The 64 squares are ONE mesh with a generated tile texture, not 64
+ *     meshes, and each piece is one mesh whose colours are baked into its
+ *     vertices, all sharing one material. Highlights are pooled overlay
+ *     planes. That keeps the whole board to well under a hundred draw calls,
+ *     which is what makes it viable on a phone.
  *   - The render loop is demand-driven: it draws when something actually
  *     changed or an animation is running, and otherwise costs nothing. A
  *     chessboard is static most of the time and a spinning idle loop would eat
@@ -55,6 +56,7 @@ import {
   ALL_SQUARES,
   boardFromFen,
   describeSquare,
+  squareShade,
   cubicBezierEasing,
   prefersReducedMotion,
 } from './board-shared.js';
@@ -62,202 +64,130 @@ import {
 /** Shared with the DOM board so a move feels the same on either. */
 const ease = cubicBezierEasing(ANIMATION_EASING);
 
-/**
- * How wide a power's burst starts and how much it grows, in squares.
- *
- * It ends up nearly twice the width of the square it went off on, which is
- * the point: at this camera height a circle that stops at the cell edge is
- * hidden behind the piece standing there for most of its life.
- */
-const CAST_MIN_SCALE = 0.3;
-const CAST_GROWTH = 1.5;
-
-/**
- * How far the burst's ring rises off the board, in squares.
- *
- * Roughly the height of a piece. It has to pass the thing it is going off
- * beside rather than stopping short of it, or the climb — which is the only
- * reason the ring reads at all from a low camera — is spent entirely behind
- * a rook.
- */
-const CAST_RING_CLIMB = 0.75;
-
 /** Board geometry, in world units: one square is 1×1. */
 const SQUARE = 1;
 const HALF = 4; // half the board, in squares
 const BOARD_Y = 0; // top surface of the playing area
-const RIM = 0.42; // border width around the playing area
+const RIM = 0.2; // the tray's lip around the playing area
+/** How thick the tray is. The camera fit reserves room for its underside. */
+const TRAY_DEPTH = 0.5;
 
 /** How high a piece rides while the pointer is carrying it. */
 const DRAG_LIFT = 0.5;
 
 /**
- * Themes mirror the CSS ones in board.css so the two boards look like the same
- * product. The extra colours (rim, and the two coordinate inks) have no CSS
- * equivalent because a flat board draws its frame in CSS instead.
+ * How much of the canvas the board is fitted across.
+ *
+ * Nearly all of it. This was 0.96, a comfortable hair of room all round, and
+ * on a phone that hair is 8px a side of board the player does not get — on a
+ * canvas that already runs to the edges of the screen, where the board is as
+ * wide as it can ever be and every pixel left over is a pixel off a square.
+ * What is left is enough to keep the rim's antialiased edge off the last row
+ * of pixels and no more. The trays of taken pieces stand in the margin this
+ * leaves at the default zoom, so the two numbers move together: see the
+ * tray's width in style.css.
  */
-/*
-   Board colours, the same values the flat board uses in CSS.
+const FRAME_FILL = 0.985;
 
-   They were darkened once, on the reasoning that these are albedos going
-   through a light and a tone curve rather than pixels going to the screen, so
-   they should be pre-compensated. The reasoning was fine and the result was
-   not: the board came out at 57% of the flat board's light squares and 39% of
-   its dark ones — nearly black — because the albedo was darkened AND the
-   exposure lowered, and the two compounded. Sampling the rendered pixels
-   against these colours, rather than adjusting by eye, is what found it.
-
-   The compensation belongs in the exposure, which is one number for the whole
-   scene, and not in the palette, which then has to be kept in sync with the
-   CSS by hand and silently drifts. See the exposure note in the constructor.
-*/
+/**
+ * Board palettes, the same values the flat board uses in board.css so the two
+ * boards look like one product. `rim` is the tray the tiles sit in and has no
+ * CSS equivalent, because a flat board draws its frame in CSS instead.
+ *
+ * These are the colours a player should SEE, not albedos pre-compensated for
+ * the lighting. They were darkened once on that reasoning, the exposure was
+ * lowered in the same pass, and the two compounded into a board rendering at
+ * 39% of its own dark squares. The compensation belongs in the lights and the
+ * exposure, which are one place for the whole scene, and those were set by
+ * sampling rendered pixels against these values. See the note in #build.
+ */
 const THEMES = {
-  classic: { light: '#ecd8b6', dark: '#b07d4f', rim: '#6b4a2c', inkOnLight: '#8a6238', inkOnDark: '#ecd8b6' },
-  midnight: { light: '#9fb0cc', dark: '#4a5a78', rim: '#2c3549', inkOnLight: '#3d4a63', inkOnDark: '#cdd8ea' },
-  wood: { light: '#e8c99b', dark: '#9a6a3d', rim: '#5d3f22', inkOnLight: '#7b5228', inkOnDark: '#f0dcc0' },
-};
-
-const HIGHLIGHT = {
-  lastMove: { color: 0xe8b44c, opacity: 0.34 },
-  // Mirrors --hl-last-from in board.css: the same ring, in the same gold, so
-  // the two boards say the same thing the same way.
-  lastFrom: { color: 0xe8b44c, opacity: 0.85 },
-  selected: { color: 0xe8b44c, opacity: 0.55 },
-  check: { color: 0xe5594d, opacity: 0.75 },
-  focus: { color: 0x7fb2ff, opacity: 0.5 },
+  classic: { light: '#f9e4b7', dark: '#b97a4f', rim: '#94603f', inkOnLight: '#b97a4f', inkOnDark: '#f9e4b7' },
+  blueberry: { light: '#e9f3ff', dark: '#79a8e8', rim: '#4f7cc2', inkOnLight: '#5f8fd4', inkOnDark: '#e9f3ff' },
+  strawberry: { light: '#fff1ea', dark: '#f0919b', rim: '#c9636f', inkOnLight: '#dc7480', inkOnDark: '#fff1ea' },
 };
 
 /**
- * The two piece finishes.
+ * Highlight colours, mirrored by the --hl-* tokens in board.css so the two
+ * boards say the same thing the same way.
  *
- * Not the same material in two colours. A pale piece is boxwood: fairly matt,
- * lit mostly by the light that scatters just under the surface. A dark piece
- * is ebonised and lacquered, so almost everything you see on it is reflection
- * — which is why it gets the harder coat and the stronger environment. Give
- * them identical finishes and the black pieces read as silhouettes with no
- * shape in them.
- *
- * A sheen lobe was tried here and removed. It is the most expensive term
- * MeshPhysicalMaterial offers, it was applied to all 32 pieces, and beside the
- * clearcoat it was doing nothing anyone could point at.
+ * Selection is blue and the last move is yellow, where both used to be one
+ * gold. Gold was chosen against a dark page and a wood board; on cream tiles
+ * it is the colour of the tile. Blue is the one hue neither square of any
+ * palette is close to, so the square you are holding reads on both.
  */
-const PIECE_MATERIALS = {
+const HIGHLIGHT = {
+  lastMove: { color: 0xffd338, opacity: 0.5 },
+  lastFrom: { color: 0xf59f00, opacity: 0.95 },
+  selected: { color: 0x35aaf7, opacity: 0.62 },
+  check: { color: 0xff4f4f, opacity: 0.8 },
+  focus: { color: 0x7a5cff, opacity: 0.5 },
+  // A move dot has to read on both tiles, and no one colour does: brown
+  // vanishes into the dark tile and cream into the light one.
+  legal: { color: 0x4a2f1b, opacity: 0.34 },
+  legalOnDark: { color: 0xfff3d6, opacity: 0.6 },
+  capture: { color: 0xff4f4f, opacity: 0.7 },
+};
+
+/**
+ * Clay pigments.
+ *
+ * A piece is modelled the way a clay one is made: several lumps pressed
+ * together, and the lumps are not all the same colour. `body` is the side's
+ * own clay. `accent` is the band that says which side a piece is on even when
+ * the body is in shadow — peach for White, green for Black. `trim` is the
+ * gold on the pieces that wear something: a ring, a crown, a cross. `alt` is
+ * a second neutral, for the knight's head and the bishop's robe, which would
+ * otherwise be one flat silhouette in the body colour. `shaft` and `blade`
+ * are the pawn's spear, and they swap between the sides: a pale shaft with a
+ * darker point for White, a dark shaft with a pale point for Black, so the
+ * point shows against whichever tile is behind it.
+ *
+ * It is ONE material. Clay is clay whatever the pigment, so the colours are
+ * baked into the geometry as vertex colours and every piece on the board is
+ * a single mesh drawn with a single shared material. Thirty-two draw calls
+ * for the whole set, where a piece assembled from separately coloured meshes
+ * would be three or four each.
+ */
+const CLAY = {
   w: {
-    color: 0xd9cdb6,
-    roughness: 0.62,
-    metalness: 0.0,
-    // A tight coat over a rough body. The contrast between the two is the
-    // whole effect: a broad soft highlight on a smooth body just looks pale,
-    // which is how the first pass read.
-    clearcoat: 0.55,
-    clearcoatRoughness: 0.13,
-    envMapIntensity: 0.9,
+    body: '#fbf6ee', accent: '#f8b6a0', trim: '#f7b93a', alt: '#c3c7d8',
+    shaft: '#a9aec4', blade: '#7f859d',
   },
   b: {
-    color: 0x1e212a,
-    roughness: 0.5,
-    metalness: 0.0,
-    clearcoat: 0.75,
-    clearcoatRoughness: 0.1,
-    envMapIntensity: 1.4,
+    body: '#65646f', accent: '#7cc474', trim: '#f7b93a', alt: '#83828f',
+    shaft: '#4d4c57', blade: '#a9a8b4',
   },
 };
 
 /**
- * Piece heights, in squares.
- *
- * Proportioned from a real Staunton set — on a tournament board a king is
- * about 1.67 square-widths tall, a pawn about 0.82 — then scaled down as a
- * group. Full height is correct for a set you look at across a table, but the
- * camera here looks down at 56 degrees, and at true height the back rank hides
- * the rank in front of it. These keep the relative proportions that make the
- * pieces instantly distinguishable while staying short enough to see past.
+ * Matt, but not chalk. At 1.0 a rounded lump has no highlight at all and reads
+ * as a flat disc of colour; a little sheen is what shows it is round.
  */
-const PIECE_HEIGHT = { p: 0.72, r: 0.84, n: 0.94, b: 1.02, q: 1.16, k: 1.3 };
+const CLAY_ROUGHNESS = 0.78;
 
 /**
- * Lathe profiles: [radius, height] pairs from the base upward, in units where
- * the piece's own height is 1. They are scaled to PIECE_HEIGHT on build, so
- * proportions stay right if a height is retuned.
- */
-const PROFILES = {
-  p: [
-    [0.00, 0.000], [0.300, 0.000], [0.300, 0.042], [0.288, 0.052],
-    [0.286, 0.074], [0.246, 0.104], [0.196, 0.132],
-    [0.162, 0.168], [0.148, 0.244], [0.142, 0.322],
-    [0.152, 0.396], [0.206, 0.442], [0.226, 0.468],
-    [0.228, 0.492], [0.196, 0.514],
-    [0.150, 0.548], [0.140, 0.582],
-    [0.186, 0.646], [0.226, 0.726], [0.236, 0.802],
-    [0.214, 0.880], [0.158, 0.942], [0.084, 0.984], [0.00, 1.000],
-  ],
-  r: [
-    [0.00, 0.000], [0.340, 0.000], [0.340, 0.048], [0.326, 0.058],
-    [0.324, 0.082], [0.276, 0.116], [0.232, 0.152],
-    [0.212, 0.196], [0.202, 0.320], [0.200, 0.480], [0.206, 0.586],
-    [0.238, 0.642], [0.246, 0.672],
-    [0.246, 0.700], [0.216, 0.716],
-    [0.222, 0.746], [0.296, 0.788], [0.310, 0.812],
-    [0.310, 0.874], [0.262, 0.876],
-    [0.262, 1.000], [0.00, 1.000],
-  ],
-  // The mitre is a tall cone pinched to a thin stem below a separate finial
-  // ball. Without that pinch a bishop is just a taller pawn — which is exactly
-  // how the first pass read on the board.
-  b: [
-    [0.00, 0.000], [0.330, 0.000], [0.330, 0.042], [0.316, 0.052],
-    [0.314, 0.074], [0.268, 0.106], [0.212, 0.140],
-    [0.172, 0.176], [0.154, 0.256], [0.150, 0.318],
-    [0.164, 0.372], [0.206, 0.412], [0.238, 0.444],
-    [0.240, 0.468], [0.208, 0.486],
-    [0.156, 0.512], [0.142, 0.546],
-    [0.186, 0.596], [0.212, 0.652], [0.222, 0.708],
-    [0.210, 0.768], [0.176, 0.826], [0.128, 0.878], [0.082, 0.916],
-    [0.048, 0.938], [0.044, 0.948],
-    [0.078, 0.964], [0.070, 0.986], [0.036, 0.996], [0.00, 1.000],
-  ],
-  q: [
-    [0.00, 0.000], [0.370, 0.000], [0.370, 0.044], [0.356, 0.054],
-    [0.354, 0.078], [0.302, 0.112], [0.240, 0.150],
-    [0.190, 0.192], [0.174, 0.286], [0.170, 0.366],
-    [0.182, 0.428], [0.230, 0.472], [0.262, 0.502],
-    [0.264, 0.526], [0.226, 0.546],
-    [0.180, 0.578], [0.168, 0.616],
-    [0.216, 0.678], [0.262, 0.740], [0.296, 0.806],
-    [0.300, 0.836], [0.258, 0.850],
-    [0.264, 0.868], [0.302, 0.884],
-    [0.296, 0.906], [0.218, 0.928],
-    [0.132, 0.948], [0.120, 0.964], [0.146, 0.978], [0.104, 0.992], [0.00, 1.000],
-  ],
-  k: [
-    [0.00, 0.000], [0.380, 0.000], [0.380, 0.044], [0.366, 0.054],
-    [0.364, 0.078], [0.310, 0.112], [0.246, 0.152],
-    [0.196, 0.196], [0.180, 0.300], [0.176, 0.388],
-    [0.188, 0.446], [0.238, 0.490], [0.272, 0.520],
-    [0.274, 0.544], [0.234, 0.564],
-    [0.188, 0.598], [0.176, 0.638],
-    [0.226, 0.700], [0.272, 0.760], [0.300, 0.812],
-    [0.302, 0.838], [0.260, 0.852],
-    [0.266, 0.868], [0.300, 0.880],
-    [0.292, 0.900], [0.214, 0.914], [0.164, 0.920], [0.00, 0.920],
-  ],
-  // The knight's body is only a short pedestal; the head is most of the piece
-  // and is extruded separately.
-  n: [
-    [0.00, 0.000], [0.340, 0.000], [0.340, 0.048], [0.326, 0.058],
-    [0.324, 0.082], [0.278, 0.114], [0.226, 0.148],
-    [0.196, 0.186], [0.188, 0.238],
-    [0.212, 0.268], [0.236, 0.292], [0.00, 0.292],
-  ],
-};
-
-/**
- * A tiny seeded PRNG, so generated detail is the same every time.
+ * Piece heights, in squares — the top of each recipe below. For the pawn that
+ * is its head; the point of its spear stands a third of a square higher.
  *
- * `Math.random` would give a board whose grain reshuffled on every theme
- * change and differed between the two players' screens, which for something
- * meant to look like one physical object is exactly wrong.
+ * Tall: a king is nearly two squares high on a foot less than one across,
+ * which is about what a tournament set is. The first clay set was two thirds
+ * of this, squat on the reasoning that clay slumps and that a tall back rank
+ * hides the pawns in front of it. Both are true and it was still the wrong
+ * call — from 56 degrees a squat piece is mostly the top of its own foot, and
+ * six kinds of disc are hard to tell apart. Standing up, each piece shows its
+ * side, which is where a rook's teeth and a queen's crown actually are.
+ *
+ * What the height costs is paid for in two places. A back-rank piece now
+ * stands in front of the foot of the pawn behind it, so a pointer has to mean
+ * the piece it is on rather than the tile under it: see #squareOnRay. And the
+ * camera has to leave room above the far rank: see #cameraSeat.
+ *
+ * The order still runs pawn, rook, knight, bishop, queen, king, which is what
+ * makes them tell apart at a glance.
  */
+const PIECE_HEIGHT = { p: 1.08, r: 1.27, n: 1.4, b: 1.5, q: 1.69, k: 1.95 };
+
 /**
  * Concatenate several already-positioned geometries into one.
  *
@@ -267,47 +197,331 @@ const PROFILES = {
  * non-indexed first so the buffers can simply be laid end to end without
  * rewriting index offsets — a few more vertices in exchange for code that has
  * nowhere to go wrong.
+ *
+ * Colour is carried when every part has one, which is how a piece gets its
+ * pigments: see bakePiece.
  */
 function mergeGeometries(list) {
-  const parts = list.map((geometry) => geometry.toNonIndexed());
+  const parts = list.map((geometry) => (geometry.index ? geometry.toNonIndexed() : geometry));
   const total = parts.reduce((sum, g) => sum + g.attributes.position.count, 0);
+  const coloured = parts.every((g) => g.attributes.color);
   const position = new Float32Array(total * 3);
   const normal = new Float32Array(total * 3);
-  const uv = new Float32Array(total * 2);
+  const color = coloured ? new Float32Array(total * 3) : null;
 
   let offset = 0;
-  parts.forEach((g) => {
+  parts.forEach((g, index) => {
     position.set(g.attributes.position.array, offset * 3);
     if (g.attributes.normal) normal.set(g.attributes.normal.array, offset * 3);
-    if (g.attributes.uv) uv.set(g.attributes.uv.array, offset * 2);
+    if (color) color.set(g.attributes.color.array, offset * 3);
     offset += g.attributes.position.count;
-    g.dispose();
+    // toNonIndexed made a copy; one that was already non-indexed is the
+    // caller's own and is theirs to dispose.
+    if (g !== list[index]) g.dispose();
   });
 
   const merged = new THREE.BufferGeometry();
   merged.setAttribute('position', new THREE.BufferAttribute(position, 3));
   merged.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
-  merged.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  if (color) merged.setAttribute('color', new THREE.BufferAttribute(color, 3));
   merged.computeBoundingSphere();
   return merged;
 }
 
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function next() {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+/**
+ * One lump of clay: a solid of revolution with its edges rolled off.
+ *
+ * Radius `rb` at the bottom and `rt` at the top, between heights `y0` and
+ * `y1`. The rolled edge is the point of it. A cylinder with a hard rim is
+ * turned wood or cast plastic; the same cylinder with its corners pressed
+ * round is something a thumb made, and every piece here is a stack of these.
+ */
+function lump(rb, rt, y0, y1, round, segments) {
+  const r = Math.min(round, (y1 - y0) / 2, rb, rt);
+  const STEPS = 4;
+  const points = [new THREE.Vector2(0, y0)];
+  for (let i = 0; i <= STEPS; i += 1) {
+    const a = (-Math.PI / 2) * (1 - i / STEPS);
+    points.push(new THREE.Vector2(rb - r + Math.cos(a) * r, y0 + r + Math.sin(a) * r));
+  }
+  for (let i = 0; i <= STEPS; i += 1) {
+    const a = (Math.PI / 2) * (i / STEPS);
+    points.push(new THREE.Vector2(rt - r + Math.cos(a) * r, y1 - r + Math.sin(a) * r));
+  }
+  points.push(new THREE.Vector2(0, y1));
+  return new THREE.LatheGeometry(points, segments);
+}
+
+/**
+ * A freer shape, turned from a handful of [radius, height] points.
+ *
+ * The points are joined by a spline rather than straight lines, so a profile
+ * of six numbers comes out as a soft bulb instead of a stack of cones — and
+ * retuning a piece means moving one of six points, not thirty.
+ */
+function turned(profile, segments) {
+  const curve = new THREE.SplineCurve(profile.map(([r, y]) => new THREE.Vector2(r, y)));
+  const points = curve.getPoints(profile.length * 3);
+  // A spline through a point on the axis can swing just past it.
+  points.forEach((p) => { p.x = Math.max(0, p.x); });
+  return new THREE.LatheGeometry(points, segments);
+}
+
+const ball = (radius, y, segments) =>
+  new THREE.SphereGeometry(radius, Math.max(10, segments >> 1), Math.max(8, segments >> 2))
+    .translate(0, y, 0);
+
+/** A rolled ring, lying flat: the gold band a clay piece wears. */
+const ring = (radius, tube, y, segments) =>
+  new THREE.TorusGeometry(radius, tube, 8, segments)
+    .rotateX(Math.PI / 2)
+    .translate(0, y, 0);
+
+/**
+ * The knight's head, assembled from solids.
+ *
+ * Two earlier attempts extruded a horse's silhouette and neither read as a
+ * horse on the board, for the same reason: the silhouette lives in a vertical
+ * plane, and this camera looks down at it from between 56 and 70 degrees. A
+ * vertical plane seen from 56 degrees keeps about half its height on screen;
+ * from 70 it keeps a third. The profile is the part you cannot see, which
+ * makes it the wrong place to put the identity of the piece.
+ *
+ * What identifies a knight from above is the plan view: a cranium with two
+ * ears behind it and a muzzle projecting forward, clear of the base. So the
+ * head is built as those parts — a neck, a cranium, a jaw, a muzzle, two ears
+ * — each a primitive, positioned in world units rather than fractions of
+ * anything, because a horse's head has proportions and they are not the
+ * piece's proportions. The mane is returned separately because it is a
+ * different colour of clay.
+ *
+ * Everything faces -X. Black's knights are mirrored by the group's
+ * userData.faces, so the two sides look at each other.
+ *
+ * Segment counts are deliberately modest. A knight's head is about a fortieth
+ * of a phone screen and the merge is non-indexed, so every segment here is
+ * paid for in duplicated vertices.
+ */
+function knightSolids() {
+  const place = (geometry, position, rotation, scale) => geometry.applyMatrix4(
+    new THREE.Matrix4().compose(
+      new THREE.Vector3(...position),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rotation ?? [0, 0, 0]))),
+      new THREE.Vector3(...(scale ?? [1, 1, 1])),
+    ),
+  );
+
+  const head = [
+    // Rises out of the pedestal and leans forward, as a horse's neck does.
+    // Thicker than a horse's: a thin neck is the first thing clay would lose.
+    place(new THREE.CylinderGeometry(0.175, 0.24, 0.42, 16, 1), [-0.035, 0.45, 0], [0, 0, 0.22]),
+    // The skull, stretched hard along X. A horse's skull is long: at anything
+    // near round, it and the muzzle read as a ball with a snout stuck on.
+    place(new THREE.SphereGeometry(0.2, 16, 12), [-0.115, 0.745, 0], null, [1.42, 1, 0.95]),
+    // The cheek and jaw, slung below and behind. Without it the head is a
+    // ball with a snout on it, which is a dog.
+    place(new THREE.SphereGeometry(0.5, 12, 8), [-0.13, 0.615, 0], [0, 0, 0.22], [0.4, 0.28, 0.29]),
+    // Muzzle, projecting forward and only slightly down. It is what puts the
+    // nose out past the edge of the base, and that overhang is the whole of
+    // what says "knight" when you are looking straight down at the board.
+    place(new THREE.CapsuleGeometry(0.118, 0.17, 4, 12), [-0.335, 0.69, 0], [0, 0, 1.76], [1, 1, 0.95]),
+    // Ears, splayed slightly apart and swept back. Fat upright cones make a
+    // rabbit; these are short and rounded off.
+    place(new THREE.ConeGeometry(0.06, 0.18, 8), [0.03, 0.975, 0.085], [0.2, 0, -0.36]),
+    place(new THREE.ConeGeometry(0.06, 0.18, 8), [0.03, 0.975, -0.085], [-0.2, 0, -0.36]),
+  ];
+
+  // The mane: three flattened lobes stepping down the back of the neck. One
+  // smooth ridge reads as a handle, and the steps are what make it hair.
+  const mane = [
+    { y: 0.85, x: 0.125, s: [0.15, 0.16, 0.115] },
+    { y: 0.675, x: 0.185, s: [0.16, 0.175, 0.122] },
+    { y: 0.49, x: 0.205, s: [0.15, 0.17, 0.115] },
+  ].map((lobe) => place(new THREE.SphereGeometry(0.5, 10, 7), [lobe.x, lobe.y, 0], [0, 0, -0.2], lobe.s));
+
+  // The head keeps the numbers it was modelled at and is then set on its
+  // pedestal whole: a little larger, and a fifth of a square higher. Retyping
+  // every position for a taller piece would be thirty chances to bend a head
+  // that already reads as a horse.
+  [...head, ...mane].forEach((solid) => solid.scale(1.12, 1.12, 1.12).translate(0, 0.21, 0));
+
+  return { head, mane };
+}
+
+/**
+ * What each piece is made of: a list of [pigment, lump] pairs, in squares.
+ *
+ * Every piece stands on the same kind of foot — a wide rolled disc, which is
+ * what stops a tall clay piece falling over — and then stacks whatever makes
+ * it that piece. What tells them apart at a glance is deliberately not
+ * subtle: the pawn is a ball on a skirt with a spear stood beside it, the
+ * rook has teeth, the bishop a gold ball on a tall egg, the queen a ring of
+ * gold points, the king a cross.
+ *
+ * The heights are a tall set's and the widths are still a squat one's. That
+ * is on purpose. Stretching a piece upward while its rings, balls and feet
+ * stay the size they were keeps a ball a ball; scaling the whole thing by one
+ * number would have made eggs of the heads and hoops of the rings.
+ *
+ * Returned as fresh geometries for bakePiece to colour, merge and dispose.
+ */
+function pieceRecipe(type, seg) {
+  const around = (count, radius, make) => Array.from({ length: count }, (_, i) => {
+    const angle = (i / count) * Math.PI * 2;
+    return make().translate(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+  });
+
+  switch (type) {
+    case 'r':
+      return [
+        ['body', lump(0.4, 0.4, 0, 0.11, 0.05, seg)],
+        ['accent', lump(0.315, 0.285, 0.09, 0.46, 0.04, seg)],
+        ['body', lump(0.275, 0.268, 0.43, 0.8, 0.03, seg)],
+        // A second band under the battlements. One band low down is hidden
+        // by whatever stands in front of the rook; this one never is.
+        ['accent', lump(0.294, 0.294, 0.765, 0.9, 0.04, seg)],
+        // A cup rather than a cap: the wall goes up, over, and back down
+        // inside, so from above the top is a ring with a hollow in it.
+        ['body', turned([
+          [0, 0.87], [0.3, 0.875], [0.354, 0.94], [0.354, 1.06],
+          [0.32, 1.1], [0.245, 1.095], [0.215, 1.04], [0, 1.03],
+        ], seg)],
+        ...around(6, 0.282, () => lump(0.072, 0.072, 1.06, 1.27, 0.03, 12)).map((g) => ['body', g]),
+      ];
+
+    case 'n': {
+      const { head, mane } = knightSolids();
+      return [
+        ['body', lump(0.4, 0.4, 0, 0.11, 0.05, seg)],
+        ['body', lump(0.3, 0.25, 0.09, 0.53, 0.04, seg)],
+        ...head.map((g) => ['alt', g]),
+        ...mane.map((g) => ['accent', g]),
+      ];
+    }
+
+    case 'b':
+      return [
+        ['body', lump(0.38, 0.38, 0, 0.1, 0.045, seg)],
+        ['alt', lump(0.3, 0.185, 0.085, 0.78, 0.04, seg)],
+        ['trim', ring(0.205, 0.054, 0.8, seg)],
+        // The mitre is a tall egg. Without the height a bishop is a pawn.
+        ['body', turned([
+          [0, 0.8], [0.185, 0.82], [0.245, 0.98], [0.21, 1.18], [0.105, 1.34], [0, 1.385],
+        ], seg)],
+        ['trim', ball(0.072, 1.428, seg)],
+      ];
+
+    case 'q':
+      return [
+        ['body', lump(0.41, 0.41, 0, 0.11, 0.05, seg)],
+        ['accent', lump(0.335, 0.21, 0.09, 0.86, 0.045, seg)],
+        ['trim', ring(0.235, 0.058, 0.88, seg)],
+        ['body', turned([
+          [0, 0.87], [0.19, 0.89], [0.205, 1.02], [0.26, 1.26], [0.298, 1.4], [0.304, 1.46], [0, 1.49],
+        ], seg)],
+        ['trim', ring(0.275, 0.047, 1.475, seg)],
+        // Points stand on the crown's ring rather than sunk into it, so they
+        // read as a coronet instead of lumps.
+        ...around(7, 0.275, () => new THREE.ConeGeometry(0.07, 0.2, 10).translate(0, 1.585, 0))
+          .map((g) => ['trim', g]),
+        ['body', ball(0.165, 1.5, seg)],
+        ['trim', ball(0.058, 1.632, seg)],
+      ];
+
+    case 'k':
+      return [
+        ['body', lump(0.425, 0.425, 0, 0.11, 0.05, seg)],
+        ['accent', lump(0.347, 0.224, 0.09, 0.94, 0.045, seg)],
+        ['trim', ring(0.244, 0.062, 0.96, seg)],
+        ['body', turned([
+          [0, 0.95], [0.204, 0.97], [0.222, 1.1], [0.27, 1.32],
+          [0.305, 1.46], [0.311, 1.535], [0.249, 1.595], [0, 1.61],
+        ], seg)],
+        ['trim', ring(0.293, 0.045, 1.535, seg)],
+        // The cross is rolled, not cut: two short sausages, pressed together.
+        // Big for the piece it stands on, because from above it is most of
+        // what says which of the two tall pieces this one is.
+        ['trim', new THREE.CapsuleGeometry(0.066, 0.25, 4, 12).translate(0, 1.759, 0)],
+        ['trim', new THREE.CapsuleGeometry(0.066, 0.2, 4, 12).rotateZ(Math.PI / 2).translate(0, 1.79, 0)],
+      ];
+
+    default: {
+      // The spear stands on the foot at the pawn's left hand, clear of the
+      // skirt. It is the one part of any piece that is off the axis, so a
+      // pawn has a left and a right: Black's are turned about to face
+      // White's, and the two ranks carry their spears on opposite sides of
+      // the board. See #makePiece.
+      const reach = -0.29;
+      return [
+        ['body', lump(0.36, 0.36, 0, 0.1, 0.045, seg)],
+        ['body', turned([
+          [0, 0.08], [0.262, 0.085], [0.24, 0.2], [0.165, 0.42], [0.128, 0.62], [0, 0.66],
+        ], seg)],
+        ['body', lump(0.185, 0.185, 0.6, 0.675, 0.032, seg)],
+        ['accent', ball(0.192, 0.888, seg)],
+        ['shaft', new THREE.CylinderGeometry(0.03, 0.034, 1.02, 10).translate(reach, 0.59, 0)],
+        // A leaf, not a needle: a point thin enough to be sharp is thin
+        // enough to vanish at the size a pawn is drawn on a phone.
+        ['blade', turned([[0, 1.06], [0.092, 1.14], [0.072, 1.22], [0.026, 1.33], [0, 1.39]], 12)
+          .translate(reach, 0, 0)],
+      ];
+    }
+  }
+}
+
+/**
+ * Colour a recipe's lumps and press them into one geometry.
+ *
+ * Each lump is filled with its pigment as a vertex colour, then all of them
+ * are concatenated. A `THREE.Color` built from a CSS string is already in the
+ * linear working space, which is what a vertex colour is read as.
+ */
+function bakePiece(type, side, segments) {
+  const pigments = CLAY[side] ?? CLAY.w;
+  const lumps = pieceRecipe(type, segments).map(([role, geometry]) => {
+    const flat = geometry.index ? geometry.toNonIndexed() : geometry;
+    if (flat !== geometry) geometry.dispose();
+    const pigment = new THREE.Color(pigments[role] ?? pigments.body);
+    const count = flat.attributes.position.count;
+    const colors = new Float32Array(count * 3);
+    for (let i = 0; i < count; i += 1) {
+      colors[i * 3] = pigment.r;
+      colors[i * 3 + 1] = pigment.g;
+      colors[i * 3 + 2] = pigment.b;
+    }
+    flat.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    return flat;
+  });
+  const baked = mergeGeometries(lumps);
+  lumps.forEach((geometry) => geometry.dispose());
+  return baked;
+}
+
+/** A square with its corners rounded off, centred on the origin. */
+function roundedSquare(size, radius) {
+  const h = size / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-h + radius, -h);
+  shape.lineTo(h - radius, -h);
+  shape.quadraticCurveTo(h, -h, h, -h + radius);
+  shape.lineTo(h, h - radius);
+  shape.quadraticCurveTo(h, h, h - radius, h);
+  shape.lineTo(-h + radius, h);
+  shape.quadraticCurveTo(-h, h, -h, h - radius);
+  shape.lineTo(-h, -h + radius);
+  shape.quadraticCurveTo(-h, -h, -h + radius, -h);
+  return shape;
+}
+
+/** A CSS colour, lightened or darkened by a fraction of full lightness. */
+function shade(css, amount) {
+  return `#${new THREE.Color(css).offsetHSL(0, 0, amount).getHexString()}`;
 }
 
 export class Board3D {
   #root;
   #onSquareActivate = () => {};
   #orientation = 'white';
-  #showCoordinates = true;
   #animationsEnabled = true;
   #theme = 'classic';
   #focusedSquare = 'e1';
@@ -320,9 +534,6 @@ export class Board3D {
   #canvas = null;
   #boardMesh = null;
   #boardTexture = null;
-  #boardRoughness = null;
-  #environmentRT = null;
-  #environment = null;
 
   /** Piece portraits, drawn once each and kept. See pieceSprite(). */
   #spriteCache = new Map();
@@ -331,13 +542,14 @@ export class Board3D {
   #markerGroup = null;
   #raycaster = new THREE.Raycaster();
   #pointer = new THREE.Vector2();
-  /** The horizontal sheet a dragged piece rides on, at DRAG_LIFT above it. */
+  /**
+   * The level sheet the pointer is followed on while it carries a piece. Its
+   * height is set per drag, to the part of the piece in hand: #carriedFoot.
+   */
   #dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(BOARD_Y + DRAG_LIFT));
 
   // Reusable resources, disposed together in dispose().
   #geometries = new Map();
-  /** The knight's head parts, kept out of #geometries — see #knightParts. */
-  #knightGeometries = null;
   #materials = new Map();
   #markerPool = [];
   #pieces = new Map(); // square -> Object3D
@@ -361,6 +573,15 @@ export class Board3D {
 
   // Interaction
   #drag = null;
+  /**
+   * What a press can do in the position on the board: whose move it is, which
+   * of their pieces have one, and where the selected piece may go. Kept from
+   * the last render because a pointer needs them and arrives with nothing —
+   * see #squareOnRay.
+   */
+  #turn = WHITE;
+  #movable = new Set();
+  #targets = new Set();
 
   /**
    * Cancels every listener this board added, in one call.
@@ -416,34 +637,61 @@ export class Board3D {
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     /*
-       Filmic tone mapping rather than none.
+       Neutral tone mapping, not filmic.
 
-       Without it, everything above 1.0 clips to flat white: a turned piece's
-       highlight arrives as a bald patch with no shape in it, which is most of
-       why the first pass read as plastic. ACES rolls those highlights off
-       instead, so the brightest part of a curve still shows its curvature.
+       Some curve is needed: without one, everything above 1.0 clips to flat
+       white, and the lit side of a white piece arrives as a bald patch with
+       no shape in it. ACES was the curve here while the set was lacquered
+       wood, and it suited that — but it buys its highlight roll-off by
+       desaturating and darkening everything under it. On this palette that
+       turned peach to beige and the green to khaki, which is the one thing a
+       clay set cannot afford: its colours ARE the look. The neutral curve
+       leaves a colour alone until it is nearly white and only then rolls it
+       off, so the pigments arrive as the pigments.
 
-       It darkens the midtones as a side effect, and THIS is where that is paid
-       for — one number for the whole scene, not by darkening the palette. The
-       palette was darkened once, in the same pass that lowered the exposure,
-       and the two compounded into a board rendering at 39% of its own dark
-       squares. The exposure and the light intensities below were set by
+       The exposure and the light intensities in #buildLights were set by
        sampling the rendered pixels against the CSS colours the flat board uses
-       for the same theme, until a dark square matched and a light square sat
-       just under it, which is where a filmic curve should leave a highlight.
+       for the same theme, until a lit tile matched — not by darkening the
+       palette to compensate, which was tried once and compounded.
     */
-    this.#renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.#renderer.toneMappingExposure = 1.18;
+    this.#renderer.toneMapping = THREE.NeutralToneMapping;
+    this.#renderer.toneMappingExposure = 1.0;
     this.#renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.#richDetail = this.#hasHardwareGpu();
 
     this.#scene = new THREE.Scene();
-    this.#camera = new THREE.PerspectiveCamera(38, 1, 0.5, 60);
+    /*
+       A long lens: 12 degrees, from forty-four squares away.
 
-    this.#buildEnvironment();
+       It was 38 degrees from about fifteen, and that was the right lens for a
+       squat set. A short lens close to the board sees each rank from a
+       different angle — at the old distance the near rank from 68 degrees
+       and the far one from 46 — and a piece seen from 68 degrees shows a
+       third of its height. With pieces no taller than a tile that hardly
+       mattered. With tall ones it meant Black's stood up and White's, the
+       ones the player is actually holding, were lids seen from above.
+
+       From this far back the two ranks are within eight degrees of each
+       other, so a piece looks the same wherever it stands, and the board is
+       drawn nearly square-on: a far square is nine tenths the width of a
+       near one, where it was three quarters. The distance is not chosen
+       here — #cameraSeat solves it for whatever the lens is.
+
+       The near plane moves out with the camera. Depth precision is spent
+       between the two planes in proportion to how close the near one is, and
+       a tile sits a thousandth of a square above the tray it is laid on.
+    */
+    this.#camera = new THREE.PerspectiveCamera(12, 1, 4, 200);
+
     this.#buildLights();
     this.#buildBoard();
+    // The coordinates are drawn in the page's own typeface, which can still
+    // be on its way when the first texture is painted. Paint them again once
+    // it has landed, or the board keeps the fallback's letters for the game.
+    document.fonts?.load?.('700 32px Fredoka')
+      .then(() => { if (!this.#disposed) this.#refreshBoardTexture(); })
+      .catch(() => { /* the fallback letters are already on the board */ });
 
     this.#pieceGroup = new THREE.Group();
     this.#markerGroup = new THREE.Group();
@@ -467,16 +715,12 @@ export class Board3D {
    *
    * Not a guess at how fast the device is — that is unknowable and the wrong
    * question. This is the one distinction that actually changes the arithmetic:
-   * a prefiltered cube lookup and a second specular lobe are a texture unit and
-   * a few ALU ops on any GPU made this decade, and hundreds of CPU instructions
-   * per fragment without one. Measured on this project's own test harness,
-   * which runs SwiftShader: the 95th-percentile frame during a move went from
-   * 17ms to 200ms with the environment map on, and back to 50ms without it.
-   * A real GPU never sees that curve.
+   * a triangle is nearly free on any GPU made this decade, and a great many
+   * CPU instructions without one.
    *
    * Chrome falls back to SwiftShader when it blocklists a driver, so this is a
-   * real population, not a hypothetical one. They get the same board with the
-   * two most fill-hungry refinements left off; everyone else gets the lot.
+   * real population, not a hypothetical one. They get the same pieces turned
+   * from fewer segments; everyone else gets the round ones.
    *
    * Unknown counts as hardware. The debug extension is absent or masked in
    * plenty of ordinary browsers, and downgrading everyone whose renderer will
@@ -495,125 +739,43 @@ export class Board3D {
   }
 
   /**
-   * A room for the pieces to reflect.
+   * Lit like a tabletop in daylight: one soft key, and a great deal of fill.
    *
-   * Lights alone give a MeshStandardMaterial diffuse shading and a single
-   * specular dot, and nothing else — no sense of a surface having anywhere to
-   * be. That is the real reason turned pieces looked like moulded plastic: a
-   * polished object reads as polished because you can see the room in it, and
-   * there was no room. This builds a small studio — a graded sky, a warm
-   * softbox above and to the left where the key light is, a cool one opposite,
-   * and a floor bounce — and prefilters it into a cube map that every standard
-   * material then samples. It is the largest single change to how the board
-   * looks, and it costs one 128px cube generated once.
+   * That ratio is the clay look as much as the material is. A hard key over a
+   * dark fill is how you light lacquer — it wants a deep shadow for the
+   * highlight to stand against. Clay is matt and pale, and the same lighting
+   * makes it look like stone. So the sky does most of the work here, the key
+   * only models the roundness, and a shadow is a soft tint on the tile rather
+   * than a hole in it.
    *
-   * Built from primitives rather than loaded, for the same reason the pieces
-   * are: nothing to ship, nothing to keep in sync.
-   *
-   * Skipped entirely when there is no GPU — see #hasHardwareGpu.
+   * The ground colour of the hemisphere is the board's own cream. Light that
+   * reaches the underside of a piece has bounced off a tile to get there, and
+   * giving it that colour is what keeps the shaded side of a white piece warm
+   * instead of grey.
    */
-  #buildEnvironment() {
-    if (!this.#richDetail) return;
-
-    let generator = null;
-    const room = new THREE.Scene();
-    const temporary = [];
-
-    try {
-      // The sky: a vertical gradient on the inside of a sphere. Warm just
-      // above the horizon, cool overhead — the way a lit room actually falls
-      // off, and enough variation that a curved surface sweeping through it
-      // shows the sweep.
-      const sky = document.createElement('canvas');
-      sky.width = 4;
-      sky.height = 64;
-      const skyCtx = sky.getContext('2d');
-      const grad = skyCtx.createLinearGradient(0, 0, 0, 64);
-      grad.addColorStop(0, '#8fa3c4');
-      grad.addColorStop(0.45, '#5c6474');
-      grad.addColorStop(0.62, '#453e38');
-      grad.addColorStop(1, '#17140f');
-      skyCtx.fillStyle = grad;
-      skyCtx.fillRect(0, 0, 4, 64);
-      const skyTexture = new THREE.CanvasTexture(sky);
-      skyTexture.colorSpace = THREE.SRGBColorSpace;
-
-      const domeGeo = new THREE.SphereGeometry(12, 16, 12);
-      const domeMat = new THREE.MeshBasicMaterial({
-        map: skyTexture,
-        side: THREE.BackSide,
-      });
-      room.add(new THREE.Mesh(domeGeo, domeMat));
-      temporary.push(domeGeo, domeMat, skyTexture);
-
-      // The softboxes. Bright emissive-by-basic panels: what a piece's
-      // highlight is actually a picture of.
-      const panelGeo = new THREE.PlaneGeometry(1, 1);
-      temporary.push(panelGeo);
-      const panel = (color, intensity, scale, position) => {
-        const material = new THREE.MeshBasicMaterial({
-          color: new THREE.Color(color).multiplyScalar(intensity),
-        });
-        const mesh = new THREE.Mesh(panelGeo, material);
-        mesh.scale.set(scale[0], scale[1], 1);
-        mesh.position.set(...position);
-        mesh.lookAt(0, 0, 0);
-        room.add(mesh);
-        temporary.push(material);
-      };
-      panel('#fff1dc', 2.4, [7, 5], [-5, 8, 5]);   // key, matching the key light
-      panel('#cfe0ff', 0.7, [8, 4], [6, 5, -7]);   // cool fill, opposite
-      panel('#ffffff', 0.28, [10, 10], [0, -6, 0]); // floor bounce
-
-      generator = new THREE.PMREMGenerator(this.#renderer);
-      generator.compileEquirectangularShader?.();
-      this.#environmentRT = generator.fromScene(room, 0.03);
-      /*
-         Assigned per material, NOT as scene.environment.
-
-         scene.environment gives it to everything, and everything includes the
-         board — which is by far the largest thing on screen. Profiling said
-         that one line was the single most expensive change in this file: the
-         95th-percentile frame went from 17ms to 500ms with it, and to 83ms
-         without, because every pixel of the board was doing a prefiltered cube
-         lookup to gain a sheen nobody was looking for. The pieces are where a
-         reflection reads, they cover a small fraction of the canvas, and they
-         are what this was for. They get it; the board does not.
-      */
-      this.#environment = this.#environmentRT.texture;
-    } catch (error) {
-      // A prefiltered environment is a refinement, not a requirement. If the
-      // generator is unavailable the materials fall back to light-only
-      // shading, which is exactly how this board looked before.
-      warn('Environment map unavailable; using lights only', error);
-      this.#environmentRT = null;
-      this.#environment = null;
-    } finally {
-      generator?.dispose();
-      temporary.forEach((resource) => resource.dispose?.());
-    }
-  }
-
   #buildLights() {
-    // Sky/ground fill, so the underside of a piece is never dead black. Lower
-    // than it was: the environment now supplies most of the ambient, and
-    // leaving both at full strength washed the shading flat again.
-    this.#scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2620, 0.52));
+    this.#scene.add(new THREE.HemisphereLight(0xffffff, 0xf3e8d2, 1.6));
 
-    const key = new THREE.DirectionalLight(0xfff4e2, 2.05);
-    key.position.set(-4.5, 9, 4.5);
+    // High, because the pieces are tall. A shadow is as long as the piece is
+    // high times how far the light leans, and from the 55 degrees this stood
+    // at a king laid a shadow a square and a third long across its
+    // neighbours. From 63 it is under a square. The intensity came down with
+    // the move, by the ratio of the two cosines, so a tile is lit exactly as
+    // it was — see the note on exposure in #build.
+    const key = new THREE.DirectionalLight(0xfffbf4, 1.92);
+    key.position.set(-3.6, 10, 3.6);
     key.castShadow = true;
     // Stays at 1024, and that is a measured decision rather than a default
     // left alone. 2048 looked marginally cleaner under a piece and cost four
-    // times the shadow pass — profiled at a 267ms 95th-percentile frame
-    // against 17ms, because the shadow map is re-rendered every time anything
-    // on the board moves. The tight frustum below is what keeps 1024 sharp
-    // enough: it spends every texel on the board rather than on the empty
-    // space the default frustum covers.
+    // times the shadow pass, because the shadow map is re-rendered every time
+    // anything on the board moves. The tight frustum below is what keeps 1024
+    // sharp enough: it spends every texel on the board rather than on the
+    // empty space the default frustum covers.
     key.shadow.mapSize.set(1024, 1024);
-    // A tight orthographic frustum around the board keeps shadow texels dense
-    // enough to stay crisp at 1024; the default frustum wastes most of them.
-    const s = HALF + RIM + 0.5;
+    // Wide enough for the top of a king on a corner square: the light leans,
+    // so a tall piece at the edge reaches further across its view than the
+    // board does.
+    const s = HALF + RIM + 1.1;
     key.shadow.camera.left = -s;
     key.shadow.camera.right = s;
     key.shadow.camera.top = s;
@@ -625,56 +787,50 @@ export class Board3D {
     this.#scene.add(key);
 
     // A dim opposite fill stops the far side of every piece going flat.
-    const fill = new THREE.DirectionalLight(0xcfe0ff, 0.32);
+    const fill = new THREE.DirectionalLight(0xe8f0ff, 0.45);
     fill.position.set(5, 4, -6);
     this.#scene.add(fill);
   }
 
   #buildBoard() {
     const theme = THEMES[this.#theme] ?? THEMES.classic;
-    // Generated first: the rim below uses it too, and it never changes with
-    // the theme — only the colour laid over it does. Skipped without a GPU:
-    // it is one more texture fetch across the largest surface on screen, and
-    // the grain is still there in the colour map either way — what is lost is
-    // the way it catches the light, not the wood.
-    this.#boardRoughness = this.#richDetail ? this.#makeGrainRoughnessTexture() : null;
 
-    // The rim: a slab slightly larger than the playing area, so the board has
-    // a physical edge to catch the light instead of floating as a flat plane.
-    const rimGeo = new THREE.BoxGeometry(
-      2 * HALF + 2 * RIM,
-      0.5,
-      2 * HALF + 2 * RIM,
-    );
-    // The border is real wood too, and at the low camera angle its near face
-    // is a sixth of what you can see. Flat colour there gave the whole board a
-    // painted edge; sharing the squares' grain map makes it part of the same
-    // object. Standard rather than physical, and no environment: it is a large
-    // area of screen for a refinement that would not show on it.
-    const rimMat = new THREE.MeshStandardMaterial({
+    // The tray: a thick slab a little larger than the playing area, with its
+    // corners and its edges rolled off. The rolled edge is what catches the
+    // light along the front of the board, and it is the difference between a
+    // slab of clay and a box.
+    const bevel = 0.06;
+    const side = 2 * HALF + 2 * RIM;
+    const trayGeo = new THREE.ExtrudeGeometry(roundedSquare(side - 2 * bevel, 0.42), {
+      depth: TRAY_DEPTH - 2 * bevel,
+      bevelEnabled: true,
+      bevelThickness: bevel,
+      bevelSize: bevel,
+      bevelSegments: 4,
+      curveSegments: 10,
+    });
+    // Extruded along +Z: laid flat, then dropped so its top face is the board.
+    trayGeo.rotateX(-Math.PI / 2);
+    trayGeo.translate(0, BOARD_Y - (TRAY_DEPTH - bevel), 0);
+    // No environment and nothing physical: it is a large area of screen, and
+    // matt clay has nothing to reflect.
+    const trayMat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(theme.rim),
-      roughnessMap: this.#boardRoughness,
-      roughness: this.#boardRoughness ? 0.95 : 0.7,
+      roughness: 0.86,
       metalness: 0.0,
     });
-    const rim = new THREE.Mesh(rimGeo, rimMat);
-    rim.position.y = BOARD_Y - 0.25;
-    rim.receiveShadow = true;
-    this.#scene.add(rim);
-    this.#geometries.set('rim', rimGeo);
-    this.#materials.set('rim', rimMat);
+    const tray = new THREE.Mesh(trayGeo, trayMat);
+    tray.receiveShadow = true;
+    this.#scene.add(tray);
+    this.#geometries.set('rim', trayGeo);
+    this.#materials.set('rim', trayMat);
 
     // The 64 squares as a single textured plane. See the header note.
     const boardGeo = new THREE.PlaneGeometry(2 * HALF, 2 * HALF);
     this.#boardTexture = this.#makeCheckerTexture();
     const boardMat = new THREE.MeshStandardMaterial({
       map: this.#boardTexture,
-      // Wood is not uniformly glossy: the grain scatters light where it is
-      // open and holds a sheen where it is not. One greyscale map turns a flat
-      // plane of two colours into a surface, and it is what makes the board
-      // move as the camera does rather than sitting there like paint.
-      roughnessMap: this.#boardRoughness,
-      roughness: this.#boardRoughness ? 1 : 0.75,
+      roughness: 0.86,
       metalness: 0.0,
     });
     this.#boardMesh = new THREE.Mesh(boardGeo, boardMat);
@@ -687,7 +843,15 @@ export class Board3D {
   }
 
   /**
-   * Draw the chequer — and the coordinates — into one canvas texture.
+   * Draw the tiles — and the coordinates — into one canvas texture.
+   *
+   * Each square is painted as a tile pressed into the tray: a face with
+   * rounded corners, and around it the rolled edge where the tile turns down
+   * into the gap. That edge is lit from one side and shaded on the other, and
+   * which side is fixed in the texture rather than worked out per view — the
+   * key light does not move when the camera does, so neither does the side of
+   * a tile it falls on. It is what makes sixty-four flat quads read as
+   * sixty-four separate tiles, at a thousandth of the cost of modelling them.
    *
    * The labels are painted into the board rather than floated above it as
    * sprites, which is why this is regenerated when the orientation flips: a
@@ -703,188 +867,109 @@ export class Board3D {
     canvas.height = cell * 8;
     const ctx = canvas.getContext('2d');
 
+    const roundedTile = (x, y, size, radius) => {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + size, y, x + size, y + size, radius);
+      ctx.arcTo(x + size, y + size, x, y + size, radius);
+      ctx.arcTo(x, y + size, x, y, radius);
+      ctx.arcTo(x, y, x + size, y, radius);
+      ctx.closePath();
+    };
+
+    const edge = cell * 0.03;
     for (let row = 0; row < 8; row += 1) {
       for (let col = 0; col < 8; col += 1) {
-        // Texture row 0 is the far side of the board (rank 8 for White).
-        const isLight = (row + col) % 2 === 1;
-        ctx.fillStyle = isLight ? theme.light : theme.dark;
-        ctx.fillRect(col * cell, row * cell, cell, cell);
-        // Each square is a separate piece of veneer, so each gets its own
-        // grain: its own direction and its own offset. A single grain running
-        // across the whole board is the one thing that would make it read as
-        // printed rather than made.
-        this.#paintGrain(ctx, col * cell, row * cell, cell, (row * 8 + col), isLight);
+        // Texture row 0 is the far side of the board (rank 8 for White), and
+        // column 0 is the a-file — so the first tile painted is a8, which is
+        // a light square. This test was the other way round for as long as
+        // this board existed: a1 came out light and the white queen stood on
+        // a dark square. Nothing measured it, because every test asked which
+        // square a click landed on and none asked what colour it was.
+        const isLight = (row + col) % 2 === 0;
+        const base = isLight ? theme.light : theme.dark;
+        const x = col * cell;
+        const y = row * cell;
+
+        // The rolled edge, shaded: what shows at the far and right-hand
+        // sides, which face away from the key light.
+        ctx.fillStyle = shade(base, isLight ? -0.1 : -0.075);
+        ctx.fillRect(x, y, cell, cell);
+
+        // The same edge, lit: the left and near sides, which face it. Drawn
+        // as the tile's own shape nudged toward the light, so the two meet in
+        // the corners the way a real rolled edge does.
+        ctx.fillStyle = shade(base, isLight ? 0.045 : 0.085);
+        roundedTile(x + edge * 0.35, y + edge * 1.65, cell - edge * 2, cell * 0.12);
+        ctx.fill();
+
+        // The face.
+        ctx.fillStyle = base;
+        roundedTile(x + edge, y + edge, cell - edge * 2, cell * 0.12);
+        ctx.fill();
       }
     }
 
-    // The seam between squares. A real board has an edge there — light catches
-    // the join — and one dark pixel of inset is enough to say so, at a
-    // thousandth of the cost of modelling 64 bevels.
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.26)';
-    ctx.lineWidth = Math.max(1, cell * 0.012);
-    for (let i = 0; i <= 8; i += 1) {
-      const at = i * cell;
-      ctx.beginPath();
-      ctx.moveTo(at, 0);
-      ctx.lineTo(at, cell * 8);
-      ctx.moveTo(0, at);
-      ctx.lineTo(cell * 8, at);
-      ctx.stroke();
-    }
+    // The coordinates, always. There was a switch for them once; it was only
+    // ever left on, so it was taken out.
+    const flip = this.#orientation === 'black';
+    ctx.font = `700 ${Math.round(cell * 0.21)}px Fredoka, system-ui, sans-serif`;
+    ctx.textBaseline = 'top';
+    for (let row = 0; row < 8; row += 1) {
+      for (let col = 0; col < 8; col += 1) {
+        const isLight = (row + col) % 2 === 0;
+        ctx.fillStyle = isLight ? theme.inkOnLight : theme.inkOnDark;
+        ctx.globalAlpha = 0.9;
 
-    if (this.#showCoordinates) {
-      const flip = this.#orientation === 'black';
-      ctx.font = `700 ${Math.round(cell * 0.2)}px system-ui, sans-serif`;
-      ctx.textBaseline = 'top';
-      for (let row = 0; row < 8; row += 1) {
-        for (let col = 0; col < 8; col += 1) {
-          const isLight = (row + col) % 2 === 1;
-          ctx.fillStyle = isLight ? theme.inkOnLight : theme.inkOnDark;
-          ctx.globalAlpha = 0.8;
+        // Ranks down the left edge, files along the bottom, of the CURRENT
+        // view — which is the opposite edge of the texture when flipped.
+        const rankEdge = flip ? col === 7 : col === 0;
+        const fileEdge = flip ? row === 0 : row === 7;
+        if (!rankEdge && !fileEdge) continue;
 
-          // Ranks down the left edge, files along the bottom, of the CURRENT
-          // view — which is the opposite edge of the texture when flipped.
-          const rankEdge = flip ? col === 7 : col === 0;
-          const fileEdge = flip ? row === 0 : row === 7;
-          const x = col * cell;
-          const y = row * cell;
+        /*
+           Which edge moves with the view. What the label SAYS does not.
 
-          if (rankEdge) {
-            const rank = flip ? row + 1 : 8 - row;
-            ctx.textAlign = 'left';
-            ctx.fillText(String(rank), x + cell * 0.08, y + cell * 0.07);
-          }
-          if (fileEdge) {
-            const file = FILES[flip ? 7 - col : col];
-            ctx.textAlign = 'right';
-            ctx.fillText(file, x + cell * 0.92, y + cell * 0.72);
-          }
+           Flipping swings the camera round to the other side; no square
+           goes anywhere, so the tile in texture row 0 is rank 8 whoever is
+           looking at it. This used to renumber as well as move — the rank
+           nearest a player sitting as Black was labelled 1, on the row
+           their own king started on — and drew the glyphs the texture's
+           way up, which from that side is upside down. So the label is the
+           square's true name, and the cell is turned half a circle before
+           it is written so that it faces whoever is reading it.
+        */
+        ctx.save();
+        ctx.translate(col * cell + cell / 2, row * cell + cell / 2);
+        if (flip) ctx.rotate(Math.PI);
+        if (rankEdge) {
+          ctx.textAlign = 'left';
+          ctx.fillText(String(8 - row), -cell * 0.4, -cell * 0.41);
         }
+        if (fileEdge) {
+          ctx.textAlign = 'right';
+          ctx.fillText(FILES[col], cell * 0.4, cell * 0.18);
+        }
+        ctx.restore();
       }
-      ctx.globalAlpha = 1;
     }
+    ctx.globalAlpha = 1;
 
     const texture = new THREE.CanvasTexture(canvas);
     /*
        Linear, not nearest.
 
        Nearest was the right call when a square was one flat colour: it kept
-       the boundary between two fields perfectly crisp. Now that each square
-       carries grain and a drawn seam, nearest samples that fine detail into
-       hard stair-steps, and the seam line does the crisp-edge job better than
-       point sampling ever did. Anisotropy is what keeps the far rank legible
-       at this camera angle — without it the grain and the coordinates smear
-       into mush a couple of ranks out.
+       the boundary between two fields perfectly crisp. Now that each tile
+       carries a drawn edge, nearest samples that fine detail into hard
+       stair-steps. Anisotropy is what keeps the far rank legible at this
+       camera angle — without it the edges and the coordinates smear into mush
+       a couple of ranks out.
     */
     texture.magFilter = THREE.LinearFilter;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.anisotropy = this.#renderer?.capabilities.getMaxAnisotropy() ?? 1;
     texture.colorSpace = THREE.SRGBColorSpace;
-    texture.needsUpdate = true;
-    return texture;
-  }
-
-  /**
-   * Wood grain for one square, in place.
-   *
-   * Deterministic from the square's index, so the board looks the same every
-   * time it is drawn — a board whose grain reshuffled on every theme change
-   * would be visibly wrong. Fine streaks with a slowly wandering centre line,
-   * which is what grain is; the alternative, random noise, reads as dirt.
-   */
-  #paintGrain(ctx, x, y, size, seed, isLight) {
-    const rand = mulberry32(seed * 2654435761);
-    const across = rand() < 0.5; // half the squares are cut the other way
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y, size, size);
-    ctx.clip();
-    ctx.translate(x + size / 2, y + size / 2);
-    if (across) ctx.rotate(Math.PI / 2);
-    ctx.translate(-size / 2, -size / 2);
-
-    const lines = 26;
-    ctx.lineWidth = size * 0.012;
-    for (let i = 0; i < lines; i += 1) {
-      const base = (i / lines) * size + rand() * size * 0.02;
-      // Dark and light streaks in the same pass: grain is both, and only
-      // darkening it makes the square look dirty rather than figured.
-      const dark = rand() < 0.62;
-      const strength = (isLight ? 0.13 : 0.16) * (0.35 + rand() * 0.65);
-      ctx.strokeStyle = dark
-        ? `rgba(60, 36, 14, ${strength})`
-        : `rgba(255, 236, 200, ${strength * 0.8})`;
-      ctx.beginPath();
-      ctx.moveTo(0, base);
-      const wobble = size * (0.012 + rand() * 0.02);
-      ctx.bezierCurveTo(
-        size * 0.33, base + wobble,
-        size * 0.66, base - wobble,
-        size, base + wobble * 0.4,
-      );
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  /**
-   * A greyscale roughness map matching the grain.
-   *
-   * Quarter the colour map's resolution on purpose: roughness varies slowly
-   * and nobody can see a roughness texel, so this is where to spend less. It
-   * is generated once and never regenerated — grain does not change when the
-   * theme or the orientation does, only its colour does.
-   */
-  #makeGrainRoughnessTexture() {
-    const cell = 40;
-    const canvas = document.createElement('canvas');
-    canvas.width = cell * 8;
-    canvas.height = cell * 8;
-    const ctx = canvas.getContext('2d');
-
-    // Mid-grey base: fairly rough, as a satin lacquer is.
-    ctx.fillStyle = '#b4b4b4';
-    ctx.fillRect(0, 0, cell * 8, cell * 8);
-
-    for (let row = 0; row < 8; row += 1) {
-      for (let col = 0; col < 8; col += 1) {
-        const rand = mulberry32((row * 8 + col) * 2654435761);
-        const across = rand() < 0.5;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(col * cell, row * cell, cell, cell);
-        ctx.clip();
-        ctx.translate(col * cell + cell / 2, row * cell + cell / 2);
-        if (across) ctx.rotate(Math.PI / 2);
-        ctx.translate(-cell / 2, -cell / 2);
-        ctx.lineWidth = cell * 0.02;
-        for (let i = 0; i < 26; i += 1) {
-          const base = (i / 26) * cell + rand() * cell * 0.02;
-          const dark = rand() < 0.62;
-          // Open grain scatters (rougher, lighter here); closed grain holds a
-          // sheen (smoother, darker here).
-          ctx.strokeStyle = dark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)';
-          ctx.beginPath();
-          ctx.moveTo(0, base);
-          const wobble = cell * (0.012 + rand() * 0.02);
-          ctx.bezierCurveTo(
-            cell * 0.33, base + wobble,
-            cell * 0.66, base - wobble,
-            cell, base + wobble * 0.4,
-          );
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.anisotropy = this.#renderer?.capabilities.getMaxAnisotropy() ?? 1;
-    // Data, not colour: a roughness map must stay linear or the values are
-    // silently gamma-shifted and the whole surface reads too glossy.
-    texture.colorSpace = THREE.NoColorSpace;
     texture.needsUpdate = true;
     return texture;
   }
@@ -964,7 +1049,7 @@ export class Board3D {
   #cameraSeat(side) {
     // Elevation is the zoom. Foreshortening means the board projects to
     // roughly sin(elevation) as tall as it is wide, so a low angle leaves a
-    // third of a square frame empty and a high one spends that space on the
+    // quarter of a square frame empty and a high one spends that space on the
     // board — see BOARD_ZOOM_LEVELS for why this is the lever rather than a
     // dolly. 56 degrees is the low end: the board fills its width and the
     // pieces clearly stand up off it.
@@ -989,7 +1074,7 @@ export class Board3D {
     for (const x of [-reach, reach]) {
       for (const z of [-reach, reach]) {
         // The board is a slab: its underside edge is visible from this angle.
-        corners.push(new THREE.Vector3(x, BOARD_Y - 0.5, z));
+        corners.push(new THREE.Vector3(x, BOARD_Y - TRAY_DEPTH, z));
         corners.push(new THREE.Vector3(x, BOARD_Y, z));
       }
     }
@@ -1014,8 +1099,7 @@ export class Board3D {
       }
       if (!Number.isFinite(extent) || extent <= 0) break;
 
-      // 0.96 leaves a hair of breathing room so the rim never touches the edge.
-      const correction = extent / 0.96;
+      const correction = extent / FRAME_FILL;
       if (Math.abs(correction - 1) < 0.005) break;
       distance *= correction;
     }
@@ -1089,12 +1173,6 @@ export class Board3D {
     this.#refreshBoardTexture();
   }
 
-  setShowCoordinates(show) {
-    if (this.#showCoordinates === Boolean(show)) return;
-    this.#showCoordinates = Boolean(show);
-    this.#refreshBoardTexture();
-  }
-
   setAnimationsEnabled(enabled) {
     this.#animationsEnabled = Boolean(enabled);
   }
@@ -1126,10 +1204,10 @@ export class Board3D {
    *
    * For the captured piles beside the board, which were Unicode glyphs and so
    * were the one place in the app still showing a flat chess set next to a
-   * solid one. This builds the real piece — the same lathed body, the same
-   * detail solids, the same clearcoat material and the same key light — and
-   * reads it back as an image, so a captured knight is the knight that was on
-   * the board rather than a different artist's idea of one.
+   * solid one. This builds the real piece — the same baked lumps, the same
+   * clay and the same soft key light — and reads it back as an image, so a
+   * captured knight is the knight that was on the board rather than a
+   * different artist's idea of one.
    *
    * Rendered once per piece and cached. Twelve portraits for a whole game.
    *
@@ -1148,14 +1226,13 @@ export class Board3D {
     let group = null;
     try {
       const scene = new THREE.Scene();
-      // The board's own environment map, so the clearcoat has the same room to
-      // reflect. Without it the portrait is lit but not polished.
-      if (this.#environment) scene.environment = this.#environment;
-      scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2620, 0.62));
-      const keyLight = new THREE.DirectionalLight(0xfff4e2, 2.2);
+      // The board's own lighting, near enough: a bright sky and a soft key
+      // from the same side. See #buildLights for why the fill is so high.
+      scene.add(new THREE.HemisphereLight(0xffffff, 0xf3e8d2, 1.6));
+      const keyLight = new THREE.DirectionalLight(0xfffbf4, 2.1);
       keyLight.position.set(-1.4, 2.4, 2.2);
       scene.add(keyLight);
-      const fill = new THREE.DirectionalLight(0xcfe0ff, 0.45);
+      const fill = new THREE.DirectionalLight(0xe8f0ff, 0.45);
       fill.position.set(2.2, 1.2, 1.6);
       scene.add(fill);
 
@@ -1163,16 +1240,17 @@ export class Board3D {
         A rim light, and specifically for the black pieces.
 
         On the board a black piece is legible because it stands on a pale
-        square: the contrast comes from behind it. In a tray there is no
-        square, so an unlit black piece on a dark panel is a piece-shaped hole.
-        Lighting it from behind and above draws a bright edge around the
-        silhouette, which is how the shape survives at this size — the same
-        reason a cinematographer puts a light behind a dark subject.
+        tile: the contrast comes from behind it. In a tray there is no tile,
+        and the tray is a dark groove, so a charcoal piece in it is close to a
+        piece-shaped hole. Lighting it from behind and above draws a bright
+        edge around the silhouette, which is how the shape survives at this
+        size — the same reason a cinematographer puts a light behind a dark
+        subject.
 
         Stronger for black than white, because white already separates from
-        the panel and too much rim on it only blows the highlight out.
+        the tray and too much rim on it only blows the highlight out.
       */
-      const rim = new THREE.DirectionalLight(0xdbe6ff, color === 'b' ? 3.4 : 1.1);
+      const rim = new THREE.DirectionalLight(0xffffff, color === 'b' ? 2.4 : 0.6);
       rim.position.set(0.6, 2.0, -2.4);
       scene.add(rim);
 
@@ -1203,11 +1281,15 @@ export class Board3D {
         pawn occupies the fraction of the frame it actually occupies on the
         board.
 
-        Comfortably wider than the widest piece too — the knight is the broad
-        one and is nowhere near a king's height — so nothing clips.
+        A close frame: the king's height and an eighth over. It was two
+        thirds over while the set was squat, because a squat king is nearly as
+        wide as it is tall and needed the room at the sides. A tall one does
+        not, and in a frame that loose it is a sliver in the middle of an
+        empty tile. The knight is the broad one, at about one square from
+        muzzle to mane, and that is still under half of this.
       */
-      const radius = (PIECE_HEIGHT.k * 1.35) / 2;
-      const distance = (radius / Math.tan(THREE.MathUtils.degToRad(fov) / 2)) * 1.22;
+      const radius = PIECE_HEIGHT.k / 2;
+      const distance = (radius / Math.tan(THREE.MathUtils.degToRad(fov) / 2)) * 1.12;
       camera.position.copy(new THREE.Vector3(0, 0.2, 1).normalize().multiplyScalar(distance));
       camera.lookAt(0, 0, 0);
 
@@ -1274,6 +1356,9 @@ export class Board3D {
     this.#syncPieces(board, move);
     this.#syncMarkers(state, view);
     this.#syncA11y(board, view, state);
+    this.#turn = state.turn;
+    this.#movable = new Set(snapshot.movable ?? []);
+    this.#targets = new Set((view?.legalTargets ?? []).map((target) => target.to));
 
     if (move) this.#animateMove(move);
 
@@ -1310,12 +1395,6 @@ export class Board3D {
     this.#geometries.clear();
     this.#materials.clear();
     this.#boardTexture?.dispose();
-    this.#boardRoughness?.dispose();
-    // The prefiltered environment is a render target, not a plain texture, and
-    // holds GPU memory of its own until it is released.
-    this.#environmentRT?.dispose();
-    this.#environmentRT = null;
-    this.#environment = null;
 
     this.#renderer?.dispose();
     // forceContextLoss frees the driver-side context immediately instead of
@@ -1356,179 +1435,35 @@ export class Board3D {
   // -----------------------------------------------------------------------
 
   /**
-   * Build (and cache) the geometry for one piece type.
-   * Cached by type only — the two colours differ by material, not by shape.
+   * Build (and cache) one piece, already in its colours.
+   *
+   * Cached by side as well as by type. The pigments are baked into the
+   * geometry, so a white rook and a black one are two buffers of the same
+   * shape rather than one shape drawn with two materials — twelve geometries
+   * for a whole set, built on first use.
    */
-  #pieceGeometry(type) {
-    const key = `piece:${type}`;
+  #pieceGeometry(type, color) {
+    const key = `piece:${color}${type}`;
     if (this.#geometries.has(key)) return this.#geometries.get(key);
 
-    const height = PIECE_HEIGHT[type] ?? 0.6;
-    const points = (PROFILES[type] ?? PROFILES.p).map(
-      ([radius, y]) => new THREE.Vector2(radius * SQUARE, y * height),
-    );
-    // 48 segments rather than 28, where there is a GPU to draw them. At 28 the silhouette of a queen against a
-    // light square was visibly a polygon, and the highlight running round a
-    // turned collar broke into facets — which is the detail that says
-    // "generated" out loud. A lathe is cheap: the whole set is still a few
-    // tens of thousands of triangles, and the board draws on demand rather
-    // than every frame, so this costs nothing while nobody is moving.
-    const geometry = new THREE.LatheGeometry(points, this.#richDetail ? 48 : 28);
-    geometry.computeVertexNormals();
+    // 32 segments where there is a GPU to draw them, 20 without. Below that
+    // the foot of a king is visibly a polygon against a pale tile, which is
+    // the detail that says "generated" out loud. The whole set is on the
+    // order of a hundred thousand triangles, and the board draws on demand
+    // rather than every frame, so this costs nothing while nobody is moving.
+    const geometry = bakePiece(type, color, this.#richDetail ? 32 : 20);
     this.#geometries.set(key, geometry);
     return geometry;
   }
 
-  /**
-   * The knight's head, assembled from solids.
-   *
-   * This is the third attempt and the first one that works, so the two that
-   * did not are worth recording. Both extruded a horse's silhouette and
-   * neither read as a horse on the board, for the same reason: the silhouette
-   * lives in a vertical plane, and this camera looks down at it from between
-   * 56 and 84 degrees. A vertical plane seen from 56 degrees keeps about half
-   * its height on screen; from 84 it keeps a tenth. The profile is the part
-   * you cannot see, which makes it the wrong place to put the identity of the
-   * piece. Tapering the extrusion helped its volume and not its legibility;
-   * rotating it to face the camera laid the horse on its back.
-   *
-   * What identifies a knight from above is the plan view: a cranium with two
-   * ears behind it and a muzzle projecting forward, clear of the base. So the
-   * head is built as those parts — a neck, a cranium, a muzzle, two ears and a
-   * crest — each a primitive, positioned in world units rather than fractions
-   * of anything, because a horse's head has proportions and they are not the
-   * piece's proportions. Seven meshes for a knight against two before; the
-   * geometries are shared across all four, and the draw-call budget has the
-   * room.
-   *
-   * Everything faces -X. Black's knights are mirrored by the group's
-   * userData.faces, exactly as before, so the two sides look at each other.
-   *
-   * Returns one baked geometry, not the parts: see the note by the merge.
-   */
-  #knightParts() {
-    if (this.#knightGeometries) return this.#knightGeometries;
-
-    /*
-       Segment counts are deliberately modest. A knight's head is about a
-       fortieth of a phone screen, and the merge below is non-indexed, so every
-       segment here is paid for in duplicated vertices — profiled at a 67ms
-       95th-percentile frame when these were set at the values a close-up would
-       want. At these counts nothing on the board is visibly faceted and the
-       frame is back where it was.
-    */
-    const parts = {
-      // Rises out of the pedestal and leans forward, as a horse's neck does.
-      neck: new THREE.CylinderGeometry(0.155, 0.225, 0.42, 14, 1),
-      // The skull: longer than it is wide, which is what makes the plan view
-      // an oval pointing somewhere rather than a ball.
-      cranium: new THREE.SphereGeometry(0.175, 14, 10),
-      // Tapered, so the nose is narrower than the cheek.
-      muzzle: new THREE.CylinderGeometry(0.085, 0.138, 0.44, 12, 1),
-      // The cheek and jaw, under and behind the muzzle. Without it the head is
-      // a ball with a snout on it, which is a dog; the deep angular jaw
-      // running back under the ear is the thing that makes it a horse.
-      jaw: new THREE.SphereGeometry(0.5, 12, 8),
-      // Slim and swept back. Fat upright cones make a rabbit.
-      ear: new THREE.ConeGeometry(0.042, 0.18, 8),
-      // A flattened lobe; three of them step down the neck as a notched mane.
-      crest: new THREE.SphereGeometry(0.5, 10, 7),
-    };
-    /*
-       Placed, then baked into ONE geometry.
-
-       Ten parts left as ten meshes is ten draw calls per knight and forty per
-       board, and it showed: the 95th-percentile frame went from 17ms to 67ms.
-       Since a knight's head never moves relative to itself, the parts can be
-       transformed into place once, at build time, and concatenated. The result
-       is a single mesh — the same count the old extruded head had, for a shape
-       that is far more of a horse — and the arrangement below stays readable
-       as an arrangement rather than becoming vertex soup.
-    */
-    const placed = [];
-    const put = (geometry, position, rotation, scale) => {
-      const matrix = new THREE.Matrix4().compose(
-        new THREE.Vector3(...position),
-        new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rotation ?? [0, 0, 0]))),
-        new THREE.Vector3(...(scale ?? [1, 1, 1])),
-      );
-      placed.push(geometry.clone().applyMatrix4(matrix));
-    };
-
-    // Neck. Leaning forward by about 14 degrees; the pedestal's lathe tops out
-    // at y = 0.274, and this starts inside it so there is no seam.
-    put(parts.neck, [-0.045, 0.47, 0], [0, 0, 0.24]);
-
-    // Cranium, stretched hard along X. A horse's skull is long: at anything
-    // near round it and the muzzle read as a ball with a snout stuck on.
-    put(parts.cranium, [-0.135, 0.760, 0], null, [1.62, 0.94, 0.84]);
-
-    // The jaw, slung below and behind the cheek.
-    put(parts.jaw, [-0.150, 0.632, 0], [0, 0, 0.22], [0.40, 0.26, 0.25]);
-
-    // Muzzle, projecting forward and only slightly down. The angle is the one
-    // that matters most: it is what puts the nose out past the edge of the
-    // base, and that overhang is the whole of what says "knight" when you are
-    // looking straight down at the board — the one feature that survives the
-    // view. Nearly horizontal, therefore, not the 45 degrees a head at rest
-    // would have.
-    put(parts.muzzle, [-0.370, 0.712, 0], [0, 0, 1.78], [1, 1, 0.82]);
-
-    // Ears, splayed slightly apart and swept back.
-    put(parts.ear, [0.050, 0.975, 0.062], [0.16, 0, -0.40]);
-    put(parts.ear, [0.050, 0.975, -0.062], [-0.16, 0, -0.40]);
-
-    // The mane: three flattened lobes stepping down the back of the neck. One
-    // smooth ridge reads as a handle, and the steps are what make it hair.
-    [
-      { y: 0.855, x: 0.115, s: [0.125, 0.145, 0.090] },
-      { y: 0.690, x: 0.168, s: [0.135, 0.160, 0.098] },
-      { y: 0.505, x: 0.186, s: [0.128, 0.155, 0.092] },
-    ].forEach((lobe) => put(parts.crest, [lobe.x, lobe.y, 0], [0, 0, -0.2], lobe.s));
-
-    const head = mergeGeometries(placed);
-    placed.forEach((geometry) => geometry.dispose());
-    Object.values(parts).forEach((geometry) => geometry.dispose());
-
-    this.#knightGeometries = head;
-    this.#geometries.set('geo:knightHead', head);
-    return head;
-  }
-
-  #pieceMaterial(color) {
-    const key = `mat:${color}`;
+  /** The one clay every piece is made of. The colour is in the geometry: see CLAY. */
+  #pieceMaterial() {
+    const key = 'mat:clay';
     if (this.#materials.has(key)) return this.#materials.get(key);
-    const spec = PIECE_MATERIALS[color] ?? PIECE_MATERIALS.w;
-    /*
-       Physical rather than standard, for the clearcoat.
-
-       A finished chess piece has two surfaces, not one: the wood or resin
-       underneath, and a thin lacquer over it. They behave differently — the
-       coat reflects the room sharply while the body under it stays soft — and
-       a single-lobe material has to average the two into something that looks
-       like neither. Clearcoat models them separately, and with the environment
-       map now giving it something to reflect it is what reads as "polished"
-       instead of "shiny".
-    */
-    /*
-       Physical only where it can be afforded. Without a GPU the clearcoat is
-       the second most expensive thing on screen after the environment map, and
-       with no environment for it to reflect it has much less to show anyway,
-       so the two are dropped together rather than half-kept.
-    */
-    const Material = this.#richDetail
-      ? THREE.MeshPhysicalMaterial
-      : THREE.MeshStandardMaterial;
-    const material = new Material({
-      color: new THREE.Color(spec.color),
-      roughness: spec.roughness,
-      metalness: spec.metalness,
-      ...(this.#richDetail ? {
-        clearcoat: spec.clearcoat,
-        clearcoatRoughness: spec.clearcoatRoughness,
-        envMap: this.#environment,
-        envMapIntensity: spec.envMapIntensity,
-      } : {}),
+    const material = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: CLAY_ROUGHNESS,
+      metalness: 0.0,
     });
     this.#materials.set(key, material);
     return material;
@@ -1537,99 +1472,25 @@ export class Board3D {
   /**
    * Assemble one piece.
    *
-   * Returns a Group rather than a single mesh: the lathe gives the turned body,
-   * and the details that make a piece identifiable at a glance — the rook's
-   * crenellations, the king's cross, the knight's head — are separate solids
-   * that no surface of revolution can express.
+   * One mesh in a Group. The group is what everything else moves, mirrors and
+   * measures, and it is kept even though it now holds a single child: a piece
+   * was several meshes once and the rest of this file addresses it by its
+   * wrapper, which is the part that did not have to change.
    */
   #makePiece(piece) {
     const group = new THREE.Group();
-    const material = this.#pieceMaterial(piece.color);
-    const height = PIECE_HEIGHT[piece.type] ?? 0.6;
-
-    const body = new THREE.Mesh(this.#pieceGeometry(piece.type), material);
+    const body = new THREE.Mesh(
+      this.#pieceGeometry(piece.type, piece.color),
+      this.#pieceMaterial(),
+    );
     body.castShadow = true;
     body.receiveShadow = true;
     group.add(body);
 
-    // Detail solids are sized FROM the piece's height, never in absolute units.
-    // They were absolute once, and retuning the heights left the rook's
-    // crenellations buried inside its own top and the king's cross too small
-    // to see — details that do not scale with the piece are details that only
-    // look right at one size.
-    if (piece.type === 'r') {
-      const key = 'geo:crenel';
-      const w = height * 0.15;
-      if (!this.#geometries.has(key)) {
-        this.#geometries.set(key, new THREE.BoxGeometry(w, height * 0.17, w));
-      }
-      const crenelGeo = this.#geometries.get(key);
-      for (let i = 0; i < 6; i += 1) {
-        const angle = (i / 6) * Math.PI * 2;
-        const merlon = new THREE.Mesh(crenelGeo, material);
-        // Sit ON the rim, overlapping it slightly so there is no seam.
-        merlon.position.set(
-          Math.cos(angle) * 0.235,
-          height + height * 0.06,
-          Math.sin(angle) * 0.235,
-        );
-        merlon.rotation.y = -angle;
-        merlon.castShadow = true;
-        group.add(merlon);
-      }
-    }
-
-    if (piece.type === 'k') {
-      const upKey = 'geo:crossUp';
-      const acrossKey = 'geo:crossAcross';
-      const bar = height * 0.075;
-      if (!this.#geometries.has(upKey)) {
-        this.#geometries.set(upKey, new THREE.BoxGeometry(bar, height * 0.3, bar));
-        this.#geometries.set(acrossKey, new THREE.BoxGeometry(height * 0.24, bar, bar));
-      }
-      // The lathe stops at 0.92 of the height, leaving the top of the piece
-      // for the cross — so the cross IS the king's last eighth, not an
-      // ornament stuck above a finished piece.
-      const upright = new THREE.Mesh(this.#geometries.get(upKey), material);
-      upright.position.y = height * 1.02;
-      upright.castShadow = true;
-      const arm = new THREE.Mesh(this.#geometries.get(acrossKey), material);
-      arm.position.y = height * 1.08;
-      arm.castShadow = true;
-      group.add(upright, arm);
-    }
-
-    if (piece.type === 'q') {
-      const key = 'geo:crownBall';
-      if (!this.#geometries.has(key)) {
-        this.#geometries.set(key, new THREE.SphereGeometry(height * 0.062, 12, 10));
-      }
-      const ballGeo = this.#geometries.get(key);
-      for (let i = 0; i < 7; i += 1) {
-        const angle = (i / 7) * Math.PI * 2;
-        const ball = new THREE.Mesh(ballGeo, material);
-        // Just outside the crown's widest ring, so they read as points around
-        // a coronet rather than lumps sunk into it.
-        ball.position.set(
-          Math.cos(angle) * 0.315,
-          height * 0.9,
-          Math.sin(angle) * 0.315,
-        );
-        ball.castShadow = true;
-        group.add(ball);
-      }
-    }
-
-    if (piece.type === 'n') {
-      // One mesh, baked from an assembly of solids at build time — see
-      // #knightParts for the shape and for why it is not an extrusion.
-      const head = new THREE.Mesh(this.#knightParts(), material);
-      head.castShadow = true;
-      head.receiveShadow = true;
-      group.add(head);
-      // Black's knights mirror, so the two sides face each other.
-      group.userData.faces = piece.color === WHITE ? 1 : -1;
-    }
+    // Black's pieces are turned about, so the two sides face each other. It
+    // shows on the two that have a front: a knight looks at the knight
+    // opposite, and a pawn's spear is in the same hand whichever side it is on.
+    group.userData.faces = piece.color === WHITE ? 1 : -1;
 
     group.userData.piece = `${piece.color}${piece.type}`;
     return group;
@@ -1698,10 +1559,11 @@ export class Board3D {
    * Highlight shapes, cached and shared.
    *
    * `square` fills the cell; `ring` is the empty circle that marks the square
-   * a piece came from. They are separate geometries rather than one quad with
-   * a texture because a ring drawn in a texture would need a transparent
-   * bitmap per theme and would soften as the camera came down; real geometry
-   * stays a crisp circle at every zoom level.
+   * a piece came from; `disc` is the dot on a square a piece may move to and
+   * `halo` the wide ring round one it may capture on. They are separate
+   * geometries rather than one quad with a texture because a ring drawn in a
+   * texture would need a transparent bitmap per theme and would soften as the
+   * camera came down; real geometry stays a crisp circle at every zoom level.
    */
   #markerGeometry(shape) {
     const key = `geo:marker:${shape}`;
@@ -1714,10 +1576,6 @@ export class Board3D {
         this.#geometries.set(key, new THREE.CircleGeometry(SQUARE * 0.5, 36));
       } else if (shape === 'halo') {
         this.#geometries.set(key, new THREE.RingGeometry(SQUARE * 0.34, SQUARE * 0.5, 44));
-      } else if (shape === 'beam') {
-        // A unit quad, scaled per beam: one square long and one square wide
-        // before scaling, so the numbers that place it are in squares.
-        this.#geometries.set(key, new THREE.PlaneGeometry(1, 1));
       } else {
         this.#geometries.set(key, new THREE.PlaneGeometry(SQUARE, SQUARE));
       }
@@ -1791,12 +1649,16 @@ export class Board3D {
     // Legal destinations: a small disc, a wide ring for a capture — the same
     // vocabulary the flat board uses, so the two read identically.
     (view?.legalTargets ?? []).forEach((target) => {
+      const onDark = squareShade(target.to) === 'dark';
       const marker = place(
         target.to,
-        { color: target.isCapture ? 0xe5594d : 0x101319, opacity: target.isCapture ? 0.55 : 0.38 },
+        target.isCapture
+          ? HIGHLIGHT.capture
+          : (onDark ? HIGHLIGHT.legalOnDark : HIGHLIGHT.legal),
         0.01,
+        target.isCapture ? 'halo' : 'disc',
       );
-      marker.scale.setScalar(target.isCapture ? 0.94 : 0.3);
+      marker.scale.setScalar(target.isCapture ? 0.92 : 0.34);
     });
   }
 
@@ -2062,47 +1924,174 @@ export class Board3D {
   // Interaction
   // -----------------------------------------------------------------------
 
-  /** Raycast a pointer event onto the board, returning a square or null. */
-  #squareFromEvent(event) {
+  /** Aim the raycaster through a point on the page. False if there is no canvas to aim at. */
+  #aim(clientX, clientY) {
     const rect = this.#canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
+    if (!rect.width || !rect.height) return false;
     this.#pointer.set(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.#raycaster.setFromCamera(this.#pointer, this.#camera);
-    const hits = this.#raycaster.intersectObject(this.#boardMesh, false);
-    if (!hits.length) return null;
-    this.#lastPick = this.#worldToSquare(hits[0].point);
+    return true;
+  }
+
+  /** The square a pointer event means, or null. See #squareOnRay for "means". */
+  #squareFromEvent(event) {
+    if (!this.#aim(event.clientX, event.clientY)) return null;
+    this.#lastPick = this.#squareOnRay();
     return this.#lastPick;
   }
 
   /**
-   * Where the pointer is, on the invisible sheet a carried piece rides on.
+   * Which square the raycaster's line of sight means.
    *
-   * The square under the pointer is a different question, answered by
-   * #squareFromEvent against the board itself. This one has to be a plane and
-   * not the board because a piece being carried is ABOVE the board, and
-   * because its answer has to be continuous: snapping a held piece to the
-   * middle of whatever square it is over makes a drag a sequence of jumps,
-   * which is what this replaces.
+   * This used to be one line: wherever the line met the board. That is right
+   * for a piece no taller than its tile is deep, and wrong for a tall one. A
+   * pawn's head is drawn most of a square beyond its own foot, over the tile
+   * behind it, so a press on the head — which is where anyone presses a pawn —
+   * landed on that empty tile and selected nothing. With a king it is worse:
+   * its cross is drawn over the foot of the pawn standing beyond it.
+   *
+   * So the pieces are asked first, and the answer is the first thing along
+   * the line of sight that the press could mean: each piece the line passes
+   * through, nearest the eye first — what is drawn under the pointer is what
+   * was pressed — and then the tile the line ends on.
+   *
+   * "Could mean" is a square the selected piece may move to, or one holding a
+   * piece that has a move — the two things a press can do. That test is what
+   * makes a tall piece something you can reach past. A piece you can neither
+   * take nor move is not what you were aiming at, so the press goes through
+   * it to whatever is behind: at the start of every game the king's cross is
+   * drawn over the middle of the e-pawn's tile, the king has nowhere to go,
+   * and a press there is the pawn's.
+   *
+   * With one exception, and it is the one that matters. A press that has
+   * landed on one of the mover's own pieces is never passed on as a MOVE to
+   * a tile behind it. It may well have been meant for that piece — the player
+   * need not know it is pinned — and guessing wrong the other way plays a
+   * move nobody chose, which online cannot be taken back. Picking up the
+   * wrong piece costs one more press; so behind an own piece only another
+   * piece to pick up is looked for, never somewhere to go.
+   *
+   * When nothing could be meant the answer is still what was pressed, because
+   * the controller clears the selection on a press that means nothing and it
+   * needs a square to be told about.
+   *
+   * `carried` is a piece in the player's hand. It is left out, or every drop
+   * would land on the piece being dropped. A hand that is already holding a
+   * piece is not picking up another, so only a square that piece may move to
+   * counts, and nothing stands in its way.
    */
-  #pointerOnDragPlane(event) {
-    const rect = this.#canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
-    this.#pointer.set(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.#raycaster.setFromCamera(this.#pointer, this.#camera);
+  #squareOnRay(carried = null) {
+    const tile = this.#raycaster.intersectObject(this.#boardMesh, false)[0];
+    const inSight = this.#piecesOnRay(carried);
+    if (tile) {
+      const ground = this.#worldToSquare(tile.point);
+      if (ground && !inSight.includes(ground)) inSight.push(ground);
+    }
+
+    let mayMove = true;
+    const meant = (square) => (mayMove && this.#targets.has(square))
+      || (!carried && this.#movable.has(square));
+
+    for (const square of inSight) {
+      if (meant(square)) return square;
+      const own = this.#pieces.get(square)?.userData.piece[0] === this.#turn;
+      if (own && !carried) mayMove = false;
+    }
+    return inSight[0] ?? null;
+  }
+
+  /**
+   * The squares of the pieces the line of sight passes through, nearest first.
+   *
+   * Tested against the pieces' own triangles rather than a box or a cylinder
+   * standing in for them. A stand-in is cheaper and it is wrong exactly where
+   * it matters: the pawn you can see beside a king's cross is inside any
+   * cylinder drawn round that king. A press is one ray, three.js rejects most
+   * pieces on their bounding spheres, and this runs when a button goes down
+   * or comes up — not on every pointer move.
+   *
+   * Exact, and so not forgiving: a press a few pixels off a pawn's neck is a
+   * press on the tile behind it. Widening each piece to catch those was
+   * tried and taken out. Seen from this angle the middle of an empty tile is
+   * a twentieth of a square above the head of the pawn in front of it, so
+   * any margin worth having round the head swallows the middle of that tile,
+   * and a board where pressing an empty square picks up a pawn is worse than
+   * one where a near miss has to be pressed again.
+   */
+  #piecesOnRay(carried) {
+    // A position written since the last frame has not reached the matrices a
+    // raycast reads, and a press can arrive between the two.
+    this.#pieceGroup.updateMatrixWorld(true);
+
+    const owners = new Map();
+    this.#pieces.forEach((group, square) => {
+      if (group !== carried) owners.set(group.children[0], square);
+    });
+
+    const squares = [];
+    for (const hit of this.#raycaster.intersectObjects([...owners.keys()], false)) {
+      const square = owners.get(hit.object);
+      if (!squares.includes(square)) squares.push(square);
+    }
+    return squares;
+  }
+
+  /**
+   * Where on a piece the pointer took hold of it, measured from its foot.
+   *
+   * A piece used to be carried by its foot whatever part of it was pressed,
+   * which nobody noticed while a piece was shorter than a tile. Take a tall
+   * king by its cross that way and the whole king jumps a square and a half
+   * up the screen to put its foot under the pointer. Remembering the hold
+   * keeps the part that was pressed under the pointer for as long as it is
+   * carried, which is all "picking something up" means.
+   *
+   * Read from the same line of sight that chose the piece: where it meets the
+   * piece itself, or, for a piece chosen by its tile, where it meets the
+   * board.
+   */
+  #holdOn(group) {
+    const hit = this.#raycaster.intersectObject(group, true)[0]?.point
+      ?? this.#raycaster.intersectObject(this.#boardMesh, false)[0]?.point;
+    return hit ? hit.clone().sub(group.position) : new THREE.Vector3();
+  }
+
+  /**
+   * Where a carried piece's foot belongs, for the pointer and the hold on it.
+   *
+   * The pointer is followed on an invisible level sheet rather than on the
+   * board, because a piece being carried is ABOVE the board, and because the
+   * answer has to be continuous: snapping a held piece to the middle of
+   * whatever square it is over makes a drag a sequence of jumps. The sheet
+   * is at the height of the part being held, so that part stays under the
+   * pointer; the foot is then the hold's distance away from it.
+   */
+  #carriedFoot(event, hold) {
+    if (!this.#aim(event.clientX, event.clientY)) return null;
+    this.#dragPlane.constant = -(BOARD_Y + DRAG_LIFT + hold.y);
     const hit = new THREE.Vector3();
     if (!this.#raycaster.ray.intersectPlane(this.#dragPlane, hit)) return null;
-    // The plane is infinite and the board is not. Past the rim the piece is
-    // pinned to the edge rather than sent off toward the horizon.
-    const edge = HALF + RIM;
-    hit.x = Math.min(Math.max(hit.x, -edge), edge);
-    hit.z = Math.min(Math.max(hit.z, -edge), edge);
-    return hit;
+    return hit.set(hit.x - hold.x, BOARD_Y + DRAG_LIFT, hit.z - hold.z);
+  }
+
+  /**
+   * The square a carried piece is being held over, as the player sees it.
+   *
+   * Not the square straight down from it. The piece is in the air and the
+   * camera is to one side, so its foot is drawn over a tile further back than
+   * the one beneath it — and the tile it is drawn over is the one the player
+   * has lined it up with. So the line of sight is taken through the foot and
+   * asked the same question a press is.
+   */
+  #squareUnder(foot, carried) {
+    const seen = foot.clone().project(this.#camera);
+    this.#pointer.set(seen.x, seen.y);
+    this.#raycaster.setFromCamera(this.#pointer, this.#camera);
+    this.#lastPick = this.#squareOnRay(carried);
+    return this.#lastPick;
   }
 
   #attachListeners() {
@@ -2112,6 +2101,29 @@ export class Board3D {
     const on = (target, type, handler) =>
       target.addEventListener(type, handler, { signal: this.#listeners.signal });
 
+    /*
+       A tap is finished when the finger lifts: pointerup, below, has already
+       activated the square. The browser does not know that. It follows every
+       touch with a click of its own, and it decides what that click landed on
+       AFTER our handler has run — so when the tap completes a promotion and
+       the picker opens under the finger, the click goes to the picker. Mostly
+       it hit the backdrop, which cancels: the picker closed in the instant it
+       opened and a pawn could not promote at all. Sometimes it hit one of the
+       four pieces, and promoted to whichever happened to be there.
+
+       A mouse never did this. Its click goes to where the button went down
+       and came up, which is the board — so this worked on every desktop and
+       failed on every phone, and no test driven by a mouse could see it.
+
+       Cancelling touchend is how a page says "this touch is dealt with": no
+       compatibility mouse events and no click follow it. Scrolling is not
+       affected — that is settled on touchstart and touchmove — and the
+       touchend that ends a scroll is not cancelable, hence the check.
+       Nothing inside the board listens for a click, so nothing is lost.
+    */
+    root.addEventListener('touchend', (event) => {
+      if (event.cancelable) event.preventDefault();
+    }, { signal: this.#listeners.signal, passive: false });
 
     on(root, 'pointerdown', (event) => {
       const square = this.#squareFromEvent(event);
@@ -2119,6 +2131,7 @@ export class Board3D {
       this.#focusSquare(square, false);
 
       const isTouch = event.pointerType === 'touch';
+      const group = this.#pieces.get(square);
       this.#drag = {
         square,
         startX: event.clientX,
@@ -2127,7 +2140,11 @@ export class Board3D {
         active: false,
         // Dragging on mouse/pen only, matching the flat board: on touch,
         // tap-to-move is primary and the page must still be able to scroll.
-        eligible: !isTouch && this.#pieces.has(square),
+        eligible: !isTouch && Boolean(group),
+        // Read now, while the raycaster is still aimed at this press.
+        hold: group ? this.#holdOn(group) : null,
+        // Where the pointer has the foot, before the rim stops it. See finish.
+        foot: null,
       };
     });
 
@@ -2138,19 +2155,40 @@ export class Board3D {
       if (!drag.active) {
         if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 8) return;
         drag.active = true;
+        // Keep hearing about this pointer after it leaves the board. Without
+        // the capture a piece carried past the edge and let go there was
+        // never let go as far as this board knew: the release went to
+        // whatever was under the pointer, and the piece hung in the air at
+        // the rim until something else redrew it.
+        try {
+          root.setPointerCapture(event.pointerId);
+        } catch {
+          // A pointer the browser has already forgotten. The drag still
+          // works for as long as it stays over the board.
+        }
         this.#onSquareActivate(drag.square);
       }
 
       // Carry the piece under the pointer at a slight lift, so it reads as
-      // picked up rather than shoved along the surface — and at the pointer
-      // itself, not at the centre of the square the pointer is over. Those
-      // differ by up to half a square, which at drag speed is the difference
-      // between a piece held in the hand and a piece teleporting between
-      // squares one jump behind the cursor.
+      // picked up rather than shoved along the surface — and by the part of
+      // it that was taken hold of, not by the centre of the square the
+      // pointer is over. Those differ by up to half a square across and, for
+      // a tall piece held by its head, by more than a square up the screen,
+      // which at drag speed is the difference between a piece held in the
+      // hand and a piece teleporting between squares one jump behind the
+      // cursor.
       const group = this.#pieces.get(drag.square);
-      const point = this.#pointerOnDragPlane(event);
-      if (group && point) {
-        group.position.copy(point);
+      const foot = this.#carriedFoot(event, drag.hold);
+      if (group && foot) {
+        drag.foot = foot;
+        // The sheet is infinite and the board is not. Past the rim the piece
+        // is pinned to the edge rather than sent off toward the horizon.
+        const edge = HALF + RIM;
+        group.position.set(
+          Math.min(Math.max(foot.x, -edge), edge),
+          foot.y,
+          Math.min(Math.max(foot.z, -edge), edge),
+        );
         this.#needsRender = true;
       }
     });
@@ -2166,11 +2204,14 @@ export class Board3D {
         return;
       }
 
-      const dropSquare = this.#squareFromEvent(event);
       const group = this.#pieces.get(drag.square);
       // Read before anything is activated: activating re-renders, and a
       // re-render moves this piece. See #settlePiece.
       const held = group ? group.position.clone() : null;
+      // From where the pointer has it rather than where the rim stopped it,
+      // so a piece carried off the board is dropped off the board — not on
+      // whichever edge square it was pinned beside.
+      const dropSquare = drag.foot ? this.#squareUnder(drag.foot, group) : null;
 
       if (dropSquare && dropSquare !== drag.square) {
         // Where their hand actually let go. If the move is legal the render
@@ -2279,13 +2320,15 @@ export class Board3D {
       if (!marker.visible) return;
       const square = this.#worldToSquare(marker.position);
       const hex = marker.material.color.getHex();
-      // Shape first, then colour. The from-square ring is the same gold as the
-      // selection at a similar opacity, so classifying on colour alone
-      // reported it as a selected square — which was wrong in the debug output
-      // and would have been wrong in any test that trusted it.
-      const isRing = marker.geometry?.type === 'RingGeometry';
+      // Shape first, then colour, because colour alone is not a name: the
+      // capture halo is the same red as the check square, and the from-square
+      // ring was once the same gold as the selection. And shape by identity,
+      // not by type — the halo is a RingGeometry too, and classifying on the
+      // type would report every capture on offer as where the last move left.
+      const isShape = (shape) => marker.geometry === this.#geometries.get(`geo:marker:${shape}`);
       if (marker === this.#focusMarker) markers.focus = square;
-      else if (isRing) markers.lastFrom = square;
+      else if (isShape('ring')) markers.lastFrom = square;
+      else if (!isShape('square')) return; // a move dot or a capture halo
       else if (hex === HIGHLIGHT.check.color) markers.check = square;
       else if (hex === HIGHLIGHT.selected.color && marker.material.opacity > 0.4) {
         markers.selected = square;
@@ -2300,20 +2343,18 @@ export class Board3D {
        * What the renderer decided about this device, and what it did with it.
        *
        * Exposed because the alternative is judging the finish by eye from a
-       * screenshot, and the interesting claims here — the board surface is not
-       * a flat fill, the pieces only carry the expensive material where there
-       * is a GPU to draw it — are measurable ones.
+       * screenshot, and the interesting claims here — the tiles are not a
+       * flat fill, the whole set is one material — are measurable ones.
        */
       detail: {
         rich: this.#richDetail,
         toneMapping: this.#renderer?.toneMapping,
         exposure: this.#renderer?.toneMappingExposure,
-        environment: Boolean(this.#environment),
-        pieceMaterial: this.#materials.get('mat:w')?.type ?? null,
-        boardRoughnessMap: Boolean(this.#boardRoughness),
+        pieceMaterial: this.#materials.get('mat:clay')?.type ?? null,
         anisotropy: this.#boardTexture?.anisotropy ?? 0,
-        // The generated chequer canvas, so a test can read the pixels back and
-        // check the grain is really there rather than trusting the code path.
+        // The generated tile canvas, so a test can read the pixels back and
+        // check the rolled edges are really there rather than trusting the
+        // code path.
         boardCanvas: this.#boardTexture?.image ?? null,
       },
       richDetail: this.#richDetail,
@@ -2341,6 +2382,30 @@ export class Board3D {
           y: rect.top + ((1 - ndc.y) / 2) * rect.height,
         };
       },
+
+      /**
+       * Where a piece is drawn, in client coordinates: a point on its axis
+       * four fifths of the way up, which is a pawn's head and a king's crown.
+       *
+       * Not the same place as its square. A tall piece is drawn most of a
+       * square beyond its own foot, and where it is drawn is where a player
+       * presses it — so a test that presses the middle of the square is
+       * testing something no finger does.
+       */
+      projectPiece: (square) => {
+        const group = this.#pieces.get(square);
+        if (!group) return null;
+        const rect = this.#canvas.getBoundingClientRect();
+        const height = PIECE_HEIGHT[group.userData.piece[1]] ?? PIECE_HEIGHT.p;
+        const ndc = group.position.clone().setY(group.position.y + height * 0.8).project(this.#camera);
+        return {
+          x: rect.left + ((ndc.x + 1) / 2) * rect.width,
+          y: rect.top + ((1 - ndc.y) / 2) * rect.height,
+        };
+      },
+
+      /** The square a press at this point on the page would mean. Presses nothing. */
+      pickAt: (clientX, clientY) => (this.#aim(clientX, clientY) ? this.#squareOnRay() : null),
 
       /** Where a piece actually is in the scene, mid-animation included. */
       piecePosition: (square) => {

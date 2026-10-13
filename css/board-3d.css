@@ -17,7 +17,9 @@
   display: block;
   position: relative;
   padding: 0;
-  overflow: hidden;
+  /* Visible, so the shadow the canvas throws on the grass is not cut off at
+     the edge of the board's own box. Nothing in here overflows otherwise. */
+  overflow: visible;
   /*
      board.css gives .board `container-type: size` so pieces can scale from the
      board's size. That is a purely 2D concern here, and a size container also
@@ -26,6 +28,10 @@
   */
   container-type: normal;
   background: transparent;
+  /* The flat board's tray, taken back off: this one models its own. */
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
 }
 
 .board3d__canvas {
@@ -40,6 +46,17 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  /*
+     The shadow the board throws on the lawn.
+
+     The canvas is transparent wherever there is no board, so a drop-shadow
+     follows the board's real outline — the rounded tray, and the pieces that
+     stand above its far edge — rather than the square the canvas is. It is
+     the cheap half of a ground shadow: a shadow-catching plane in the scene
+     would be the honest half, and would be cut off at the edge of the canvas,
+     which the board very nearly fills.
+  */
+  filter: drop-shadow(0 16px 12px rgba(33, 84, 14, 0.42));
 }
 
 /*
@@ -78,7 +95,7 @@
    element the browser actually considers focused.
 */
 .board3d__cell:focus-visible {
-  outline: 2px dashed rgba(232, 180, 76, 0.75);
+  outline: 2px dashed rgba(28, 120, 207, 0.8);
   outline-offset: -3px;
   border-radius: 2px;
 }
@@ -89,8 +106,7 @@
    summary of what choosing it does.
 */
 .style-option__preview[data-style="board3d"] {
-  background:
-    linear-gradient(160deg, #2a3142 0%, #1a1f2b 100%);
+  background: repeating-conic-gradient(var(--bg-glow) 0% 25%, var(--bg) 0% 50%) 0 0 / 18px 18px;
   position: relative;
   overflow: hidden;
 }
@@ -99,12 +115,11 @@
   content: "";
   position: absolute;
   inset: 18% 8% 10%;
-  background:
-    repeating-conic-gradient(#ecd8b6 0% 25%, #b07d4f 0% 50%) 0 0 / 50% 50%;
+  background: repeating-conic-gradient(#f9e4b7 0% 25%, #b97a4f 0% 50%) 0 0 / 50% 50%;
   transform: perspective(60px) rotateX(34deg);
   transform-origin: center bottom;
   border-radius: 2px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 3px 0 #94603f;
 }
 
 /*
@@ -115,10 +130,10 @@
 */
 .board3d-unavailable {
   padding: 12px 14px;
-  border-radius: 10px;
-  background: rgba(229, 89, 77, 0.12);
-  border: 1px solid rgba(229, 89, 77, 0.35);
-  color: var(--text-dim, #9aa3b5);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
   font-size: 0.85rem;
   line-height: 1.45;
 }

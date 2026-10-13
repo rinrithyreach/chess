@@ -73,7 +73,12 @@ Both ends of the last move are tinted, and **the square the piece came from
 also carries a ring** — an empty circle behind, the piece ahead. Tinting both
 ends says a move happened; it does not say which way, and which way is the
 thing you want when you look up and someone has moved. Both boards draw the
-same ring in the same gold at the same radius.
+same ring in the same amber at the same radius.
+
+The square you are holding is **blue** and the last move is **yellow**, where
+both used to be one gold. Gold was chosen against a dark page and a wood
+board; on cream tiles it is the colour of the tile. A move dot is brown on a
+pale tile and cream on a dark one, because no single colour reads on both.
 
 **Three game modes** — *Local Two Player* (share one device), *Player vs Bot*
 and *Online Multiplayer*. Each is a session provider and nothing else: the
@@ -483,21 +488,27 @@ otherwise somebody with friends would appear idle to all of them for the
 whole game they are visibly in the middle of.
 
 **Captured pieces, drawn in 3D** — the piles are the board's own pieces, not
-Unicode glyphs. `Board3D.pieceSprite()` builds the real piece — the same lathed
-body, the same detail solids, the same clearcoat material — and reads it back
+Unicode glyphs. `Board3D.pieceSprite()` builds the real piece — the same baked
+lumps of the same clay under the same soft light — and reads it back
 through a render target as an image, so a captured knight is the knight that
 was on the board rather than a flat glyph of somebody else's chess set standing
 next to a solid one. Twelve portraits, drawn once each and cached, through the
 existing WebGL context rather than a second one.
 
-Two things that had to be got right. The portraits are framed to the **tallest
+Three things that had to be got right. The portraits are framed to the **tallest
 piece in the set**, not to each piece's own box: framing every piece to fill its
 own square is the obvious approach and it renders a pawn the same size as a
-king, at which point the pile stops reading as chess pieces. And the black
+king, at which point the pile stops reading as chess pieces. The black
 pieces get a **rim light** — on the board they are legible because they stand on
-a pale square, and in a tray there is no square, so an unlit black piece on a
-dark panel is a piece-shaped hole. Lighting from behind draws the edge that
-carries the shape at this size.
+a pale tile, and in a tray there is no tile — the tray is a dark groove in the
+lawn — so an unlit charcoal piece in it is close to a piece-shaped hole. Lighting from behind draws the edge that
+carries the shape at this size. And each portrait is drawn **more than twice as
+wide as the column it sits in**. The pieces are tall, so a square picture of one
+is mostly empty at the sides — the broadest, the knight, fills under half of it
+— and at the column's own width a king is a mark 6px across. At 30px and
+centred it is 27px high and 12px across, and the knight's 14px is still inside
+a 14px column, which is where the column's width comes from. The part that
+overhangs is the empty part.
 
 The flat fallback board has no geometry to photograph, so there the trays fall
 back to the Unicode glyphs.
@@ -512,21 +523,29 @@ next to the name, because that is the part you read at a glance.
 The columns are **overlaid, not laid out beside the board**, and that is the
 whole trick. The board is square and limited by width, so a column in the flow
 costs a pixel off each side of every square — measured at 14%, more than the
-full-bleed change had just won back. It does not have to cost anything, because
-the canvas is already not full of board: the camera reserves headroom for a
-king standing on the far rank, so at the default angle the board is drawn
-across 84% of the canvas and the rest is empty either side. 32px of it on a
-390px phone, against a 20px column. The tray goes there, free.
+full-bleed change had just won back. It does not have to cost anything at the
+default zoom, because the canvas is already not full of tiles: the camera
+keeps the board's rim in frame, so the tiles are drawn across 93% of the
+canvas and the rest is rim and a sliver of lawn either side — 14.8px of it on
+a 412px phone, against a 14px column. The tray goes there.
 
-That margin narrows as the camera rises, so the board takes real padding at
-**Max** alone, where there is none left to borrow. Measured, with the tray
-clearing the board at every level:
+It used to go there with room to spare, in a 20px column. That was while the
+board was drawn through a short lens, which shrinks the far side and needs a
+wide margin to keep a corner king in frame, and while the fit left a further
+4% all round. The long lens the tall pieces are drawn through does not need
+the first, and the second was given to the squares: the board is now fitted to
+the canvas rim to rim, which on a phone is the edge of the screen. So the
+column is as slim as the broadest piece allows — 3.4% of the board's width,
+a fraction rather than a number of pixels because the margin it stands in is
+a fraction too — and Large, which crops half the rim, is padded by what it is
+short. Measured on a 412px phone, to the tiles of the near rank, with the
+tray clearing them at both levels, and checked the same way at 320, 360 and
+390px:
 
-| Level | Board drawn | Margin per side | Tray | Overlap |
-| --- | --- | --- | --- | --- |
-| Fit (default) | 321px | 32px | 20px | none |
-| Large | 345px | 20px | 20px | none |
-| Max | 328px | 8px | 20px | none (board padded) |
+| Level | Tiles drawn | Padding per side | Margin per side | Tray | Overlap |
+| --- | --- | --- | --- | --- | --- |
+| Fit (default) | 382px | none | 14.8px | 14px | none |
+| Large | 384px | 6px | 14.1px | 14px | none |
 
 The piles come from the **move history**, not from comparing the position
 against a full starting set. That distinction is the whole correctness story: a
@@ -602,32 +621,130 @@ own UI during `beforeunload`, and browsers replace whatever it supplies with
 fixed wording of their own — so the dialog goes on the other side of the
 reload, where the app is in charge of it.
 
-**One board, and it is the 3D one.** A real WebGL board: turned pieces with
-genuine depth, a lit scene with cast shadows, a camera that swings round the
-board when you flip it, and moves that carry the piece through the air. Its
-pieces are *generated*, not modelled — chess pieces are surfaces of revolution,
-so a two-dozen-point profile produces a real lathe-turned piece with its
-plinth, chamfer, collar and coronet. There are no model files to ship or keep
-in sync.
+**The look is clay.** A set modelled out of coloured clay, standing on a tray
+of clay tiles, on a lawn — and a page round it built from the same stuff:
+cream slabs with a visible side, chunky blue buttons that sink when you press
+them, white lettering outlined in dark ink. It replaced a dark page with a
+lacquered wooden set, whole rather than as a theme beside it, the way every
+other look this app has had was replaced.
 
-The knight is the exception twice over: it is not a surface of revolution, and
-after two attempts it is no longer an extruded silhouette either. It is built
-from eight solids — neck, cranium, jaw, muzzle, two ears and three mane lobes —
-placed and then baked into a single geometry at build time, so it costs the
-same two draw calls a lathe-turned piece does. See *Things that went wrong*
-for why the silhouette approach could not work on a board seen from above.
+**One board, and it is the 3D one.** A real WebGL board: a lit scene with cast
+shadows, a camera that swings round the board when you flip it, and moves that
+carry the piece through the air. Its pieces are *generated*, not modelled.
+Each is a recipe — a list of rounded lumps, a few numbers apiece: a wide foot,
+a body, a band, and whatever the piece wears on top — lathed and pressed into
+one mesh. What tells them apart is deliberately not subtle: the pawn is a ball
+on a skirt with a spear stood beside it, the rook has teeth, the bishop a gold
+ball on a tall egg, the queen a ring of gold points, the king a cross. There
+are no model files to ship or keep in sync.
 
-**The finish.** Filmic tone mapping, so a highlight on a turned surface rolls
-off and keeps its shape instead of clipping to a bald white patch. A small
-studio — graded sky, warm softbox where the key light is, cool fill opposite,
-floor bounce — built from primitives and prefiltered into a cube map, so the
-pieces have a room to reflect: a polished object reads as polished because you
-can see something in it, and before this there was nothing. A clearcoat over
-each piece, because a finished piece is lacquer over wood and one specular lobe
-has to average the two into something that looks like neither. And the board is
-a surface rather than two colours: every square gets its own wood grain, with
-its own direction and its own seed, a matching roughness map so the grain
-catches the light, and a drawn seam at every join.
+The lumps are different colours, the way a clay piece is made: the side's own
+body colour, an accent band that says which side a piece is on even in shadow
+(peach for White, green for Black), gold trim on the pieces that wear
+something, and a second neutral for the knight's head and the bishop's robe.
+It is still **one material**. The pigments are baked into each geometry as
+vertex colours, so a piece is a single mesh and the whole set is thirty-two
+draw calls with one shared material, where separately coloured parts would
+have been three or four apiece.
+
+The knight is the exception: a horse's head is not a surface of revolution, and
+after two attempts it is not an extruded silhouette either. It is built from
+primitive solids — neck, cranium, jaw, muzzle, two ears, and three mane lobes
+in the accent colour — placed and baked in with the rest. See *Things that
+went wrong* for why the silhouette approach could not work on a board seen
+from above.
+
+**The pieces are tall.** A king stands nearly two squares high on a foot less
+than one across, which is about what a tournament set is, and a pawn a little
+over one, with the point of its spear a third of a square above its head. The
+first clay set was two thirds of that — squat, on the reasoning that clay
+slumps and that a tall back rank hides the pawns in front of it. Both are true
+and it was still the wrong call: seen from 56 degrees a squat piece is mostly
+the top of its own foot, and six kinds of disc are hard to tell apart.
+Standing up, each piece shows its side, which is where a rook's teeth and a
+queen's crown actually are. The widths did not change. Stretching a piece
+upward while its rings, balls and feet stay the size they were keeps a ball a
+ball; scaling the whole thing by one number would have made eggs of the heads.
+
+Two things had to change with them.
+
+**The lens.** The board was drawn through a 38-degree lens from fifteen
+squares away, and a short lens that close sees each rank from a different
+angle: the near one from 68 degrees, the far one from 46. A piece seen from 68
+degrees shows a third of its height. With pieces no taller than a tile that
+hardly mattered; with tall ones Black's stood up and White's — the ones the
+player is actually holding — were lids seen from above. It is now a 12-degree
+lens from forty-four squares away. The two ranks are within eight degrees of
+each other, so a piece looks the same wherever it stands, and the board is
+drawn nearly square-on: a far square is nine tenths the width of a near one,
+where it was three quarters. That gave the far rank back most of the tap size
+perspective had been costing it — see *Board size*.
+
+**And what a press means.** A tall piece is drawn most of a square beyond its
+own foot, over the tile behind it. The board used to resolve a pointer to
+wherever its line of sight met the tiles, so a press on a pawn's head — which
+is where anyone presses a pawn — would have landed on the empty tile behind it
+and selected nothing. Now the pieces are asked first, and the answer is the
+first thing along the line of sight that the press *could mean*: a square the
+selected piece may move to, or a piece that has a move. What is drawn under
+the pointer is what was pressed, and that test is what lets you reach past
+it. At the start of every game the king's cross is drawn over the middle of
+the e-pawn's square; the king has nowhere to go, so a press there is the
+pawn's. (The controller now hands the board the list of pieces that can move,
+`movable`, for exactly this.)
+
+One exception, and it is the one that matters: a press that lands on one of
+your own pieces is never passed on as a *move* to a tile behind it. It may
+have been meant for that piece — you need not know it is pinned — and guessing
+wrong the other way plays a move nobody chose, which online cannot be taken
+back. Picking up the wrong piece costs one more press.
+
+The test is against the pieces' own triangles, not a cylinder standing in for
+each: the pawn you can see beside a king's cross is inside any cylinder drawn
+round that king. A margin for near misses was tried as well and taken out.
+From this angle the middle of an empty tile is a twentieth of a square above
+the head of the pawn in front of it, so any margin worth having swallowed the
+middle of that tile, and pressing an empty square picked up a pawn.
+
+**The finish.** Matt, but not chalk: at full roughness a rounded lump has no
+highlight at all and reads as a flat disc of colour, so there is just enough
+sheen to show it is round. The scene is lit like a tabletop in daylight — one
+soft key and a great deal of fill — because that ratio is the clay look as much
+as the material is; a hard key over a dark fill is how you light lacquer, and
+makes matt clay look like stone. Tone mapping is the neutral curve rather than
+the filmic one: ACES buys its highlight roll-off by desaturating everything
+under it, which turned peach to beige and the green to khaki, and a clay set's
+colours *are* the look. The tiles are one textured plane, each painted with
+its own rolled edge, lit on the side that faces the key light and shaded on
+the other — which is what makes sixty-four flat quads read as sixty-four
+tiles — sitting in a tray with its corners and edges rolled off.
+
+The environment map, the clearcoat and the wood grain that the lacquered set
+needed all went with it. None of them had anything to do on matt clay, and
+the environment map was the single most expensive thing the old scene did.
+
+**The page.** Bright grass in a two-tone check, with a bush in two of the
+corners. Panels are cream slabs that show their side along the bottom edge and
+throw a green shadow, not a grey one. Buttons are the same slab in another
+colour — blue to act, red to warn, cream for the answer that is not the main
+one — and their hover and press are one quantity going two ways: how much of
+the side is showing. Lifting raises the face and deepens the side by the same
+two pixels; pressing drops the face onto its own base. The foot of the button
+never moves, which is what makes it read as a solid thing being pushed.
+Headings that stand directly on the grass are white with an ink outline;
+small print never stands on grass at all, which is why the New Game form
+became a slab of its own.
+
+The typeface is **Fredoka**, shipped with the site in `assets/fonts` rather
+than fetched from a font host: one variable file, 30KB, covering every weight
+used. The look leans on it — outlined lettering only reads as lettering in a
+face whose strokes are as round and heavy as the outline. Names typed in
+another script fall through to the system font behind it.
+
+**Board themes** — *Caramel* (the default), *Blueberry* and *Strawberry*: three
+colours of tile, in Settings. Caramel keeps the id `classic`, which every
+stored setting already names; a device that had saved *Midnight* or *Wood*
+lands on Caramel with no migration step.
 
 Both boards draw from **one palette**: the 3D board reads the same colours the
 flat board's CSS names for that theme, and the exposure is what compensates for
@@ -655,26 +772,39 @@ the exception, and still follows the device, because it moves the whole view.
 
 Dragging follows the pointer continuously rather than snapping the piece to the
 centre of whichever square it is over, and a piece released onto a square it
-cannot legally reach is animated back rather than teleported. The timings live
+cannot legally reach is animated back rather than teleported. A piece is
+carried by the part of it that was taken hold of: take a king by its cross and
+the cross stays under the pointer, where carrying it by its foot — which is
+what a short piece got away with — jumps the whole king a square and a half up
+the screen. It is put down on the square its foot is seen over. The timings live
 in `config.js` and the tests read them from there, so tuning them cannot leave
 a stale number behind in an assertion.
 
-**Board size**, in the control row next to Flip, in three steps: *Fit* (the
-default), *Large* and *Max*. It is zoom, but implemented as camera
+**Board size**, in the control row next to Flip, in two steps: *Fit* (the
+default) and *Large*. It is zoom, but implemented as camera
 elevation rather than as a dolly, which sounds like the wrong lever until you
 measure the board. On a 412px phone the frame is square while the board, seen
-from 56 degrees, projects about 1.35 times wider than tall — roughly 110px of
-the frame's height is empty sky. Raising the camera spends that space on the
+from 56 degrees, is drawn about 1.25 times wider than it is deep — the tiles
+take 304px of the frame's height, and the rest is the far rank's heads and
+lawn. Raising the camera spends that space on the
 board, so **the whole board stays visible at every step and there is nothing to
 pan**; a dolly would have to crop to get squares the same size, and a chessboard
-you have to scroll around is worse than a small one. At the top step the frame
-also crops the wooden rim, which is another tenth of the width spent on
-something you never tap.
+you have to scroll around is worse than a small one. At Large the frame also
+crops half of the wooden rim, which is width spent on something you never tap.
 
-It fixes the more annoying half of the problem too. At the low angle the far
-rank is a 23.9px target while the near rank is 36.6px; at Max they are 41.8px
-and 46.2px — **every square within 3px of every other**. Each level is measured
-square by square through the live camera in the board-size suite.
+It evens the squares out too. At the low angle a far-rank square is 35px deep
+against 41px for a near one; at Large they are 42px and 46px. Each level is
+measured square by square through the live camera.
+
+And since the pieces were made tall it does a third thing, which is now the
+main one. From 56 degrees a piece stands in front of whatever is behind it;
+from 70 a pawn stays inside its own tile and a queen's crown covers about a
+sixth of the one behind. A player who would rather see the squares than see
+the pieces standing up is one press from that.
+
+There was a third step, *Max*, looking almost straight down from 84 degrees.
+It has been removed. The setting is stored as a step number, so a device that
+had Max saved lands on Large, the nearest step left, with no migration.
 
 There is no Look & Feel setting any more. Every player gets the 3D board, so
 the picker had nothing left to choose between, and a radiogroup of one is a
@@ -698,29 +828,31 @@ skin, and a saved `classic` from back when it was on offer, both land on the
 3D board with no migration step and nobody left behind. (`js/board-3d.js`
 explains in its header why Arcade went; the history is in git.)
 
-**Background** — *Midnight*, the one ground. Not only the strip around the
+**Background** — *Meadow*, the one ground. Not only the strip around the
 board — the 3D renderer is transparent, so the page shows through its scene as
-well as around it. It redefines the surface tokens only — ground, glow, panels
-and borders, in one hue — so cards, modals and toasts follow without being
-listed, while text and accent tokens carry the contrast and are left alone.
+well as around it, and the board throws its shadow straight onto the grass. It
+redefines the surface tokens only — the ground, its second tone, panels and
+borders — so cards, modals and toasts follow without being listed, while text
+and accent tokens carry the contrast and are left alone.
 
-*Charcoal*, *Forest* and *Mahogany* have been removed, and the Background row
+*Midnight* was the ground while the set was lacquered wood, and went with it;
+*Charcoal*, *Forest* and *Mahogany* had gone before, and the Background row
 in Settings with them. It hides rather than being deleted, for the reason Look &
 Feel does: a radiogroup of one is a control that cannot do anything, so the
 section hides whenever fewer than two backgrounds exist and would come back on
-its own if a second were added. A device that had saved one of the three lands
-on Midnight with no migration step — `resolveBackground`, and the inline script
+its own if a second were added. A device that had saved any of them lands
+on Meadow with no migration step — `resolveBackground`, and the inline script
 that applies the ground before first paint, both decline an id they do not know
 and fall back to the default.
 
 **Interface** — start screen, new-game setup, waiting room with the shareable
 code, responsive game screen, friends panel, chat sheet, settings (sound,
-board theme, coordinates, animations, auto-flip, chat and emotes),
+board theme, animations, chat and emotes),
 custom confirmation modals, toasts, and a collapsible move history.
 
 **Every control answers the pointer** — hovering any button lifts it 2px,
-opens a shadow under it, and on the gold and red solid buttons sends a sheen
-across the face. One block at the end of `style.css` rather than a transform
+shows 2px more of its side, and on the blue and red solid buttons sends a
+sheen across the face. One block at the end of `style.css` rather than a transform
 scattered through nine components, and it is deliberately last in the file:
 these selectors are no more specific than the component rules they extend, so
 source order is what makes them win.
@@ -788,6 +920,7 @@ chess-game/
 │   ├── database.rules.json       Security rules (deploy these!)
 │   └── README.md                 What the rules do and do not enforce
 └── assets/
+    ├── fonts/                    Fredoka (variable, two subsets) and its licence
     ├── pieces/{white,black}/     Optional SVG piece drop-in
     └── sounds/                   Optional .mp3 drop-in
 ```
@@ -1378,8 +1511,8 @@ Five independent `localStorage` keys are used so a corrupt game never costs
 you your preferences:
 
 - `chess-arena:game` — the current game
-- `chess-arena:settings` — sound, board theme, background, coordinates,
-  animations, auto-flip, chat and emotes
+- `chess-arena:settings` — sound, board theme, background, animations, chat
+  and emotes
 - `chess-arena:avatars` — the remembered profile picture for each New Game seat
 - `chess-arena:profile` — the name this device plays online under, and the
   friend code it claimed
@@ -1479,7 +1612,7 @@ the totals are reported separately rather than as one number:
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
-| **Capture trays (Chromium)** | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at all three zooms — must vanish when empty, must follow a board flip, and a full pile of 15 3D portraits must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
+| **Capture trays (Chromium)** | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at each zoom — must vanish when empty, must follow a board flip, and a full pile of 15 3D portraits must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
 | **Mobile board + captures (Chromium)** | **24** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
 | **Room code length (Chromium + emulator)** | **14** | **Six characters everywhere the length appears independently: the constant, `ONLINE_AVATARS`, the normaliser, the join field's maxlength and typing limit, both placeholders, and the security rules — which cannot import the constant, so they are checked to accept 6 and reject 3, 4 and look-alike characters** |
@@ -1585,9 +1718,9 @@ And two from building that WebGL board:
 10. **The knight took three goes, and the first two failed the same way.** Its
    head began as an extruded 2D silhouette, which is the natural choice — the
    silhouette is what identifies the piece. But this camera looks down at the
-   board from between 56 and 84 degrees, and the silhouette lives in a
+   board from between 56 and 70 degrees, and the silhouette lives in a
    vertical plane: at 56 degrees that plane keeps about half its height on
-   screen, at 84 degrees a tenth. The identity of the piece was in the part
+   screen, at 70 degrees a third. The identity of the piece was in the part
    you cannot see. Attempt one extruded it deeper; attempt two tapered the
    extrusion so the muzzle was narrower than the cheek and tipped the head
    back to turn the profile toward the camera — which laid the horse on its
@@ -1750,6 +1883,67 @@ being hidden by a rule that changed underneath it:
    chat one decides whether an arriving message is news, so a message landing
    in that window would have been counted unread while you were looking
    straight at the log it arrived in.
+
+18. **The 3D board's squares were the wrong way round.** a1 was a light
+   square and the white queen stood on a dark one, for as long as the board
+   had existed. The texture is painted far rank first, a-file first, so the
+   first tile painted is a8 — a light square — and the test for "is this one
+   light" was `(row + col) % 2 === 1`, which makes it dark. The flat board
+   was always right; it asks `squareShade()`, which works from the
+   coordinate. Nothing caught it because every test of the 3D board asked
+   which square a click landed on and none asked what colour it was — and a
+   board with every square swapped is still a perfectly regular chequer.
+   Found by sampling rendered pixels while recolouring the tiles, when the
+   list labelled "light" came back brown.
+
+19. **Flipped, the 3D board's coordinates were upside down and wrong.** The
+   labels are painted into the board's texture, and the texture is repainted
+   on a flip so they can move to the edges nearest the viewer. It moved them
+   — and also renumbered them, so the rank nearest a player sitting as Black
+   read 1 on the row their own king started on, and the a-file was lettered
+   h. And it drew them the texture's way up, which from Black's side is
+   upside down. Flipping swings the camera round; no square goes anywhere, so
+   which edge a label sits on depends on the view and what it says does not.
+   Each label is now the square's true name, in a cell turned half a circle
+   before it is written so it faces whoever is reading it. Anybody playing
+   Black online, or with the board flipped, had been looking at this.
+
+20. **A pawn could not promote on a phone.** Tap the last rank and the picker
+   opened and closed in the same instant, the pawn still on the seventh. Both
+   boards act when the finger lifts — `pointerup` activates the square — and
+   a browser follows every touch with a click of its own, aimed *after* that
+   handler has run. So the click for the tap that opened the picker was
+   delivered to the picker. Mostly it landed on the backdrop, which cancels.
+   In two of twelve positions tried it landed on one of the four pieces
+   instead and promoted to it: a piece nobody chose, in a game with no undo.
+
+   A mouse never does this — its click goes to where the button went down and
+   came up, which is the board — so it worked on every desktop, and every
+   test that had ever promoted a pawn had done it with a mouse or by calling
+   the controller. Reproducing it needed real touch input, with the browser
+   building the click itself.
+
+   Fixed at both ends, and either end alone is enough. The boards cancel
+   `touchend`, which is how a page says a touch has been dealt with: no click
+   follows. Scrolling is untouched, since that is settled on `touchstart` and
+   `touchmove`, and nothing inside a board listens for a click. And a dialog
+   no longer accepts a press that is older than it is — an event is stamped
+   with when the input happened, not when it was delivered, so a click
+   belonging to the gesture that opened a dialog carries a time from before
+   the dialog existed. No coordinates, no grace period. That second rule is
+   there so the first does not have to be remembered by whatever opens a
+   dialog from a `pointerup` next.
+
+21. **A piece carried off the board and let go was left hanging.** Drag a
+   piece with a mouse past the edge of the board, release it there, and it
+   stayed in the air at the rim — until something else happened to redraw the
+   board. The board listened for the release on its own element and never
+   asked to keep the pointer, so a button that came up over the page instead
+   was reported to the page, and as far as the board knew the piece was still
+   in the player's hand. It takes pointer capture when a drag starts now,
+   which is what capture is for: the release comes home wherever it happens,
+   and the piece is seen to go back to its square. Found by the test written
+   for carrying the tall pieces, which let go off the board on purpose.
 
 ### Manual checklist
 
@@ -1918,36 +2112,43 @@ the DOM**. Set it to `false` before shipping.
     is worst by a wide margin, so its real-GPU cost is inferred rather than
     measured.
 
-17. **Perspective still costs tap size, but far less than it did.** The far
-    rank used to be a 22px target on a 412px phone against the near rank's
-    36px — the hardest square on the board to hit. The board-size control
-    fixes most of that by raising the camera rather than dollying in, which
-    spends the empty sky a tilted board leaves in a square frame instead of
-    cropping anything.
+17. **A tilted board still costs tap size, and a tall piece hides part of
+    the square behind it.** The far rank used to be a 22px target on a 412px
+    phone against the near rank's 36px — the hardest square on the board to
+    hit. Most of that was the lens rather than the angle, and went when the
+    lens did. What is left is the angle itself: a square seen from the side
+    is not as deep as it is wide.
 
     **The default is Fit, which is the level that costs the most here.** It is
     chosen for how the board looks rather than for reach, and the numbers are
-    worth stating plainly. Measured through the live camera on a 390px phone,
-    with the board now running edge to edge:
+    worth stating plainly. Measured through the live camera on a 412px phone:
 
-    | Level | Board drawn | Far rank | Near rank | Far square area |
+    | Level | Tiles drawn | Far square | Near square | Far square area |
     | --- | --- | --- | --- | --- |
-    | **Fit** (default) | 321px (82% of the screen) | **24px** | 36px | 745px² |
-    | Large | 345px (88%) | 32px | 43px | 1171px² |
-    | Max | 366px (94%) | 42px | 47px | 1819px² |
+    | **Fit** (default) | 382px (93% of the screen) | 44 x **35px** | 48 x 41px | 1534px² |
+    | Large | 384px (93%) | 45 x 42px | 48 x 46px | 1880px² |
 
-    So a far-rank square at Fit is under half the area of one at Max, and a
-    24px target against the 44px this app uses everywhere else. Fit also draws
-    the board across only 82% of the screen even though the canvas is full
-    width — that is the level's own geometry rather than slack, because the
-    camera reserves headroom for a king standing on the far rank, which at a
-    low angle projects well above the board.
+    So a far-rank square at Fit is four fifths the area of one at Large, and
+    35px deep against the 44px this app uses everywhere else. The board is
+    as wide as the phone allows at both levels: it is fitted to the canvas
+    rim to rim, the canvas runs to the edges of the screen, and what is left
+    either side is the 14px column the taken pieces stand in.
 
-    None of this is a trap: the Size control cycles the three levels and says
-    which one you are on, so a player who finds the back rank fiddly is one tap
-    from Large and two from Max, and the choice is remembered. Every square is
-    reachable at every level regardless — picking is a raycast against real
-    geometry, and all 64 are verified individually at every zoom level.
+    The other cost is new with the tall set and is the larger one. At Fit a
+    piece is drawn over the lower part of the tile behind it: a pawn's head
+    covers about a quarter of it, a queen's crown about two thirds. A press on
+    the covered part is a press on that piece. The board reaches past an
+    opponent's piece that cannot be taken, and past one of your own only to
+    pick up another piece, never to play a move — so to move to a square
+    directly behind your own queen you press the part of the square you can
+    see. A move dot on that square is partly hidden for the same reason.
+
+    None of this is a trap: the Size control switches between the two levels
+    and says which one you are on, so a player who finds the back rank fiddly,
+    or wants more of every square in view, is one tap from Large, and the
+    choice is remembered. Every square is reachable at both levels regardless
+    — picking is a raycast against real geometry, and the middle of every
+    empty tile is verified to be that tile at each of them.
 5. **PGN import is not implemented.** Export and clipboard copy work; the
    engine already exposes `loadPgn()`, so import is a small addition.
 6. **There is no clock in any mode.** The one that existed belonged to
@@ -2023,4 +2224,6 @@ the DOM**. Set it to `false` before shipping.
 ## Licence
 
 `chess.js` is BSD-2-Clause (Jeff Hlywa); its licence header is preserved in
-`js/vendor/chess.js`. Application code is yours to use as you see fit.
+`js/vendor/chess.js`. Fredoka is by The Fredoka Project Authors, under the SIL
+Open Font Licence 1.1; the licence is beside the font files in
+`assets/fonts/OFL.txt`. Application code is yours to use as you see fit.

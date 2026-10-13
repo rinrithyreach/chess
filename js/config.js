@@ -349,54 +349,66 @@ export const INVITE_TTL_MS = 180_000;
  *
  * Implemented as camera elevation rather than as a dolly, which sounds like
  * the wrong lever until you measure the board. On a 412px phone the frame is
- * square but the board, seen from 56 degrees, projects about 1.35 times wider
- * than tall: roughly 110px of the frame's height is empty sky above and below
- * it. Raising the camera spends that empty space on the board instead of
- * cropping anything, so the whole board stays visible at every level and there
- * is nothing to pan. A dolly would have to crop to achieve the same thing, and
- * a chessboard you have to scroll around is worse than a small one.
+ * square but the board, seen from 56 degrees, is drawn about 1.25 times wider
+ * than it is deep: the tiles take 304px of the frame's 412, and the rest is
+ * the far rank's heads and lawn. Raising the camera spends that on the board
+ * instead of cropping anything, so the whole board stays visible at every
+ * level and there is nothing to pan. A dolly would have to crop to achieve
+ * the same thing, and a chessboard you have to scroll around is worse than a
+ * small one.
  *
- * It also fixes the more annoying half of the problem. At 56 degrees the far
- * rank is barely 23px tall while the near rank is 35px — the back rank is the
- * hardest thing on the board to tap. Elevation flattens that difference out;
- * at 84 degrees every square is within a few pixels of every other, and all of
- * them clear the 44px touch target.
+ * It evens the squares out as well. At 56 degrees a far-rank square is 35px
+ * deep against 41px for a near one; at 70 they are 42px and 46px, and the
+ * far one is all but the 44px touch target this app uses everywhere else.
  *
- * Ordered small to large, and the index is what is stored.
+ * And since the pieces were made tall it does a third thing, which is now the
+ * main one. From 56 degrees a piece is drawn most of a square beyond its own
+ * foot and stands in front of whatever is behind it; from 70 a pawn stays
+ * inside its own tile and a queen's crown covers a sixth of the one behind.
+ * A player who would rather see the squares than see the pieces standing up
+ * is one press from that.
+ *
+ * Two levels. There was a third, Max, from 84 degrees — almost straight down
+ * — and it has been removed. The index is what is stored, so a device that
+ * had Max saved holds a 2: clampBoardZoom lands it on Large, the nearest
+ * level left.
+ *
+ * Ordered small to large.
  */
 /**
  * `rim` is how much of the board's wooden border has to stay in frame, as a
- * fraction. The border is 0.84 of the board's 8.84 units across — nearly a
- * tenth of the width, spent on something you never tap. At the low angle it
- * has to stay: it is the visible front edge of the slab, and clipping it makes
- * the board look broken. Seen from above it is just a margin, so the top level
- * lets the frame crop it and gives the squares the width back.
+ * fraction. The border is 0.4 of the board's 8.4 units across — a twentieth
+ * of the width, spent on something you never tap. At the low angle it has to
+ * stay: it is the visible front edge of the slab, and clipping it makes the
+ * board look broken. Seen from higher up it is closer to being just a margin,
+ * so Large lets the frame crop half of it.
  */
 export const BOARD_ZOOM_LEVELS = [
   { id: 'fit', label: 'Fit', elevation: 56, rim: 1, hint: 'The cinematic angle' },
   { id: 'large', label: 'Large', elevation: 70, rim: 0.5, hint: 'Bigger, still clearly 3D' },
-  { id: 'max', label: 'Max', elevation: 84, rim: 0, hint: 'Every square the same size' },
 ];
 
 /**
  * Fit — the first level, and the cinematic angle.
  *
  * This is a deliberate choice of looks over reach, and it is worth being
- * precise about what it trades. Measured through the live camera on a 390px
- * phone, with the board now running edge to edge:
+ * precise about what it trades. Measured through the live camera on a 412px
+ * phone:
  *
- *   Fit    far square 31x24   near 40x36
- *   Large  far square 36x32   near 43x43
- *   Max    far square 43x42   near 46x47
+ *   Fit    far square 44x35   near 48x41
+ *   Large  far square 45x42   near 48x46
  *
- * So the back rank is a 24px target here against 42px at Max. That is well
+ * So the back rank is a 35px-deep target here against 42px at Large. That is
  * under the 44px this app uses everywhere else, and it is the cost of seeing
- * the board in perspective: a board drawn at an angle cannot hold the same
- * target on every rank, because that is what perspective means.
+ * the board from an angle: a square seen from the side is not as deep as it
+ * is wide. It was a much worse trade once — 31x24 for a far square — while
+ * the board was drawn through a short lens that also shrank the far side.
+ * The long lens the tall pieces need took most of that back: see #build in
+ * board-3d.js.
  *
- * It is a default, not a decision. The Size control cycles the three levels
- * and says which one you are on, so a player who finds the back rank fiddly is
- * one tap from Large and two from Max — and the choice is remembered.
+ * It is a default, not a decision. The Size control switches between the two
+ * levels and says which one you are on, so a player who finds the back rank
+ * fiddly is one tap from Large — and the choice is remembered.
  */
 export const DEFAULT_BOARD_ZOOM = 0;
 
@@ -406,11 +418,18 @@ export function clampBoardZoom(level) {
   return Math.min(Math.max(n, 0), BOARD_ZOOM_LEVELS.length - 1);
 }
 
-/** Board themes. Values map to `data-theme` on the board element. */
+/**
+ * Board themes. Values map to `data-theme` on the board element.
+ *
+ * Three colours of clay tile. `classic` keeps its id because it is the one
+ * every stored setting already names; the other two replaced Midnight and
+ * Wood, and a setting still naming one of those falls back to the default
+ * rather than to a block that no longer exists.
+ */
 export const BOARD_THEMES = [
-  { id: 'classic', label: 'Classic' },
-  { id: 'midnight', label: 'Midnight' },
-  { id: 'wood', label: 'Wood' },
+  { id: 'classic', label: 'Caramel' },
+  { id: 'blueberry', label: 'Blueberry' },
+  { id: 'strawberry', label: 'Strawberry' },
 ];
 
 /**
@@ -418,21 +437,22 @@ export const BOARD_THEMES = [
  *
  * The background is not just the strip around the board. The 3D renderer is
  * transparent — `alpha: true`, clear colour alpha 0 — so the page shows
- * through the board's own scene as well as around it, which is why it matters
- * at all and why it is dark: a light ground behind a lit 3D board reads as a
- * photograph on the wrong wall.
+ * through the board's own scene as well as around it. The board is a clay
+ * set photographed in daylight, so what it stands on is bright: a lawn. A
+ * dark page behind it was right for lacquered wood under a lamp and would
+ * put this one in a cellar.
  *
  * Each id is a block in style.css that redefines the surface tokens only —
- * base, glow, panels and borders, in one hue, holding the lightness ladder
- * the default sets. Text and accent tokens are deliberately untouched: they
- * are what carry contrast, and a background is no reason to renegotiate it.
+ * the ground and the panels that sit on it. Text and accent tokens are
+ * deliberately untouched: they are what carry contrast, and a background is
+ * no reason to renegotiate it.
  */
 export const BACKGROUNDS = [
-  { id: 'midnight', label: 'Midnight', hint: 'Cool and dark' },
+  { id: 'meadow', label: 'Meadow', hint: 'Bright grass' },
 ];
 
 /** The background a player gets with nothing stored, and the fallback. */
-export const DEFAULT_BACKGROUND = 'midnight';
+export const DEFAULT_BACKGROUND = 'meadow';
 
 export const VALID_BACKGROUNDS = BACKGROUNDS.map((b) => b.id);
 
@@ -540,9 +560,7 @@ export const DEFAULT_SETTINGS = {
   boardZoom: DEFAULT_BOARD_ZOOM,
   boardTheme: 'classic',
   background: DEFAULT_BACKGROUND,
-  showCoordinates: true,
   animations: true,
-  autoFlip: false,
   // Chat and emotes together, because they are one pipe and somebody who
   // wants quiet wants quiet. Off means nothing arrives and nothing can be
   // sent — and the panel says so, rather than swallowing what you type.
@@ -630,7 +648,9 @@ export const CAPTURE_FADE_DELAY = Math.round(ANIMATION_MS * (1 - CAPTURE_FADE_RA
 /**
  * How high a piece rides on its way across, in squares.
  *
- * A knight goes higher because it is the piece that jumps. Here rather than
+ * A knight goes higher because it is the piece that jumps — high enough to
+ * clear the head of a pawn, which stands a little over one square tall and
+ * is what a knight is usually jumping. Here rather than
  * inline in board-3d.js because every other number that decides what a move
  * looks like — how long it takes, how it accelerates, when the captured piece
  * goes — is here, and a lift buried in the renderer is the one you would not
@@ -640,7 +660,7 @@ export const CAPTURE_FADE_DELAY = Math.round(ANIMATION_MS * (1 - CAPTURE_FADE_RA
  * one world unit, and this should not quietly depend on that.
  */
 export const CARRY_LIFT = 0.32;
-export const CARRY_LIFT_KNIGHT = 0.85;
+export const CARRY_LIFT_KNIGHT = 1.2;
 
 /** How long toasts remain on screen (ms). */
 export const TOAST_MS = 2400;

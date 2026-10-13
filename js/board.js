@@ -77,7 +77,6 @@ export class Board {
 
   #animationsEnabled = true;
 
-  #showCoordinates = true;
   #focusedSquare = 'e1';
 
   /**
@@ -189,8 +188,8 @@ export class Board {
       const col = index % 8;
 
       // Coordinates live in the edge squares of the current orientation.
-      entry.rankLabel.hidden = !(this.#showCoordinates && col === 0);
-      entry.fileLabel.hidden = !(this.#showCoordinates && row === 7);
+      entry.rankLabel.hidden = col !== 0;
+      entry.fileLabel.hidden = row !== 7;
 
       fragment.append(entry.el);
     });
@@ -201,12 +200,6 @@ export class Board {
     const next = orientation === 'black' ? 'black' : 'white';
     if (next === this.#orientation) return;
     this.#orientation = next;
-    this.#applyOrientation();
-  }
-
-  setShowCoordinates(show) {
-    if (this.#showCoordinates === show) return;
-    this.#showCoordinates = Boolean(show);
     this.#applyOrientation();
   }
 
@@ -495,6 +488,16 @@ export class Board {
     // whole board from the element in one call. See #listeners.
     const on = (target, type, handler) =>
       target.addEventListener(type, handler, { signal: this.#listeners.signal });
+
+    // A tap is finished when the finger lifts, and the click the browser
+    // sends after it must not exist: it is aimed after pointerup has run, so
+    // it lands on whatever that tap just opened — the promotion picker, which
+    // it cancelled or answered. The whole story is beside the same listener
+    // in board-3d.js; the two boards have to agree on this or a phone can
+    // promote on one of them and not the other.
+    this.#root.addEventListener('touchend', (event) => {
+      if (event.cancelable) event.preventDefault();
+    }, { signal: this.#listeners.signal, passive: false });
 
     // Pointer down: begin a tap, and possibly a drag for mouse/pen.
     on(this.#root, 'pointerdown', (event) => {

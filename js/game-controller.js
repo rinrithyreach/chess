@@ -14,6 +14,8 @@
 import {
   WHITE,
   BLACK,
+  FILES,
+  RANKS,
   GAME_MODE,
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
@@ -74,6 +76,12 @@ export class GameController {
     pendingPromotion: null,
     lastRejected: null,
   };
+
+  /**
+   * Which squares hold a piece this device could move right now, and the
+   * position that answer was worked out for. See #movableSquares.
+   */
+  #movable = { fen: null, seats: '', squares: [] };
 
   #settings = { ...DEFAULT_SETTINGS };
 
@@ -239,7 +247,6 @@ export class GameController {
 
     if (moveAdded || movesRemoved) {
       this.#clearSelection();
-      this.#applyAutoFlip();
     }
 
     if (moveAdded) {
@@ -348,7 +355,6 @@ export class GameController {
 
     this.#started = true;
     this.#view.orientation = 'white';
-    this.#applyAutoFlip();
     this.#save();
     this.#emitChange();
     log('New game started');
@@ -374,7 +380,6 @@ export class GameController {
     this.#resetView();
     this.#started = true;
     this.#view.orientation = saved.orientation === 'black' ? 'black' : 'white';
-    this.#applyAutoFlip();
     this.#emitChange();
     this.#toast('Game restored');
     return { ok: true };
@@ -684,7 +689,6 @@ export class GameController {
     const result = await this.#session.submitAction(SESSION_ACTION.RESTART);
     if (result.ok) {
       this.#resetView();
-      this.#applyAutoFlip();
       this.#save();
       this.#emitChange();
       this.#toast('Game restarted');
@@ -766,7 +770,6 @@ export class GameController {
     }
 
     this.#resetView();
-    this.#applyAutoFlip();
 
     if (this.isOnline()) {
       const rematch = this.#state?.online?.rematch;
@@ -822,12 +825,6 @@ export class GameController {
     return this.#view.orientation;
   }
 
-  /** When Auto Flip is on, keep the side to move at the bottom. */
-  #applyAutoFlip() {
-    if (!this.#settings.autoFlip || !this.#state) return;
-    this.#view.orientation = this.#state.turn === WHITE ? 'white' : 'black';
-  }
-
   #resetView() {
     this.#view.selected = null;
     this.#view.legalTargets = [];
@@ -851,11 +848,6 @@ export class GameController {
     this.#settings = { ...this.#settings, ...patch };
     sound.setEnabled(this.#settings.sound);
     storage.saveSettings(this.#settings);
-
-    if (Object.prototype.hasOwnProperty.call(patch, 'autoFlip')) {
-      this.#applyAutoFlip();
-    }
-
     this.#emitChange();
     return this.getSettings();
   }
@@ -940,11 +932,46 @@ export class GameController {
     return Boolean(this.#state?.isGameOver);
   }
 
+  /**
+   * The squares holding a piece this device could move right now: the side
+   * to move's, if this device plays that side, and only those with somewhere
+   * to go.
+   *
+   * For the 3D board, which has to decide what a press means. Its pieces are
+   * tall, so one stands in front of the foot of the piece behind it — at the
+   * start, the king's cross is drawn over the middle of the e-pawn's square.
+   * A press there is on the king, and the king cannot move; knowing that is
+   * what lets the board give the press to the pawn, which can. Nothing here
+   * stops a piece being selected. It only says which of two answers to a
+   * press is the useful one.
+   *
+   * Remembered by position, because every snapshot asks and only a move
+   * changes the answer. The seats are part of the key: the same position is
+   * a different answer to the device that is not on the move.
+   */
+  #movableSquares() {
+    const state = this.#state;
+    if (!state || state.isGameOver) return [];
+
+    const seats = (this.#session.getControllableColors?.() ?? []).join('');
+    if (this.#movable.fen !== state.fen || this.#movable.seats !== seats) {
+      const squares = seats.includes(state.turn)
+        ? FILES.flatMap((file) => RANKS.map((rank) => `${file}${rank}`)).filter((square) => (
+          this.#session.getPiece(square)?.color === state.turn
+          && this.#session.getLegalMoves(square).length > 0
+        ))
+        : [];
+      this.#movable = { fen: state.fen, seats, squares };
+    }
+    return this.#movable.squares;
+  }
+
   /** Everything a view needs to render, in one object. */
   getSnapshot() {
     return {
       state: this.#state,
       view: { ...this.#view },
+      movable: this.#movableSquares(),
       // Which seats this device may act for. The views use it to decide who
       // may be renamed, rather than each of them working the mode out again.
       controllable: this.#session.getControllableColors?.() ?? [],

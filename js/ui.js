@@ -117,6 +117,21 @@ export class UI {
    * uses: nothing raises a confirmation from on top of a confirmation.
    */
   #confirmUnder = null;
+
+  /**
+   * When the dialog now on screen was opened, on the clock events are
+   * stamped with.
+   *
+   * A dialog cannot be answered by a press that is older than it is. That
+   * sounds too obvious to need writing down, and it is exactly what happened
+   * on every phone: the tap that completed a promotion opened the picker, and
+   * the click the browser sends after a touch then arrived at the picker —
+   * cancelling it, or choosing a piece. The boards now cancel that click
+   * where it is made (see the touchend listener in board-3d.js). This is the
+   * same rule kept at the other end, so that it holds whatever opens a dialog
+   * and however the press that opened it is delivered. See #predatesDialog.
+   */
+  #modalOpenedAt = 0;
   #lastFocused = null;
   #confirmResolver = null;
   /** What dismissing the confirmation resolves to — see confirm(). */
@@ -181,9 +196,9 @@ export class UI {
    * Which card each colour is on, as of the last render.
    *
    * An emote lands on its sender's card, and which card that is depends on
-   * board orientation — which flips on a rematch, on Auto Flip, and on the
-   * Flip button. Read from the render that already worked it out rather than
-   * worked out again here from a different source.
+   * board orientation — which flips on a rematch and on the Flip button.
+   * Read from the render that already worked it out rather than worked out
+   * again here from a different source.
    */
   #cardSide = { w: 'bottom', b: 'top' };
 
@@ -246,7 +261,7 @@ export class UI {
       'btn-confirm-ok', 'btn-confirm-cancel', 'btn-confirm-alt',
       'modal-gameover', 'gameover-icon', 'gameover-title', 'gameover-result',
       'gameover-detail', 'btn-rematch', 'btn-gameover-new',
-      'modal-settings', 'set-sound', 'set-coords', 'set-animations', 'set-autoflip',
+      'modal-settings', 'set-sound', 'set-animations',
       'theme-picker', 'bg-picker',
       'modal-menu', 'btn-restart', 'btn-leave',
       'toasts',
@@ -1183,6 +1198,7 @@ export class UI {
 
     this.#lastFocused = document.activeElement;
     modal.hidden = false;
+    this.#modalOpenedAt = performance.now();
     // Force a frame so the CSS transition runs from the hidden state.
     requestAnimationFrame(() => modal.classList.add('is-open'));
     this.#openModal = name;
@@ -1224,6 +1240,24 @@ export class UI {
 
   isModalOpen() {
     return this.#openModal !== null;
+  }
+
+  /**
+   * Was this press made before the dialog on screen existed?
+   *
+   * An event is stamped with when the input happened, not when it was
+   * delivered, so a click that belongs to the gesture which OPENED a dialog
+   * carries a time from before the dialog was there — and that is the whole
+   * test. No coordinates and no grace period: a real answer is always newer
+   * than the question.
+   *
+   * A stamp of zero, or one from a browser old enough to count from 1970
+   * rather than from page load, is never "before", so the check lets those
+   * through rather than swallowing every click on a browser it cannot read.
+   */
+  #predatesDialog(event) {
+    const stamp = event.timeStamp;
+    return stamp > 0 && stamp < this.#modalOpenedAt;
   }
 
   /**
@@ -1458,9 +1492,7 @@ export class UI {
   syncSettings(settings) {
     const map = {
       'set-sound': 'sound',
-      'set-coords': 'showCoordinates',
       'set-animations': 'animations',
-      'set-autoflip': 'autoFlip',
       'set-chat': 'chat',
     };
     Object.entries(map).forEach(([id, key]) => {
@@ -2081,9 +2113,8 @@ export class UI {
     control('resign', 'onResign');
 
     // Zoom cycles rather than stepping, so one button covers every level and
-    // the row keeps its shape. Three steps is few enough that wrapping round
-    // from the largest back to the smallest is quicker than hunting for a
-    // second button — and the label always says where you are.
+    // the row keeps its shape. With two levels that makes it a switch — and
+    // the label always says where you are.
     this.#dom['btn-zoom']?.addEventListener('click', () => {
       const current = clampBoardZoom(this.#controller.getSettings().boardZoom);
       const next = (current + 1) % BOARD_ZOOM_LEVELS.length;
@@ -2143,6 +2174,9 @@ export class UI {
     this.#dom['promotion-choices']?.addEventListener('click', (event) => {
       const choice = event.target.closest('.promotion__choice');
       if (!choice) return;
+      // Not the tap that opened the picker. A piece chosen by that one is a
+      // piece nobody chose, and there is no taking a promotion back.
+      if (this.#predatesDialog(event)) return;
       // Close first so the modal cannot accept a second click.
       const modal = this.#dom['modal-promotion'];
       if (modal) {
@@ -2174,9 +2208,7 @@ export class UI {
     // --- Settings ---
     const settingInputs = {
       'set-sound': 'sound',
-      'set-coords': 'showCoordinates',
       'set-animations': 'animations',
-      'set-autoflip': 'autoFlip',
       'set-chat': 'chat',
     };
     Object.entries(settingInputs).forEach(([id, key]) => {
@@ -2206,7 +2238,9 @@ export class UI {
     // --- Global: backdrop clicks and Escape ---
     document.addEventListener('click', (event) => {
       const closer = event.target.closest('[data-close]');
-      if (closer) this.closeModal(closer.dataset.close);
+      // A press older than the dialog is not a dismissal of it: see
+      // #predatesDialog.
+      if (closer && !this.#predatesDialog(event)) this.closeModal(closer.dataset.close);
     });
 
     document.addEventListener('keydown', (event) => {

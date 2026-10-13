@@ -14,11 +14,7 @@
     padding: 0.6rem 0.5rem 2rem;
   }
 
-  .board-frame {
-    padding: 5px;
-  }
-
-  .player-card {
+    .player-card {
     padding: 0.5rem 0.6rem;
   }
 
@@ -89,10 +85,6 @@
     /* The frame's own inset costs the board twice over, so it goes too. What
        is left is the border, which is what makes the board read as an object
        rather than as wallpaper. */
-    padding: 3px;
-    border-left: 0;
-    border-right: 0;
-    border-radius: 0;
   }
 
   /* Chrome gives way before the board does. */
@@ -122,7 +114,6 @@
 
   .board-frame {
     width: min(90vw, 560px);
-    padding: 10px;
   }
 
   .status__text {
@@ -228,8 +219,6 @@
 
   #status {
     padding: 0.5rem 0.9rem;
-    border: 1px solid var(--border);
-    background: var(--panel);
   }
 }
 
@@ -302,7 +291,6 @@
     /* Bound by height, not width — the short axis is what constrains here.
        Sized so the header and both player cards still fit on screen. */
     width: min(52vw, 56vh);
-    padding: 5px;
   }
 
   /* Two columns so labels are never squeezed into the narrow side panel. */
