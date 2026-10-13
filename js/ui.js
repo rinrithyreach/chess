@@ -119,19 +119,19 @@ export class UI {
   #confirmUnder = null;
 
   /**
-   * When the dialog now on screen was opened, on the clock events are
-   * stamped with.
+   * A press is under way: a finger or a button has gone down and the click it
+   * ends in has not been seen yet.
    *
-   * A dialog cannot be answered by a press that is older than it is. That
-   * sounds too obvious to need writing down, and it is exactly what happened
-   * on every phone: the tap that completed a promotion opened the picker, and
-   * the click the browser sends after a touch then arrived at the picker —
-   * cancelling it, or choosing a piece. The boards now cancel that click
-   * where it is made (see the touchend listener in board-3d.js). This is the
-   * same rule kept at the other end, so that it holds whatever opens a dialog
-   * and however the press that opened it is delivered. See #predatesDialog.
+   * And `#strayClick` says a dialog opened in the middle of one. A press that
+   * began before a dialog existed cannot be an answer to it, but the browser
+   * does not know that — it aims the click a touch ends in at whatever is
+   * under the finger by then, which is the dialog. That click is swallowed.
+   * See #watchPresses.
    */
-  #modalOpenedAt = 0;
+  #pressing = false;
+  #strayClick = false;
+  #pressTimer = null;
+
   #lastFocused = null;
   #confirmResolver = null;
   /** What dismissing the confirmation resolves to — see confirm(). */
@@ -1198,7 +1198,8 @@ export class UI {
 
     this.#lastFocused = document.activeElement;
     modal.hidden = false;
-    this.#modalOpenedAt = performance.now();
+    // Opened by a press that is still going on: its click is not for us.
+    if (this.#pressing) this.#strayClick = true;
     // Force a frame so the CSS transition runs from the hidden state.
     requestAnimationFrame(() => modal.classList.add('is-open'));
     this.#openModal = name;
@@ -1243,21 +1244,64 @@ export class UI {
   }
 
   /**
-   * Was this press made before the dialog on screen existed?
+   * Keep a dialog from being answered by the press that opened it.
    *
-   * An event is stamped with when the input happened, not when it was
-   * delivered, so a click that belongs to the gesture which OPENED a dialog
-   * carries a time from before the dialog was there — and that is the whole
-   * test. No coordinates and no grace period: a real answer is always newer
-   * than the question.
+   * The boards act when a finger lifts, so a tap that completes a promotion
+   * opens the picker under the finger — and a browser follows a touch with a
+   * click, aimed at whatever is there by then. The boards cancel that click
+   * where it is made, which is the fix (see the touchend listener in
+   * board-3d.js). This is the spare, for a browser that sends the click
+   * anyway, and for whatever opens a dialog from a press next.
    *
-   * A stamp of zero, or one from a browser old enough to count from 1970
-   * rather than from page load, is never "before", so the check lets those
-   * through rather than swallowing every click on a browser it cannot read.
+   * It counts presses rather than reading a clock. A press starts at
+   * pointerdown, or touchstart where there are no pointer events, and is
+   * over when its click has gone by. A dialog that opens in between marks
+   * the click still to come as a stray, and that one click is stopped before
+   * anything hears it. A new press clears the mark: whatever click follows
+   * that was meant.
+   *
+   * What it cannot do is swallow a real answer, which matters more than what
+   * it catches. A tap or a mouse click always begins with a press, and a
+   * press clears the mark. Enter, Space and `click()` arrive with a detail
+   * of zero and are never touched. And the mark does not outlive the press
+   * by more than a moment, so nothing that clicks without pressing — a
+   * screen reader's activate, say — can walk into one left lying about.
+   *
+   * mousedown is deliberately not a press. After a touch the browser sends
+   * one for compatibility, between the touch and its click, and counting it
+   * would clear the mark just before the click it was set for.
    */
-  #predatesDialog(event) {
-    const stamp = event.timeStamp;
-    return stamp > 0 && stamp < this.#modalOpenedAt;
+  #watchPresses() {
+    const began = () => {
+      clearTimeout(this.#pressTimer);
+      this.#pressing = true;
+      this.#strayClick = false;
+    };
+    // The click a touch ends in can trail it — by a third of a second where
+    // the browser waits to see whether a second tap is coming. Past that it
+    // is not coming at all.
+    const ended = () => {
+      clearTimeout(this.#pressTimer);
+      this.#pressTimer = setTimeout(() => {
+        this.#pressing = false;
+        this.#strayClick = false;
+      }, 700);
+    };
+    const quietly = { capture: true, passive: true };
+    ['pointerdown', 'touchstart'].forEach((type) => document.addEventListener(type, began, quietly));
+    ['pointerup', 'pointercancel', 'touchend', 'touchcancel']
+      .forEach((type) => document.addEventListener(type, ended, quietly));
+
+    document.addEventListener('click', (event) => {
+      const stray = this.#strayClick;
+      clearTimeout(this.#pressTimer);
+      this.#pressing = false;
+      this.#strayClick = false;
+      if (stray && event.detail > 0 && event.target.closest?.('.modal')) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+    }, { capture: true });
   }
 
   /**
@@ -2174,9 +2218,23 @@ export class UI {
     this.#dom['promotion-choices']?.addEventListener('click', (event) => {
       const choice = event.target.closest('.promotion__choice');
       if (!choice) return;
-      // Not the tap that opened the picker. A piece chosen by that one is a
-      // piece nobody chose, and there is no taking a promotion back.
-      if (this.#predatesDialog(event)) return;
+      /*
+         The tap that opened the picker cannot arrive here: the boards cancel
+         the click a browser sends after a touch, where it is made, and a
+         stray one is stopped on the way in. See the touchend listener in
+         board-3d.js, and #watchPresses.
+
+         There was a different guard in this handler, and it must not come
+         back. It refused any click whose event.timeStamp was earlier than
+         the performance.now() taken when the dialog opened — "a press older
+         than the dialog". That compares two clocks, and nothing promises
+         they agree. Safari on an iPhone has a history of stamping touches
+         from the system's event clock, which falls behind the page's while
+         the phone sleeps. When it does, every tap in every dialog looks
+         older than the dialog and is thrown away, which is a promotion
+         picker that cannot be answered or even closed. A guard that can
+         swallow a real press is worse than the bug it was a spare for.
+      */
       // Close first so the modal cannot accept a second click.
       const modal = this.#dom['modal-promotion'];
       if (modal) {
@@ -2236,11 +2294,10 @@ export class UI {
     });
 
     // --- Global: backdrop clicks and Escape ---
+    this.#watchPresses();
     document.addEventListener('click', (event) => {
       const closer = event.target.closest('[data-close]');
-      // A press older than the dialog is not a dismissal of it: see
-      // #predatesDialog.
-      if (closer && !this.#predatesDialog(event)) this.closeModal(closer.dataset.close);
+      if (closer) this.closeModal(closer.dataset.close);
     });
 
     document.addEventListener('keydown', (event) => {

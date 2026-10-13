@@ -1927,12 +1927,10 @@ being hidden by a rule that changed underneath it:
    `touchend`, which is how a page says a touch has been dealt with: no click
    follows. Scrolling is untouched, since that is settled on `touchstart` and
    `touchmove`, and nothing inside a board listens for a click. And a dialog
-   no longer accepts a press that is older than it is — an event is stamped
-   with when the input happened, not when it was delivered, so a click
-   belonging to the gesture that opened a dialog carries a time from before
-   the dialog existed. No coordinates, no grace period. That second rule is
-   there so the first does not have to be remembered by whatever opens a
-   dialog from a `pointerup` next.
+   that opens in the middle of a press does not take the click that press
+   ends in. That second rule is there so the first does not have to be
+   remembered by whatever opens a dialog from a `pointerup` next. Its first
+   version was wrong in a way that mattered: see the next entry.
 
 21. **A piece carried off the board and let go was left hanging.** Drag a
    piece with a mouse past the edge of the board, release it there, and it
@@ -1944,6 +1942,33 @@ being hidden by a rule that changed underneath it:
    which is what capture is for: the release comes home wherever it happens,
    and the piece is seen to go back to its square. Found by the test written
    for carrying the tall pieces, which let go off the board on purpose.
+
+22. **The spare for the promotion fix could leave every dialog dead on an
+   iPhone.** The second half of that fix refused any click whose
+   `event.timeStamp` was earlier than the `performance.now()` taken when the
+   dialog opened — a press older than the dialog. It read well and passed
+   every test, and it compares two clocks that nothing promises agree.
+   Safari on an iPhone has a history of stamping touches from the system's
+   event clock, which falls behind the page's while the phone sleeps. When
+   it does, every tap in every dialog looks older than the dialog: the
+   promotion picker cannot be answered or cancelled, and Done does not close
+   Settings. Which is the bug it was written to prevent, made worse, on the
+   one phone it had not been tried on.
+
+   It could not be reproduced on an iPhone from here — there was not one —
+   so it was reproduced in WebKit, Safari's engine, by setting the page's
+   clock a minute ahead of the event clock. The shipped build then fails
+   exactly as described; with the clocks in step it passes, which is why
+   Chrome never saw it.
+
+   The guard is gone and what replaced it reads no clock. A press starts at
+   `pointerdown`, or `touchstart`, and is over when its click has gone by. A
+   dialog that opens in between marks the click still to come, and that one
+   click is stopped. A new press clears the mark, so a real tap can never be
+   the one that is stopped; clicks from the keyboard arrive with a detail of
+   zero and are never touched. Tested the way the first should have been:
+   in both engines, with each half of the fix switched off in turn, and with
+   both off to show the tests can see the bug at all.
 
 ### Manual checklist
 
