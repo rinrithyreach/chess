@@ -189,6 +189,26 @@ const CLAY_ROUGHNESS = 0.78;
 const PIECE_HEIGHT = { p: 1.08, r: 1.27, n: 1.4, b: 1.5, q: 1.69, k: 1.95 };
 
 /**
+ * The two pictures the board draws of a piece for the page around it. See
+ * pieceSprite().
+ *
+ * `pile` is the small one in the captured piles. Its frame is the king's, so
+ * that a pawn in a pile is the fraction of a king it is on the board, and
+ * the piece floats in the middle of it, because a pile has no floor.
+ *
+ * `choice` is the one in the promotion picker, where four pieces are lined
+ * up to be chosen between. They stand there, feet on one line, the way they
+ * would on a table. The frame is the queen's: she is the tallest thing a
+ * pawn can become, and a frame with room for a king would only make all
+ * four smaller. Twice the pixels, because it is shown at more than twice
+ * the size and a phone has three pixels to each of the page's.
+ */
+const PORTRAIT = {
+  pile: { size: 96, tallest: 'k', standing: false },
+  choice: { size: 192, tallest: 'q', standing: true },
+};
+
+/**
  * Concatenate several already-positioned geometries into one.
  *
  * three.js ships this as BufferGeometryUtils, which is an addon: this project
@@ -1266,17 +1286,24 @@ export class Board3D {
    * captured knight is the knight that was on the board rather than a
    * different artist's idea of one.
    *
-   * Rendered once per piece and cached. Twelve portraits for a whole game.
+   * The promotion picker asks for the same thing, larger and standing up:
+   * the four pieces a pawn can become, in the colour of the pawn. That is
+   * the `choice` look, and the piles' is `pile`. See PORTRAIT.
+   *
+   * Rendered once per piece and look, and cached: twenty pictures at most.
    *
    * Drawn through a render target rather than the visible canvas, so the live
    * frame is never disturbed and no second WebGL context is created — browsers
    * cap those per page, and this board already has to be careful about it.
    *
+   * @param {string} [look] a key of PORTRAIT.
    * @returns {string|null} a PNG data URL, or null if it could not be drawn.
    */
-  pieceSprite(type, color, size = 96) {
+  pieceSprite(type, color, look = 'pile') {
     if (this.#disposed || !this.#renderer || !THREE) return null;
-    const key = `${color}${type}@${size}`;
+    const frame = PORTRAIT[look] ? look : 'pile';
+    const { size, tallest, standing } = PORTRAIT[frame];
+    const key = `${color}${type}@${frame}`;
     if (this.#spriteCache.has(key)) return this.#spriteCache.get(key);
 
     let target = null;
@@ -1317,8 +1344,13 @@ export class Board3D {
       scene.add(group);
 
       // Centre the piece on the origin so the camera can simply look at it.
+      // Standing, it is centred from side to side only, and its foot goes
+      // where the tallest piece's foot would be: every piece drawn this way
+      // then has its feet on the same line of its picture, and a row of the
+      // pictures is a row of pieces on one floor.
       const box = new THREE.Box3().setFromObject(group);
       const centre = box.getCenter(new THREE.Vector3());
+      if (standing) centre.y = box.min.y + PIECE_HEIGHT[tallest] / 2;
       group.position.sub(centre);
 
       const fov = 28;
@@ -1336,7 +1368,8 @@ export class Board3D {
         frame with it renders a pawn the same size as a king, and the pile
         stops reading as chess pieces at all. Sizing to the king once means a
         pawn occupies the fraction of the frame it actually occupies on the
-        board.
+        board. (The promotion picker's tallest piece is the queen, and the
+        same holds there: its rook is shorter than its queen.)
 
         A close frame: the king's height and an eighth over. It was two
         thirds over while the set was squat, because a squat king is nearly as
@@ -1345,7 +1378,7 @@ export class Board3D {
         empty tile. The knight is the broad one, at about one square from
         muzzle to mane, and that is still under half of this.
       */
-      const radius = PIECE_HEIGHT.k / 2;
+      const radius = PIECE_HEIGHT[tallest] / 2;
       const distance = (radius / Math.tan(THREE.MathUtils.degToRad(fov) / 2)) * 1.12;
       camera.position.copy(new THREE.Vector3(0, 0.2, 1).normalize().multiplyScalar(distance));
       camera.lookAt(0, 0, 0);
@@ -1403,10 +1436,13 @@ export class Board3D {
    *
    * So they are drawn ahead, one at a time with a pause between, and never
    * while something on the board is moving. Pawns first: a pawn is usually
-   * the first thing taken. No kings, which never are.
+   * the first thing taken. No kings, which never are. Then the eight the
+   * promotion picker shows, which no game needs in its first minute.
    */
   #warmPortraits() {
     const queue = ['p', 'n', 'b', 'r', 'q'].flatMap((type) => [[type, 'w'], [type, 'b']]);
+    queue.push(...['q', 'r', 'b', 'n']
+      .flatMap((type) => [[type, 'w', 'choice'], [type, 'b', 'choice']]));
     const next = () => {
       if (this.#disposed || !queue.length) return;
       const busy = this.#animations.length > 0 || this.#cameraSpin || this.#drag || this.#warmFrames > 0;

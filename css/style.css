@@ -1754,7 +1754,11 @@ body::before {
 /* Promotion picker */
 .promotion {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* minmax(0, …), not a bare 1fr: a bare one may not go narrower than what
+     is in it, and the piece's picture is wider than its button on purpose
+     (see .promotion__piece). The four then outgrew the dialog and the knight
+     was cut off at its edge. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
@@ -1764,6 +1768,7 @@ body::before {
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
+  min-width: 0;
   min-height: 76px;
   padding: 0.6rem 0.25rem;
   border: 0;
@@ -1787,6 +1792,52 @@ body::before {
 
 .promotion__choice:active {
   transform: translateY(1px);
+}
+
+/*
+   What a choice shows: the piece itself, drawn by the 3D board, or a glyph
+   on the flat one. See showPromotion() in ui.js.
+*/
+.promotion__figure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* As wide as the button and no wider, whatever is in it. */
+  width: 100%;
+  min-width: 0;
+}
+
+/*
+   The picture is square and the piece in it is tall and thin, so most of
+   its width is empty air on either side. It is therefore set wider than the
+   button has room for and left to overhang, evenly, into the button's own
+   padding: sized to fit, the queen would be a third smaller. The broadest of
+   the four is the knight, at about half the picture's width, which the
+   narrowest phone's button still holds.
+
+   No pointer events, so a press on the picture is a press on the button —
+   and so that an iPhone does not answer a long press with its menu for
+   saving an image.
+
+   The shadows are for the white pieces. White clay under a bright light is
+   very nearly the colour of the button it is shown on, and a white rook's
+   battlements were only just there. A tight shadow draws a line round the
+   whole piece and a softer one sits it on the button. This is a filter on a
+   picture that never changes, so it is worked out once — not the filter on
+   a live canvas that board-3d.css explains the removal of.
+*/
+.promotion__piece {
+  flex: none;
+  display: block;
+  width: 4.5rem;
+  height: 4.5rem;
+  filter:
+    drop-shadow(0 0 0.6px rgba(74, 44, 23, 0.7))
+    drop-shadow(0 2px 2px rgba(74, 44, 23, 0.22));
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .promotion__glyph {

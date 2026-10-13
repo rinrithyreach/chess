@@ -343,8 +343,10 @@ export class UI {
         button.className = 'promotion__choice';
         button.dataset.piece = type;
         button.setAttribute('aria-label', `Promote to ${name}`);
+        // The figure is empty until a pawn promotes: what goes in it depends
+        // on whose pawn, and on which board is mounted. See showPromotion().
         button.innerHTML =
-          `<span class="promotion__glyph" data-color="w">${PIECE_GLYPHS[type]}</span>` +
+          '<span class="promotion__figure"></span>' +
           `<span class="promotion__name">${name}</span>`;
         choices.append(button);
       });
@@ -1399,12 +1401,36 @@ export class UI {
     resolve?.(value);
   }
 
-  /** Show the promotion picker, with glyphs in the promoting side's colour. */
+  /**
+   * Show the promotion picker, with the four pieces in the promoting side's
+   * colour.
+   *
+   * The pieces themselves where the board can draw them: the clay ones that
+   * are standing on it, in their own colours, so what is offered is what
+   * will arrive. It was four Unicode glyphs in one flat ink, which was the
+   * last place a second chess set was still showing next to the real one.
+   * Those are the fallback now, for the flat board, which has no piece to
+   * photograph.
+   *
+   * Filled in here rather than once at start-up because both answers change
+   * during a game: whose pawn it is, and which board is mounted. The key is
+   * the same idea as the trays': nothing is rebuilt when neither has.
+   */
   showPromotion({ color }) {
     const choices = this.#dom['promotion-choices'];
-    choices?.querySelectorAll('.promotion__glyph').forEach((glyph) => {
-      glyph.dataset.color = color;
-    });
+    const key = `${color}|${this.#spriteEpoch}`;
+    if (choices && choices.dataset.key !== key) {
+      choices.dataset.key = key;
+      choices.querySelectorAll('.promotion__choice').forEach((button) => {
+        const type = button.dataset.piece;
+        const figure = button.querySelector('.promotion__figure');
+        if (!figure) return;
+        const sprite = this.#pieceSprite?.(type, color, 'choice');
+        figure.innerHTML = sprite
+          ? `<img class="promotion__piece" src="${sprite}" alt="" data-color="${color}">`
+          : `<span class="promotion__glyph" data-color="${color}">${PIECE_GLYPHS[type]}</span>`;
+      });
+    }
     this.openModal('promotion');
   }
 

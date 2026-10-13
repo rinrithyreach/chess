@@ -492,8 +492,8 @@ Unicode glyphs. `Board3D.pieceSprite()` builds the real piece — the same baked
 lumps of the same clay under the same soft light — and reads it back
 through a render target as an image, so a captured knight is the knight that
 was on the board rather than a flat glyph of somebody else's chess set standing
-next to a solid one. Twelve portraits, drawn once each and cached, through the
-existing WebGL context rather than a second one.
+next to a solid one. Drawn once each and cached, through the existing WebGL
+context rather than a second one.
 
 Three things that had to be got right. The portraits are framed to the **tallest
 piece in the set**, not to each piece's own box: framing every piece to fill its
@@ -512,6 +512,32 @@ overhangs is the empty part.
 
 The flat fallback board has no geometry to photograph, so there the trays fall
 back to the Unicode glyphs.
+
+**The promotion picker shows the pieces too** — *Promote Pawn* offers the four
+pieces a pawn can become as the clay ones that are standing on the board, in
+their own colours and the colour of the pawn, so what is offered is what will
+arrive. It was four Unicode glyphs in one flat ink, the last place a second
+chess set was still showing next to the real one.
+
+It is the same `pieceSprite()` with a second look, `choice`, beside the piles'
+`pile`. Three differences, each for a reason. The pieces **stand**: a pile has
+no floor, so a pile's piece floats in the middle of its picture, but four
+pieces in a row are four pieces on a table and their feet belong on one line.
+The frame is the **queen's**, not the king's — she is the tallest thing a pawn
+can become, and room for a king would only make all four smaller. And the
+picture is **192px, not 96**, because it is shown at 72px on a phone with three
+pixels to each of the page's.
+
+The picture is set wider than its button, for the same reason the piles' is set
+wider than its column: the piece is tall and thin and the sides of a square
+picture of it are air. That put a bug in the first version — the four columns
+were `1fr`, which may not go narrower than its content, so the buttons grew to
+fit their pictures, outgrew the dialog, and the knight was cut off at its edge.
+`minmax(0, 1fr)` holds them. White clay under a bright light is very nearly the
+colour of the button, so the picture carries a tight shadow that draws a line
+round the piece; that is a filter on an image that never changes, worked out
+once, not the per-frame filter on the canvas that bug 23 removed. The eight
+pictures are drawn ahead with the piles', and the flat board keeps its glyphs.
 
 **Captured pieces, either side of the board** — the pieces each player has
 taken sit in a column beside the board: the left one belongs to the player at
