@@ -7,8 +7,8 @@ backend, no build step, no framework.
 >
 > **Phase 1 — Local.** Two players share one device, or one plays the
 > built-in bot. Full standard chess rules, save/resume, move history, resign
-> and rematches. (Undo is built but locked in the UI; the Draw button has been
-> removed — see *Known limitations*.)
+> and rematches. (There is no Undo, and the Draw button has been removed — see
+> *Known limitations*.)
 >
 > **Phase 2 — Online.** Two players, two devices, synchronised through
 > Firebase Realtime Database: room codes, anonymous auth, live move sync,
@@ -487,105 +487,93 @@ Going online starts the friends layer even if the panel is never opened —
 otherwise somebody with friends would appear idle to all of them for the
 whole game they are visibly in the middle of.
 
-**Captured pieces, drawn in 3D** — the piles are the board's own pieces, not
-Unicode glyphs. `Board3D.pieceSprite()` builds the real piece — the same baked
-lumps of the same clay under the same soft light — and reads it back
-through a render target as an image, so a captured knight is the knight that
-was on the board rather than a flat glyph of somebody else's chess set standing
-next to a solid one. Drawn once each and cached, through the existing WebGL
-context rather than a second one.
+**Captured pieces, on the players' cards** — the pieces each player has taken
+stand in a row at the end of that player's card, with the material lead (`+2`)
+after them: strongest first, each kind together, a pawn a little in front of
+the pawn before it, the way a row of them stands on a table. They are as tall
+as the inside of the card, 38px on a phone, and they follow a board flip with
+the card.
 
-Three things that had to be got right. The portraits are framed to the **tallest
-piece in the set**, not to each piece's own box: framing every piece to fill its
-own square is the obvious approach and it renders a pawn the same size as a
-king, at which point the pile stops reading as chess pieces. The black
-pieces get a **rim light** — on the board they are legible because they stand on
-a pale tile, and in a tray there is no tile — the tray is a dark groove in the
-lawn — so an unlit charcoal piece in it is close to a piece-shaped hole. Lighting from behind draws the edge that
-carries the shape at this size. And each portrait is drawn **more than twice as
-wide as the column it sits in**. The pieces are tall, so a square picture of one
-is mostly empty at the sides — the broadest, the knight, fills under half of it
-— and at the column's own width a king is a mark 6px across. At 30px and
-centred it is 27px high and 12px across, and the knight's 14px is still inside
-a 14px column, which is where the column's width comes from. The part that
-overhangs is the empty part.
+They are the board's own pieces, not Unicode glyphs. `Board3D.pieceSprite()`
+builds the real piece — the same baked lumps of the same clay under the same
+soft light — and reads it back through a render target as an image, so a
+captured knight is the knight that was on the board rather than a flat glyph of
+somebody else's chess set standing next to a solid one. Drawn once each and
+cached, through the existing WebGL context rather than a second one. The flat
+fallback board has no geometry to photograph, so there the cards show glyphs.
 
-The flat fallback board has no geometry to photograph, so there the trays fall
-back to the Unicode glyphs.
+Four things that had to be got right. The picture is framed to the **tallest
+piece that can be in it**, the queen, and not to each piece's own box: framing
+every piece to fill its own square is the obvious approach and it renders a
+pawn the same size as a queen, at which point the row stops reading as chess
+pieces. Every piece **stands on the bottom of its picture**, so a row of
+pictures is a row of pieces on one floor. The black pieces get a **rim light**
+— on the board they are legible because they stand on a pale tile, and on a
+card there is no tile, so an unlit charcoal piece is one flat shape; lighting
+from behind draws the edge that carries the shape at this size. And each piece
+is a **slot narrower than its picture**. The pieces are tall, so a square
+picture of one is mostly air at the sides — the foot is four tenths of its
+width — and a slot the width of the foot puts the pieces shoulder to shoulder
+with the air lying over the neighbours, where it shows nothing. A slot is
+narrower again for a second piece of the same kind, which is what overlaps the
+pawns. The slots shrink before the row is allowed to push the card wider: all
+fifteen pieces that can be taken stand at 94% of their natural spacing on a
+390px phone and 71% on a 320px one. A name gives way before the pieces do:
+once a card has a row, the name may have just under half of it and takes an
+ellipsis past that.
 
-**The promotion picker shows the pieces too** — *Promote Pawn* offers the four
-pieces a pawn can become as the clay ones that are standing on the board, in
-their own colours and the colour of the pawn, so what is offered is what will
-arrive. It was four Unicode glyphs in one flat ink, the last place a second
-chess set was still showing next to the real one.
+The row stands **beside the name, and not under it**, and the first version
+had it under. A second line has to be as tall as a piece whether or not there
+is a piece on it — a line that appeared with the first capture would push the
+board down the page in the middle of a game — so it made both cards 13px
+taller for good, and on a phone 26px is the row of controls gone from the
+first screen. The check that runs the game in Safari's engine as an iPhone
+found it: its tap on Resign landed below the bottom of the screen. The end of
+the card was empty, is the card's full height, and costs nothing: the cards
+are the height they were, with pieces 38px tall where under the name they
+were 32. Two things moved to make room. The *To Move* badge is under the
+name, beside the colour, slimmed to the height of that line so the card to
+move is no taller than the other one. And the row is set against the card's
+right-hand edge, growing towards the name, so that it does not jump sideways
+each time the badge under the name comes and goes.
 
-It is the same `pieceSprite()` with a second look, `choice`, beside the piles'
-`pile`. Three differences, each for a reason. The pieces **stand**: a pile has
-no floor, so a pile's piece floats in the middle of its picture, but four
-pieces in a row are four pieces on a table and their feet belong on one line.
-The frame is the **queen's**, not the king's — she is the tallest thing a pawn
-can become, and room for a king would only make all four smaller. And the
-picture is **192px, not 96**, because it is shown at 72px on a phone with three
-pixels to each of the page's.
+**They used to stand in two slim columns laid over the edges of the board**, in
+the margin the camera happens to leave beside the tiles: 14px wide on a 412px
+phone, a fraction of the board's width so as to fit that margin on every phone,
+with the pictures tucked one behind the next to get fifteen into the board's
+height. It cost the board nothing, which was the whole argument for it, and it
+was the size of a margin: a rook was a mark a few pixels across, behind the
+piece above it, at the edge of the screen. It was reported as "after the
+elimination, chess should show more clearly". The columns are gone, whole — the
+two trays, the second and smaller picture that was drawn for them, the padding
+Large needed to keep a pile off the a- and h-files, and the attribute that told
+the page which size was on so it could pad. The padding was 1.15% a side, and
+Large gets it back as board: a near square there is 46 x 45px on a 390px phone
+where it was 45 x 44.
 
-The picture is set wider than its button, for the same reason the piles' is set
-wider than its column: the piece is tall and thin and the sides of a square
-picture of it are air. That put a bug in the first version — the four columns
-were `1fr`, which may not go narrower than its content, so the buttons grew to
-fit their pictures, outgrew the dialog, and the knight was cut off at its edge.
-`minmax(0, 1fr)` holds them. White clay under a bright light is very nearly the
-colour of the button, so the picture carries a tight shadow that draws a line
-round the piece; that is a filter on an image that never changes, worked out
-once, not the per-frame filter on the canvas that bug 23 removed. The eight
-pictures are drawn ahead with the piles', and the flat board keeps its glyphs.
+**The promotion picker shows the same pictures** — *Promote Pawn* offers the
+four pieces a pawn can become as the clay ones that are standing on the board,
+in their own colours and the colour of the pawn, so what is offered is what
+will arrive. It was four Unicode glyphs in one flat ink.
 
-**Captured pieces, either side of the board** — the pieces each player has
-taken sit in a column beside the board: the left one belongs to the player at
-the top and fills downward, the right one to the player at the bottom and fills
-upward, so a pile always starts at the same edge as the card it belongs to.
-Both follow a board flip. The running material lead (`+2`) stays on the card,
-next to the name, because that is the part you read at a glance.
+The picture is set wider than its button, for the same reason a taken piece's
+is set wider than its slot. That put a bug in the first version — the four
+columns were `1fr`, which may not go narrower than its content, so the buttons
+grew to fit their pictures, outgrew the dialog, and the knight was cut off at
+its edge. `minmax(0, 1fr)` holds them. White clay under a bright light is very
+nearly the colour of the button, so the picture carries a tight shadow that
+draws a line round the piece, here and on the cards; that is a filter on an
+image that never changes, worked out once, not the per-frame filter on the
+canvas that bug 23 removed. The ten pictures a game can need are drawn ahead,
+while nothing is moving.
 
-The columns are **overlaid, not laid out beside the board**, and that is the
-whole trick. The board is square and limited by width, so a column in the flow
-costs a pixel off each side of every square — measured at 14%, more than the
-full-bleed change had just won back. It does not have to cost anything at the
-default zoom, because the canvas is already not full of tiles: the camera
-keeps the board's rim in frame, so the tiles are drawn across 93% of the
-canvas and the rest is rim and a sliver of lawn either side — 14.8px of it on
-a 412px phone, against a 14px column. The tray goes there.
-
-It used to go there with room to spare, in a 20px column. That was while the
-board was drawn through a short lens, which shrinks the far side and needs a
-wide margin to keep a corner king in frame, and while the fit left a further
-4% all round. The long lens the tall pieces are drawn through does not need
-the first, and the second was given to the squares: the board is now fitted to
-the canvas rim to rim, which on a phone is the edge of the screen. So the
-column is as slim as the broadest piece allows — 3.4% of the board's width,
-a fraction rather than a number of pixels because the margin it stands in is
-a fraction too — and Large, where the board fills the canvas by its height
-and leaves a little less at the sides, is padded by what it is short.
-Measured on a 412px phone, to the tiles of the near rank, with the tray
-clearing them at both levels, and checked the same way at 320, 360 and
-390px:
-
-| Level | Tiles drawn | Padding per side | Margin per side | Tray | Overlap |
-| --- | --- | --- | --- | --- | --- |
-| Fit (default) | 382px | none | 14.8px | 14px | none |
-| Large | 383px | 5px | 14.4px | 14px | none |
-
-The piles come from the **move history**, not from comparing the position
+The rows come from the **move history**, not from comparing the position
 against a full starting set. That distinction is the whole correctness story: a
 side that promotes a pawn shows one pawn short, and a material diff reads that
 as the opponent having captured it — inventing a capture that never happened
 and skewing the score. The history says plainly what was taken. A position
-restored from a bare FEN has no history and so shows no piles, which is honest:
+restored from a bare FEN has no history and so shows no rows, which is honest:
 nothing knows what was captured to reach it.
-
-A full pile is fifteen pieces and a phone card fits about eight at their
-natural width, so the glyphs overlap by a third — the same trick a stack of
-poker chips uses. Past that the pile clips and the score does not: the number
-is the part you actually need.
 
 **A board that fills the phone** — on mobile the board goes edge to edge. It is
 the only square thing on the page and it is limited by WIDTH, not height (the
@@ -610,7 +598,7 @@ risk left in it — font coverage is patchy and it can land as a missing-glyph
 box — so it is the next one worth drawing.
 
 **Game management** — restart (local), resign, rematch, board flip, and copy
-PGN. The control row is **Undo, Flip, Resign**.
+PGN. The control row is **Flip, Size, Resign**.
 
 A rematch always swaps colours, with nothing to tick. It used to be an option
 in the game-over dialog, which turned out to be an option only some of the
@@ -620,9 +608,20 @@ room — agreed by both devices, with nowhere to honour one player's preference
 the rule the same everywhere, and it is the ordinary one: whoever had Black has
 White next.
 
-**Undo is locked**: built and correct, but shown with a padlock and refused on
-tap and on keyboard alike. Remove its id from `LOCKED_CONTROLS`
-(`js/config.js`) to restore it — nothing else needs changing.
+**There is no Undo.** There was one, and for most of its life it was a button
+nobody could press: built and correct, then locked — shown in the row with a
+padlock, refused on tap and on keyboard alike — so that a player could see the
+game had one and that it was not on offer. It has been removed, and whole: the
+button, the lock and the list of locked controls it was the only member of,
+the controller's action, the session's, and the `canUndo` every state carried.
+A button that only ever says no is a button to take away. The engine can still
+take a half-move back, because that is how an online move the room refused is
+rolled out of this device's copy of the position; nothing a player does reaches
+it.
+
+With three controls where there were four, the row is one line at every width.
+On a wide screen it used to be two columns, two and two, and three in two
+columns is two and one, with Resign on a line by itself.
 
 **The Draw button was removed.** The capability underneath is intact and still
 tested: `offerDraw()` is still part of the session contract, and the dialog
@@ -630,8 +629,8 @@ that receives an offer still works, so a peer running an older build can still
 send one. What is gone is the way to *make* an offer from this build.
 
 **Persistence** — autosave after every meaningful action, and a *Continue
-Game* entry point. Local games restore position, history, players, orientation
-and undo depth; online games rejoin their room and resync from it.
+Game* entry point. Local games restore position, history, players and
+orientation; online games rejoin their room and resync from it.
 
 **Refresh mid-game** and the app's own dialog offers it straight back —
 *Resume your game?*, naming the players and how far you got, with three
@@ -851,7 +850,7 @@ you have to scroll around is worse than a small one. At Large the frame also
 crops half of the wooden rim, which is width spent on something you never tap.
 
 It evens the squares out too. At the low angle a far-rank square is 35px deep
-against 41px for a near one; at Large they are 42px and 46px. Each level is
+against 41px for a near one; at Large they are 43px and 47px. Each level is
 measured square by square through the live camera.
 
 **The pieces stand up at Large as well**, and that took a trick. What raising
@@ -890,9 +889,10 @@ already filled. The camera looks at the middle of the board, which is not the
 middle of what has to be seen — heads above the far rank, only the front of
 the slab below the near one — so the picture is now fitted by its height and
 then slid down the frame to where it fits, 2% of it at Large and nothing at
-Fit. That left the board a little to spare at the sides, which was given to
-the canvas out of the padding beside it: a near square is 45 x 44px before
-and after.
+Fit. That left the board a little to spare at the sides, and it cost a near
+square nothing: 45 x 44px on a 390px phone before and after. (It is 46 x 45
+now. The padding Large carried beside the board was for the columns of taken
+pieces, and went with them.)
 
 There was a third step, *Max*, looking almost straight down from 84 degrees.
 It has been removed. The setting is stored as a step number, so a device that
@@ -952,10 +952,11 @@ source order is what makes them win.
 Three things are excluded on purpose. The **lift sits behind `hover: hover`**,
 because a touch screen reports a tap as a hover and then keeps reporting it —
 unguarded, a phone leaves the last button you pressed floating and lit. A
-**locked control** (the Undo) does not move or glow, which is the whole point
-of it being locked. And **`prefers-reduced-motion` removes the movement
-entirely** rather than letting it snap to its finished position with the
-transition stripped off: the jump without the motion is the worst of both.
+**disabled control** does not move or glow. (A third kind, the locked one, did
+not either, and went with the Undo it was made for.) And
+**`prefers-reduced-motion` removes the movement entirely** rather than letting
+it snap to its finished position with the transition stripped off: the jump
+without the motion is the worst of both.
 The colour changes stay there — the control still answers, it just does it by
 lighting up rather than by moving.
 
@@ -1301,7 +1302,7 @@ await initialize()
 await createGame(config)                    // -> state
 await restoreGame(savedRecord)              // -> {ok, state}
 await submitMove({ from, to, promotion })   // -> {ok, error?, move?}
-await submitAction(action, payload)         // resign|draw|undo|restart|rematch
+await submitAction(action, payload)         // resign|draw|restart|rematch
      subscribeToState(listener)             // -> unsubscribe
      getState()                             // synchronous snapshot
      getControllableColors()                // ['w','b'] locally
@@ -1585,7 +1586,7 @@ Behaviours verified against 1.4.0 and handled in the wrapper:
 | `move()` **throws** on an illegal move | Caught; returns `{ok:false, error}`. Position is provably unchanged. |
 | `move()` **throws** if a pawn reaches the back rank without `promotion` | `requiresPromotion()` detects it from the legal-move list *first*, so the picker opens instead. |
 | `load()` **throws** on an invalid FEN | `validateFen()` first, then try/catch. |
-| `load()` silently **clears move history** | Restores use `loadPgn()` replay instead, preserving undo and repetition history. |
+| `load()` silently **clears move history** | Restores use `loadPgn()` replay instead, preserving the move list and repetition history. |
 | `loadPgn()` **throws** on unparseable PGN | Caught; returns `{ok:false}`. |
 | `isDraw()` is true for *any* draw | `getDrawReason()` probes stalemate → insufficient material → threefold → fifty-move to report the specific reason. |
 | `isCapture()` is **false for en passant** (flag `e`, not `c`) | Folded in as `isCapture() \|\| isEnPassant()` so en passant renders a capture ring and plays the capture sound. |
@@ -1596,7 +1597,7 @@ Behaviours verified against 1.4.0 and handled in the wrapper:
 
 ## How saving works
 
-Autosave runs after every move, promotion, undo, restart, resignation, draw,
+Autosave runs after every move, promotion, restart, resignation, draw,
 rematch, board flip and settings change. There is no save button.
 
 Five independent `localStorage` keys are used so a corrupt game never costs
@@ -1644,7 +1645,7 @@ Both records are versioned:
 ### PGN is the restore path, FEN is the cross-check
 
 A FEN alone describes the position but carries no history — restoring from one
-would silently disable **undo** and break **threefold-repetition** detection.
+would silently empty the **move list** and break **threefold-repetition** detection.
 So the PGN is replayed on load, and the resulting FEN must match the stored
 FEN or the record is rejected as corrupt.
 
@@ -1687,12 +1688,12 @@ the totals are reported separately rather than as one number:
 | Config state | 16 | Online availability, and that the SDK is never fetched for local play |
 | Waiting watchdog | 4 | The host's recovery poll runs while waiting and stops when seated |
 | **Styles** | **30** | **A visitor who touches nothing lands on the 3D board and can play on it; the picker is gone, not empty; no retired style returns by any route; the fallback board still works** |
-| **Control row (Chromium)** | **39** | **Undo never reaches the controller by any route; Draw is absent; the row still holds 44px targets** |
+| **Control row (Chromium)** | **39** | **Undo never reaches the controller by any route; Draw is absent; the row still holds 44px targets. Run while Undo was still in the row, locked; it has since been removed, and the row is checked without it at five screen sizes on both boards** |
 | **Board size (Chromium)** | **33** | **Every square measured through the live camera at each level: each step bigger, near and far converge, nothing ever cropped, picking still exact** |
 | **Profile pictures (Chromium)** | **39** | **A real file through the real picker: centre-cropped, scaled to 128px, under budget; shown on the card, saved, restored after a reload, offered back next game; a 6-megapixel photo still fits; a non-image is refused and says why; remote, `javascript:` and SVG values all rejected** |
 | Rules (emulator) | 14 | The rules of the time loaded into the database emulator and driven as an ordinary signed-in user: a room with no picture accepted, unknown player fields rejected, a stranger's uid refused a seat. Its avatar rows asserted that *every* picture was rejected, which was true of the rules then deployed and is no longer true of the rules in this repo — superseded by the suite below, not re-run |
 | **Pictures on online seats (Chromium ×2)** | **36** | **Two devices against a database that enforces the shipped rule text — the cap and the pattern are read out of `firebase/database.rules.json` itself, so client and rules are checked against each other rather than against anyone's memory. A photograph over the budget at 128px comes back 96px and inside it; one already inside is not re-encoded a second time; a remote URL, an SVG and nothing at all are all refused. Two players create, join, and see each other's face on both devices, and the room document carrying both faces is 9,475 bytes. Then the same run against rules that do NOT know the field: the write is refused, the room is created anyway without the picture, both players are told why, and the game is playable — the failure that this feature caused the first time it shipped. Zero console errors** |
-| **Hover feedback (Chromium)** | **20** | **Measured as a pointer, as a finger, and as someone who asked for less motion. With a pointer: buttons, icon buttons, the picture pickers and the swatches all lift exactly 2px and settle back when it leaves, the gold buttons glow gold rather than grey, the sheen is a real gradient behind the label, and hovering the chosen swatch does not strip the outline that marks it chosen. Locked Undo stays flat and shadowless while Flip beside it lifts, and a press beats the lift. On a touch screen the media query does not match, so a tapped button is not left floating. Under reduced motion the lift does not happen at all and the sheen is gone rather than parked mid-sweep. Caught two real specificity bugs: the gold glow was losing to the generic hover rule, and the reduced-motion override was losing to both** |
+| **Hover feedback (Chromium)** | **20** | **Measured as a pointer, as a finger, and as someone who asked for less motion. With a pointer: buttons, icon buttons, the picture pickers and the swatches all lift exactly 2px and settle back when it leaves, the gold buttons glow gold rather than grey, the sheen is a real gradient behind the label, and hovering the chosen swatch does not strip the outline that marks it chosen. Locked Undo stays flat and shadowless while Flip beside it lifts (Undo and its lock have since been removed), and a press beats the lift. On a touch screen the media query does not match, so a tapped button is not left floating. Under reduced motion the lift does not happen at all and the sheen is gone rather than parked mid-sweep. Caught two real specificity bugs: the gold glow was losing to the generic hover rule, and the reduced-motion override was losing to both** |
 | **The deployed site (Chromium ×2 + real project)** | **15** | **The published URL on a phone viewport, the real SDK from the CDN, the real rules: two anonymous accounts claim two friend codes, one adds the other by code, the request arrives with the right name, accepting writes both lists, then a real room with a real message and a real emote crossing between them, a move landing after the conversation, and presence moving to "in a game" on the friend's screen. It removes its own rooms, profiles, presence, friendships and handles afterwards, so the database is left as it was found. Caught a real bug: a friend whose presence had not arrived yet was being announced as offline** |
 | **Chat, emotes, friends, presence, invitations (Chromium ×2–3)** | **110** | **Fifteen of them read `firebase/database.rules.json` itself and assert what it says — that a message can only be written as yourself *or left exactly as it was*, that a colour must match the seat you hold, that a friends list is readable only by its owner, that somebody may add themselves to yours only while your request stands, that a request cannot be sent to yourself, that an invitation may only be written by somebody already on the list while withdrawing one is always allowed, and that the profile-picture rule is byte-for-byte the seat-picture rule. The rest drive two and three real browsers against a database that enforces that rule text. Two players talk: what you send lands on your own side and the other side, attributed to the seat, counted as unread while the sheet is shut and cleared when it opens. An emote arrives named and is drawn from the receiver's own list; with the sheet open it stays in the log on **both** devices, and only with the sheet shut does it pop on the card of whoever sent it. That pair replaced an assertion that checked for a bubble while the sheet was open — a bubble nobody could see, since the sheet is drawn over the cards, so it passed for as long as the bug existed and would have gone on passing. `<img src=x onerror=alert(1)>` arrives as characters and creates no element. **A move after a conversation is not refused** — the check the "unchanged" rule clauses exist for, and the one that would have broken every game after the first message. A log of 60 is shown 40 deep, oldest dropped, and sending into a full log trims the room rather than growing it. Blank, whitespace-only, over-long and unknown-emote sends are each refused for their own reason, and a second send in the same instant is refused for the cooldown. With the setting off the button is gone, both sends refuse, and nothing arrives on screen. Two devices claim two different friend codes, each handle points back at its claimer, a request crosses with the right name, accepting writes both lists and clears both cleanups, and removing clears both. Presence follows a game: starting one moves a friend to "In a game" on the other device without anybody reopening the panel. A reload reclaims the same code rather than a second one. Then the whole thing again against rules that know none of it: the game is still playable and the move still crosses, the message is refused with an explanation, and the friends panel says the rules need deploying rather than sitting empty. It also holds the mode list in place: the five modes in their intended order, and choosing any one of them marking that one and only that one — measured from computed styles after the transition has finished, because a row caught mid-fade looks selected and this project has been fooled by that twice. That check found a real bug: Online Multiplayer could not be highlighted at all, because the rule keyed on a class its label had never carried. Then invitations, on three browsers at once: a friend who is about can be asked, one who is not on the list cannot — and a third browser going round the client and writing straight at the database is refused by the rules, which is the check that matters, since the client is the half an attacker replaces. One tap hosts a room, stands in it, gets the panel out of the way, and writes an invitation naming that room, under the right name, carrying nothing else; the row for that friend then says "Invited" and will not send a second. Cancelling the room withdraws it rather than leaving it pointing at a room that has gone. Asked again, the other phone shows a count with the panel shut, the invitation named and offering both answers, and Join seats both players in that one room with no code typed anywhere — after which the invitation is deleted and the count is gone. An invitation seeded three minutes old is not offered at all, neither in the panel nor in the state behind it. And the only write refused in the whole run is the one that was supposed to be. Zero console errors** |
 | **The emote bubble (Chromium)** | **14** | **A duration, so it is measured rather than trusted: the bubble is fired and watched at 50ms intervals until it goes, and it has to still be there well past the old 2.6s and to leave within a small margin of the configured time — it lives 5,014ms against a configured 5,000. The stylesheet is checked to READ the duration rather than repeat it, no emote animation is left carrying a hard-coded one, every `var()` fallback matches the constant, and the custom property is confirmed on the root of a running page. Plus the things a longer bubble must not break: it still appears at once, carries the right glyph, and a second emote replays the animation instead of sitting still because the class was already on** |
@@ -1703,7 +1704,7 @@ the totals are reported separately rather than as one number:
 | **Profile pictures — regression (Chromium)** | **24** | **The paths whose signatures changed: the bot seat never inherits a picture, a rematch carries each picture across the colour swap, the mode toggle still hides the right rows, and a move still plays** |
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
-| **Capture trays (Chromium)** | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at each zoom — must vanish when empty, must follow a board flip, and a full pile of 15 3D portraits must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
+| **Capture trays (Chromium)** — since replaced by the rows on the cards, which are checked at five screen sizes on both boards with every piece taken | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at each zoom — must vanish when empty, must follow a board flip, and a full pile of 15 3D portraits must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
 | **Mobile board + captures (Chromium)** | **24** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
 | **Room code length (Chromium + emulator)** | **14** | **Six characters everywhere the length appears independently: the constant, `ONLINE_AVATARS`, the normaliser, the join field's maxlength and typing limit, both placeholders, and the security rules — which cannot import the constant, so they are checked to accept 6 and reject 3, 4 and look-alike characters** |
@@ -1839,8 +1840,8 @@ to tell the rest of the app about.
    expired. Every bit of it invisible until somebody tapped a piece and was
    told it had nothing left. Fixed by overriding `submitAction` to reset the
    elemental state and re-charge the board for exactly those two actions —
-   and deliberately not for Undo, which is locked app-wide and would need a
-   history of every power ever used to roll back through.
+   and deliberately not for Undo, which was locked app-wide and would have
+   needed a history of every power ever used to roll back through.
 
 12. **A game seven moves deep offered to resume "0 moves played".** The
    Continue dialog counts `state.moves`, which is chess.js' move list — and a
@@ -2142,6 +2143,26 @@ being hidden by a rule that changed underneath it:
    away from the camera and every knight faces the way its side does. The
    same check on the build before the fix fails at both sizes — on the lean
    at Large, and on the knights at Fit, which is the published game.
+27. **The taken pieces could not be read.** Reported as "after the
+   elimination, chess should show more clearly". They stood in two columns
+   laid over the edges of the board, in the margin the camera leaves beside
+   the tiles, and that margin is 13px on a 390px phone. It had been a good
+   bargain while it was being struck — a pile that cost the board nothing —
+   and every later change that gave the board more of the screen made the
+   margin, and so the pile, smaller, until a taken rook was a few pixels of
+   cream at the edge of the glass with a bishop tucked behind it.
+
+   They are a row at the end of the player's card now, standing, 38px
+   tall, and the columns are removed. See *Captured pieces, on the players'
+   cards*, which also has the arrangement that was tried first and what it
+   pushed off the screen.
+
+   One bug on the way. Each piece is a slot narrower than its picture, and
+   the slots were given their width as a flex-basis. A row is as wide as
+   its slots only if the slots have a width of their own to count; a basis
+   is not counted, and a slot holds nothing in the flow, its picture being
+   positioned over it. So the row measured as seven empty slots, 14px, and
+   drew seven pieces on top of one another. The slots have a `width`.
 
 ### Manual checklist
 
@@ -2161,7 +2182,7 @@ being hidden by a rule that changed underneath it:
 | 12 | Promote to Q / R / B / N | Picker opens; chosen piece appears |
 | 13 | Load `7k/5Q2/6K1/8/8/8/8/8 b - - 0 1` | DRAW — Stalemate |
 | 14 | Load `7k/8/8/8/8/8/8/K7 w - - 0 1` | DRAW — Insufficient Material |
-| 15 | e4, e5, Nf3, then tap Undo | Refused — Undo is locked, and says so |
+| 15 | Look for an Undo button | There is none — the control row is Flip, Size, Resign |
 | 16 | Play moves, then refresh | *Resume your game?* dialog; Continue restores position and history |
 | 16b | Refresh again, tap Exit Game | Back on the menu, nothing lost — Continue still offers the same game |
 | 17 | Flip Board | Only orientation changes |
@@ -2195,7 +2216,7 @@ Positions for tests 9–14 are one tap away via the DEBUG presets below.
 | 21 | Each device's own colour | Always at the bottom of its own board |
 | 22 | Tap an opponent piece | Nothing happens; no move is sent |
 | 23 | Move on device A | Appears on B within a moment, with last-move highlight |
-| 24 | Look for a Draw button | There is none — the control row is Undo, Flip, Resign |
+| 24 | Look for a Draw button | There is none — the control row is Flip, Size, Resign |
 | 25 | Resign | Both devices show the same result |
 | 26 | Rematch | Resets only once *both* ask; colours swap |
 | 27 | Close one device's tab | Other shows "disconnected" |
@@ -2250,23 +2271,21 @@ the DOM**. Set it to `false` before shipping.
 3. **Drag-and-drop is mouse/pen only.** On touch, tap-to-move is the sole
    interaction so that page scrolling keeps working. Tap-to-move is fully
    supported everywhere, including desktop.
-4. **Undo is locked in the UI, and Draw is gone from it.** Undo stays in the
-   row with a padlock and refuses to act; the Draw button was removed
-   outright. Neither capability was deleted — both are still implemented and
-   still tested — so restoring either is a small, contained change rather than
-   a repair job: an id in `LOCKED_CONTROLS` for Undo, a button and one line of
-   wiring for Draw.
+4. **There is no Undo, and no Draw button.** The two are gone in different
+   ways. Undo was removed whole — button, lock, controller action, session
+   action — so a move, once played, stays played, and bringing it back is
+   writing it again. The Draw button was removed from the row and the
+   capability under it was kept and is still tested, so restoring that one is
+   a button and one line of wiring.
 
-   The practical consequence is that a draw can no longer be *offered* from
-   this build, online or off. Receiving, accepting and declining still work,
-   since a peer on an older build can still send one.
+   The practical consequence of the second is that a draw can no longer be
+   *offered* from this build, online or off. Receiving, accepting and
+   declining still work, since a peer on an older build can still send one.
 
-   If Undo is ever unlocked, its own caveats still apply: it has no depth
-   limit and no confirmation, and is local-only — online, a unilateral
-   take-back would let one player rewind the opponent's position. Turning it
-   into an offer the opponent approves is the natural next step; it already
-   routes through `submitAction`, so the change is confined to the session
-   provider.
+   If Undo is ever written again, what was true of the old one still is: it
+   had no depth limit and no confirmation, and was local-only — online, a
+   unilateral take-back would let one player rewind the opponent's position.
+   An offer the opponent approves is the shape it would need there.
 
 11. **There is no clock.** There was one, for Speed Chess, and it went with
     that mode. It was local-only and could only ever have been: online is two
@@ -2324,13 +2343,12 @@ the DOM**. Set it to `false` before shipping.
     | Level | Tiles drawn | Far square | Near square | Far square area |
     | --- | --- | --- | --- | --- |
     | **Fit** (default) | 382px (93% of the screen) | 44 x **35px** | 48 x 41px | 1534px² |
-    | Large | 384px (93%) | 45 x 42px | 48 x 46px | 1880px² |
+    | Large | 392px (95%) | 46 x 43px | 49 x 47px | 1968px² |
 
     So a far-rank square at Fit is four fifths the area of one at Large, and
     35px deep against the 44px this app uses everywhere else. The board is
     as wide as the phone allows at both levels: it is fitted to the canvas
-    rim to rim, the canvas runs to the edges of the screen, and what is left
-    either side is the 14px column the taken pieces stand in.
+    rim to rim, and the canvas runs to the edges of the screen.
 
     The other cost is new with the tall set and is the larger one. At Fit a
     piece is drawn over the lower part of the tile behind it: a pawn's head

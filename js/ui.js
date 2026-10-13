@@ -28,8 +28,6 @@ import {
   UI_STYLES,
   SELECTABLE_UI_STYLES,
   DEFAULT_UI_STYLE,
-  LOCKED_CONTROLS,
-  isControlLocked,
   TOAST_MS,
   warn,
 } from './config.js';
@@ -221,15 +219,15 @@ export class UI {
    * Draws one piece as a picture, when the mounted board can.
    *
    * Null on the flat fallback board, which has no geometry to photograph — the
-   * trays fall back to Unicode glyphs there. See setPieceSprites().
+   * cards fall back to Unicode glyphs there. See setPieceSprites().
    */
   #pieceSprite = null;
 
   /**
    * Bumped whenever the sprite source changes.
    *
-   * Part of the tray cache key. Without it, swapping renderers mid-game would
-   * leave the trays showing whichever form they were built with: the pieces
+   * Part of the pile's cache key. Without it, swapping renderers mid-game would
+   * leave the cards showing whichever form they were built with: the pieces
    * have not changed, so the key would not either, and the early return would
    * keep glyphs on a 3D board or portraits on a flat one.
    */
@@ -252,9 +250,9 @@ export class UI {
       'bottom-name', 'bottom-color', 'bottom-turn',
       'btn-rename-top', 'btn-rename-bottom',
       'input-rename-top', 'input-rename-bottom',
-      'tray-top', 'tray-bottom', 'top-edge', 'bottom-edge',
+      'top-taken', 'bottom-taken', 'top-edge', 'bottom-edge',
       'board', 'board-area', 'status', 'status-text', 'status-badge',
-      'btn-undo', 'btn-flip', 'btn-resign', 'btn-zoom', 'zoom-label',
+      'btn-flip', 'btn-resign', 'btn-zoom', 'zoom-label',
       'history-panel', 'btn-history-toggle', 'history-list', 'history-count',
       'modal-promotion', 'promotion-choices',
       'modal-confirm', 'confirm-title', 'confirm-text', 'confirm-actions',
@@ -383,37 +381,6 @@ export class UI {
         stylePicker.append(button);
       });
     }
-
-    // Locked controls: visible, plainly unavailable, and inert. Applied once
-    // here rather than on every render, since the lock never changes at
-    // runtime — and applying it before the first render means there is no
-    // frame in which a locked control looks pressable.
-    LOCKED_CONTROLS.forEach((id) => {
-      const button = this.#dom[`btn-${id}`];
-      if (!button) return;
-
-      // The label is the button's own text, minus the icon span, so it stays
-      // correct if a control is ever renamed in the HTML.
-      const label = [...button.childNodes]
-        .filter((node) => node.nodeType === Node.TEXT_NODE)
-        .map((node) => node.textContent.trim())
-        .join(' ')
-        .trim() || id;
-
-      button.classList.add('btn--locked');
-      // aria-disabled rather than `disabled`: the button keeps its place in
-      // the tab order and is still announced, so a screen-reader user learns
-      // the control is locked instead of it silently vanishing.
-      button.setAttribute('aria-disabled', 'true');
-      button.setAttribute('aria-label', `${label}, locked`);
-      button.title = `${label} is locked`;
-
-      const lock = document.createElement('span');
-      lock.className = 'btn__lock';
-      lock.setAttribute('aria-hidden', 'true');
-      lock.textContent = '🔒';
-      button.append(lock);
-    });
 
     // Profile-picture pickers. The markup declares which seats have one, via
     // `data-avatar-slot`, so adding a seat to the form is the whole change.
@@ -561,7 +528,7 @@ export class UI {
   }
 
   /**
-   * Hand the trays a way to draw a real piece, or take it away.
+   * Hand the cards a way to draw a real piece, or take it away.
    *
    * Called once per board mount, because it is the mounted renderer that
    * decides whether there is any geometry to photograph.
@@ -627,11 +594,6 @@ export class UI {
     const zoom = BOARD_ZOOM_LEVELS[clampBoardZoom(settings.boardZoom)];
     if (this.#dom['zoom-label']) this.#dom['zoom-label'].textContent = zoom.label;
 
-    // How much empty margin the camera leaves either side of the board depends
-    // on the angle, and that is what decides whether the capture trays can sit
-    // in it for free. CSS needs to know which level is on — see .board-area
-    // in board.css.
-    this.#dom['board-area']?.setAttribute('data-zoom', zoom.id);
     // The accessible name carries what pressing it does; the visible label only
     // has room to say where you are now.
     this.#dom['btn-zoom']?.setAttribute(
@@ -917,17 +879,30 @@ export class UI {
   }
 
   /**
-   * Draw one player's captured pile, and their lead if they have one.
+   * Draw the pieces one player has taken, at the end of that player's card,
+   * and their lead if they have one.
    *
-   * The strip is rebuilt only when its contents actually change. render() runs
+   * A row of the pieces themselves, stood up side by side: strongest first,
+   * each kind together, a pawn overlapping the pawn before it the way a row
+   * of them does on a table. Each is a slot narrower than its picture — the
+   * picture is square and a piece is tall and thin, so most of its width is
+   * air — and the slots give way before the row is allowed to push the card
+   * wider. See .player-card__taken in style.css.
+   *
+   * They were two columns laid over the edges of the board, 14px wide, in
+   * the margin the camera happens to leave there: free, and the size of a
+   * margin. A rook in one was a mark a few pixels across, tucked behind the
+   * piece above it. The card has the room the board does not.
+   *
+   * The row is rebuilt only when its contents actually change. render() runs
    * on every move and this is the one part of the card that holds a dozen
-   * nodes, so a blind rebuild would churn the DOM twice a move for a strip
+   * nodes, so a blind rebuild would churn the DOM twice a move for a row
    * that usually has not changed at all.
    */
   #renderCaptures(prefix, taken, color) {
-    const strip = this.#dom[`tray-${prefix}`];
+    const row = this.#dom[`${prefix}-taken`];
     const edgeEl = this.#dom[`${prefix}-edge`];
-    if (!strip || !edgeEl) return;
+    if (!row || !edgeEl) return;
 
     const mine = taken[color] ?? [];
     const theirs = taken[color === WHITE ? BLACK : WHITE] ?? [];
@@ -940,31 +915,32 @@ export class UI {
     );
     // The colour is part of the key, not just the pieces.
     //
-    // A tray belongs to whichever player is at that end of the board, and a
+    // A card belongs to whichever player is at that end of the board, and a
     // flip swaps them. When both piles happen to hold the same pieces — after
     // an even trade, which is common — a key of pieces alone is unchanged
-    // across the flip, the early return fires, and the tray keeps the previous
+    // across the flip, the early return fires, and the card keeps the previous
     // player's pile: the right shapes in the wrong colour.
     const key = `${color}|${sorted.join('')}|${edge}|${this.#spriteEpoch}`;
-    if (strip.dataset.key === key) return;
-    strip.dataset.key = key;
+    if (row.dataset.key === key) return;
+    row.dataset.key = key;
 
     // Captured pieces belong to the other side, so they are drawn in the other
-    // side's colour — a white player's tray holds the black pieces they took.
+    // side's colour — a white player's card holds the black pieces they took.
     const theirColor = color === WHITE ? BLACK : WHITE;
-    strip.innerHTML = sorted
-      .map((p) => {
+    row.innerHTML = sorted
+      .map((p, index) => {
         // The real piece where the board can draw one, so a captured knight is
         // the knight that was on the board rather than a flat glyph of a
         // different chess set standing next to a solid one.
         const sprite = this.#pieceSprite?.(p, theirColor);
+        // The first of each kind stands a little clear of the kind before it.
+        const lead = sorted[index - 1] === p ? '' : ' taken--lead';
         // Both forms carry what they represent, so nothing downstream has to
         // infer a captured piece's colour from the shape of its markup.
+        const what = `data-color="${theirColor}" data-piece="${p}"`;
         return sprite
-          ? `<img class="capture capture--piece" src="${sprite}" alt=""`
-            + ` data-color="${theirColor}" data-piece="${p}">`
-          : `<span class="capture" data-color="${theirColor}" data-piece="${p}">`
-            + `${PIECE_GLYPHS[p]}</span>`;
+          ? `<span class="taken${lead}" ${what}><img class="taken__piece" src="${sprite}" alt=""></span>`
+          : `<span class="taken taken--glyph${lead}" ${what}>${PIECE_GLYPHS[p]}</span>`;
       })
       .join('');
 
@@ -974,7 +950,7 @@ export class UI {
     sorted.forEach((p) => counts.set(p, (counts.get(p) ?? 0) + 1));
     const spoken = [...counts].map(([p, n]) =>
       `${n} ${PIECE_NAME[p]}${n === 1 ? '' : 's'}`).join(', ');
-    strip.setAttribute('aria-label', spoken ? `Captured ${spoken}` : '');
+    row.setAttribute('aria-label', spoken ? `Captured ${spoken}` : '');
 
     edgeEl.hidden = edge <= 0;
     if (edge > 0) edgeEl.textContent = `+${edge}`;
@@ -1166,14 +1142,6 @@ export class UI {
     // Online, the board is only live once both seats are filled.
     const inactive = Boolean(state.isGameOver) || Boolean(online?.waitingForOpponent);
 
-    // Locked controls are skipped: their appearance and title are set once at
-    // build time, and re-deriving them from game state here would overwrite
-    // the lock with an ordinary enabled/disabled button.
-    const undo = this.#dom['btn-undo'];
-    if (undo && !isControlLocked('undo')) {
-      undo.disabled = !state.canUndo;
-      undo.title = online ? 'Undo is not available in online games' : '';
-    }
     if (this.#dom['btn-resign']) this.#dom['btn-resign'].disabled = inactive;
 
     // Restart resets the position unilaterally, which has no meaning across
@@ -1414,7 +1382,7 @@ export class UI {
    *
    * Filled in here rather than once at start-up because both answers change
    * during a game: whose pawn it is, and which board is mounted. The key is
-   * the same idea as the trays': nothing is rebuilt when neither has.
+   * the same idea as the cards': nothing is rebuilt when neither has.
    */
   showPromotion({ color }) {
     const choices = this.#dom['promotion-choices'];
@@ -1425,7 +1393,7 @@ export class UI {
         const type = button.dataset.piece;
         const figure = button.querySelector('.promotion__figure');
         if (!figure) return;
-        const sprite = this.#pieceSprite?.(type, color, 'choice');
+        const sprite = this.#pieceSprite?.(type, color);
         figure.innerHTML = sprite
           ? `<img class="promotion__piece" src="${sprite}" alt="" data-color="${color}">`
           : `<span class="promotion__glyph" data-color="${color}">${PIECE_GLYPHS[type]}</span>`;
@@ -2164,22 +2132,8 @@ export class UI {
     this.#dom['btn-game-settings']?.addEventListener('click', () => this.openModal('settings'));
 
     // --- Controls ---
-    // Routed through one helper so the lock is enforced in a single place. A
-    // locked control is aria-disabled rather than `disabled`, so the browser
-    // still delivers its click — from a tap and from Enter or Space on a
-    // focused button alike — and this is what refuses to act on it.
-    const control = (id, action) => {
-      this.#dom[`btn-${id}`]?.addEventListener('click', () => {
-        if (isControlLocked(id)) {
-          this.toast(`${this.#dom[`btn-${id}`].title}`, 'warn');
-          return;
-        }
-        this.#call(action);
-      });
-    };
-    control('undo', 'onUndo');
-    control('flip', 'onFlip');
-    control('resign', 'onResign');
+    this.#dom['btn-flip']?.addEventListener('click', () => this.#call('onFlip'));
+    this.#dom['btn-resign']?.addEventListener('click', () => this.#call('onResign'));
 
     // Zoom cycles rather than stepping, so one button covers every level and
     // the row keeps its shape. With two levels that makes it a switch — and

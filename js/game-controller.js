@@ -663,27 +663,6 @@ export class GameController {
   // taken here and one taken by a remote opponent follow the same path.
   // -----------------------------------------------------------------------
 
-  async undo() {
-    if (this.#processing) return { ok: false };
-    if (!this.#state?.canUndo) {
-      this.#toast(
-        this.isOnline() ? 'Undo is not available online' : 'Nothing to undo',
-        'warn',
-      );
-      return { ok: false };
-    }
-
-    this.#processing = true;
-    try {
-      const result = await this.#session.submitAction(SESSION_ACTION.UNDO);
-      if (result.ok) this.#toast('Move taken back');
-      else if (result.error) this.#toast(result.error, 'warn');
-      return result;
-    } finally {
-      this.#processing = false;
-    }
-  }
-
   async restart() {
     this.#expectReset();
     const result = await this.#session.submitAction(SESSION_ACTION.RESTART);

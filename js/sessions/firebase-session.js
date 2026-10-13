@@ -689,8 +689,8 @@ export class FirebaseSession {
         rebuilt = replay.ok && this.#engine.getFen() === targetFen;
       }
       if (!rebuilt && targetFen) {
-        // Fall back to the raw position. History (and therefore undo) is lost,
-        // but the board stays correct — which matters more.
+        // Fall back to the raw position. History is lost, but the board stays
+        // correct — which matters more.
         const loaded = this.#engine.loadFen(targetFen);
         if (!loaded.ok) warn('Could not apply remote position', loaded.error);
       }
@@ -864,11 +864,6 @@ export class FirebaseSession {
         return this.#respondToDraw(true);
       case SESSION_ACTION.REMATCH:
         return this.#requestRematch();
-      case SESSION_ACTION.UNDO:
-        // Deliberately unsupported online: a unilateral take-back would let a
-        // player rewind the opponent's position. Offered as a request in a
-        // future revision.
-        return { ok: false, error: 'Undo is not available in online games' };
       case SESSION_ACTION.RESTART:
         return { ok: false, error: 'Use Rematch in online games' };
       default:
@@ -1242,8 +1237,6 @@ export class FirebaseSession {
       result: room?.result ?? null,
       isCheck,
       checkSquare: isCheck ? engine.getKingSquare(turn) : null,
-      // Undo is intentionally unavailable online.
-      canUndo: false,
       moveNumber: engine.moveNumber(),
       startFen: room?.startFen ?? null,
       isGameOver: this.#isTerminal(),

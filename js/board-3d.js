@@ -83,9 +83,7 @@ const DRAG_LIFT = 0.5;
  * canvas that already runs to the edges of the screen, where the board is as
  * wide as it can ever be and every pixel left over is a pixel off a square.
  * What is left is enough to keep the rim's antialiased edge off the last row
- * of pixels and no more. The trays of taken pieces stand in the margin this
- * leaves at the default zoom, so the two numbers move together: see the
- * tray's width in style.css.
+ * of pixels and no more.
  */
 const FRAME_FILL = 0.985;
 
@@ -190,24 +188,26 @@ const CLAY_ROUGHNESS = 0.78;
 const PIECE_HEIGHT = { p: 1.08, r: 1.27, n: 1.4, b: 1.5, q: 1.69, k: 1.95 };
 
 /**
- * The two pictures the board draws of a piece for the page around it. See
+ * The picture the board draws of a piece for the page around it. See
  * pieceSprite().
  *
- * `pile` is the small one in the captured piles. Its frame is the king's, so
- * that a pawn in a pile is the fraction of a king it is on the board, and
- * the piece floats in the middle of it, because a pile has no floor.
+ * One picture, for two places: the row of taken pieces on a player's card,
+ * and the four choices in the promotion picker. Both line pieces up to be
+ * read side by side, so in both the piece stands, its foot on the bottom of
+ * the frame, and a row of the pictures is a row of pieces on one floor.
  *
- * `choice` is the one in the promotion picker, where four pieces are lined
- * up to be chosen between. They stand there, feet on one line, the way they
- * would on a table. The frame is the queen's: she is the tallest thing a
- * pawn can become, and a frame with room for a king would only make all
- * four smaller. Twice the pixels, because it is shown at more than twice
- * the size and a phone has three pixels to each of the page's.
+ * The frame is the queen's. She is the tallest piece either place can show —
+ * a king is never taken and a pawn never becomes one — and a frame with room
+ * for a king would only make everything in it smaller. 192 pixels, because
+ * the picker shows it at 72 and a phone has three pixels to each of the
+ * page's.
+ *
+ * There were two. The other was for the taken pieces while they stood in
+ * slim columns beside the board: a smaller picture, framed to the king,
+ * with the piece floating in the middle of it because a column has no
+ * floor. The columns went and it went with them.
  */
-const PORTRAIT = {
-  pile: { size: 96, tallest: 'k', standing: false },
-  choice: { size: 192, tallest: 'q', standing: true },
-};
+const PORTRAIT = { size: 192, tallest: 'q' };
 
 /**
  * Concatenate several already-positioned geometries into one.
@@ -1497,31 +1497,27 @@ export class Board3D {
   /**
    * A small picture of one piece, drawn with the board's own parts.
    *
-   * For the captured piles beside the board, which were Unicode glyphs and so
-   * were the one place in the app still showing a flat chess set next to a
-   * solid one. This builds the real piece — the same baked lumps, the same
-   * clay and the same soft key light — and reads it back as an image, so a
-   * captured knight is the knight that was on the board rather than a
-   * different artist's idea of one.
+   * For the taken pieces on the players' cards, which were Unicode glyphs
+   * and so were the one place in the app still showing a flat chess set next
+   * to a solid one. This builds the real piece — the same baked lumps, the
+   * same clay and the same soft key light — and reads it back as an image,
+   * so a captured knight is the knight that was on the board rather than a
+   * different artist's idea of one. The promotion picker shows the same
+   * picture, of the four pieces a pawn can become. See PORTRAIT.
    *
-   * The promotion picker asks for the same thing, larger and standing up:
-   * the four pieces a pawn can become, in the colour of the pawn. That is
-   * the `choice` look, and the piles' is `pile`. See PORTRAIT.
-   *
-   * Rendered once per piece and look, and cached: twenty pictures at most.
+   * Rendered once per piece and cached: ten pictures in a game, kings never
+   * being asked for.
    *
    * Drawn through a render target rather than the visible canvas, so the live
    * frame is never disturbed and no second WebGL context is created — browsers
    * cap those per page, and this board already has to be careful about it.
    *
-   * @param {string} [look] a key of PORTRAIT.
    * @returns {string|null} a PNG data URL, or null if it could not be drawn.
    */
-  pieceSprite(type, color, look = 'pile') {
+  pieceSprite(type, color) {
     if (this.#disposed || !this.#renderer || !THREE) return null;
-    const frame = PORTRAIT[look] ? look : 'pile';
-    const { size, tallest, standing } = PORTRAIT[frame];
-    const key = `${color}${type}@${frame}`;
+    const { size, tallest } = PORTRAIT;
+    const key = `${color}${type}`;
     if (this.#spriteCache.has(key)) return this.#spriteCache.get(key);
 
     let target = null;
@@ -1542,15 +1538,14 @@ export class Board3D {
         A rim light, and specifically for the black pieces.
 
         On the board a black piece is legible because it stands on a pale
-        tile: the contrast comes from behind it. In a tray there is no tile,
-        and the tray is a dark groove, so a charcoal piece in it is close to a
-        piece-shaped hole. Lighting it from behind and above draws a bright
-        edge around the silhouette, which is how the shape survives at this
-        size — the same reason a cinematographer puts a light behind a dark
-        subject.
+        tile: the contrast comes from behind it. On a card or in the picker
+        there is no tile, and a charcoal piece is one flat shape. Lighting it
+        from behind and above draws a bright edge around the silhouette,
+        which is how the shape survives at this size — the same reason a
+        cinematographer puts a light behind a dark subject.
 
-        Stronger for black than white, because white already separates from
-        the tray and too much rim on it only blows the highlight out.
+        Stronger for black than white, because too much rim on a white piece
+        only blows the highlight out.
       */
       const rim = new THREE.DirectionalLight(0xffffff, color === 'b' ? 2.4 : 0.6);
       rim.position.set(0.6, 2.0, -2.4);
@@ -1561,14 +1556,13 @@ export class Board3D {
       group.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
       scene.add(group);
 
-      // Centre the piece on the origin so the camera can simply look at it.
-      // Standing, it is centred from side to side only, and its foot goes
-      // where the tallest piece's foot would be: every piece drawn this way
-      // then has its feet on the same line of its picture, and a row of the
-      // pictures is a row of pieces on one floor.
+      // Centre the piece on the origin from side to side, so the camera can
+      // simply look at it, and put its foot where the tallest piece's foot
+      // would be: every piece then has its feet on the same line of its
+      // picture, and a row of the pictures is a row of pieces on one floor.
       const box = new THREE.Box3().setFromObject(group);
       const centre = box.getCenter(new THREE.Vector3());
-      if (standing) centre.y = box.min.y + PIECE_HEIGHT[tallest] / 2;
+      centre.y = box.min.y + PIECE_HEIGHT[tallest] / 2;
       group.position.sub(centre);
 
       const fov = 28;
@@ -1582,19 +1576,18 @@ export class Board3D {
         piece's own box.
 
         Framing every piece to fill its own square is the obvious thing and it
-        destroys the set: a pawn is barely half a king's height, so filling the
-        frame with it renders a pawn the same size as a king, and the pile
-        stops reading as chess pieces at all. Sizing to the king once means a
-        pawn occupies the fraction of the frame it actually occupies on the
-        board. (The promotion picker's tallest piece is the queen, and the
-        same holds there: its rook is shorter than its queen.)
+        destroys the set: a pawn is two thirds of a queen's height, so
+        filling the frame with it renders a pawn the same size as a queen,
+        and a row of taken pieces stops reading as chess pieces at all.
+        Sizing to the queen once means a pawn is the fraction of her it is on
+        the board, and a rook is shorter than she is.
 
-        A close frame: the king's height and an eighth over. It was two
-        thirds over while the set was squat, because a squat king is nearly as
-        wide as it is tall and needed the room at the sides. A tall one does
-        not, and in a frame that loose it is a sliver in the middle of an
-        empty tile. The knight is the broad one, at about one square from
-        muzzle to mane, and that is still under half of this.
+        A close frame: the queen's height and an eighth over. It was two
+        thirds over while the set was squat, because a squat piece is nearly
+        as wide as it is tall and needed the room at the sides. A tall one
+        does not, and in a frame that loose it is a sliver in the middle of
+        an empty tile. The knight is the broad one, at nine tenths of a
+        square from muzzle to mane, and that is still under half of this.
       */
       const radius = PIECE_HEIGHT[tallest] / 2;
       const distance = (radius / Math.tan(THREE.MathUtils.degToRad(fov) / 2)) * 1.12;
@@ -1654,13 +1647,11 @@ export class Board3D {
    *
    * So they are drawn ahead, one at a time with a pause between, and never
    * while something on the board is moving. Pawns first: a pawn is usually
-   * the first thing taken. No kings, which never are. Then the eight the
-   * promotion picker shows, which no game needs in its first minute.
+   * the first thing taken. No kings, which never are. The promotion picker
+   * shows the same pictures, so these ten are all of them.
    */
   #warmPortraits() {
     const queue = ['p', 'n', 'b', 'r', 'q'].flatMap((type) => [[type, 'w'], [type, 'b']]);
-    queue.push(...['q', 'r', 'b', 'n']
-      .flatMap((type) => [[type, 'w', 'choice'], [type, 'b', 'choice']]));
     const next = () => {
       if (this.#disposed || !queue.length) return;
       const busy = this.#animations.length > 0 || this.#cameraSpin || this.#drag || this.#warmFrames > 0;

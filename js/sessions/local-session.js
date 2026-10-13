@@ -16,8 +16,8 @@
  *   async createGame(config)                 Start a new game. -> state
  *   async restoreGame(saved)                 Rebuild from a saved record. -> state
  *   async submitMove({from, to, promotion})  -> {ok, error?, move?}
- *   async submitAction(action, payload)      resign / draw / undo / restart /
- *                                            rematch -> {ok, error?}
+ *   async submitAction(action, payload)      resign / draw / restart / rematch
+ *                                            -> {ok, error?}
  *   subscribeToState(listener)               -> unsubscribe function
  *   getState()                               Current snapshot (synchronous).
  *   getControllableColors()                  Colors this device may move.
@@ -62,7 +62,6 @@ export const END_REASON = {
 export const SESSION_ACTION = {
   RESIGN: 'resign',
   DRAW: 'draw',
-  UNDO: 'undo',
   RESTART: 'restart',
   REMATCH: 'rematch',
 };
@@ -144,8 +143,8 @@ export class LocalSession {
    * Rebuild a game from a validated saved record.
    *
    * The PGN is replayed rather than the FEN loaded, because replaying rebuilds
-   * the full move history — which is what keeps undo and threefold-repetition
-   * detection working across a page refresh. The FEN is used only as a
+   * the full move history — which is what keeps the move list, the captured
+   * piles and threefold-repetition detection right across a page refresh. The FEN is used only as a
    * cross-check, and as a last-resort fallback if replay somehow fails.
    */
   async restoreGame(saved) {
@@ -166,8 +165,9 @@ export class LocalSession {
     if (!restored) {
       const loaded = this.#engine.loadFen(saved.fen);
       if (!loaded.ok) return { ok: false, error: loaded.error };
-      // History is empty on this path, so undo is unavailable — acceptable
-      // because the position itself is correct.
+      // History is empty on this path, so the move list starts here and a
+      // repetition from before it cannot be counted — acceptable because the
+      // position itself is correct.
     }
 
     this.#players = {
@@ -287,8 +287,6 @@ export class LocalSession {
         return this.#resign(payload.color ?? this.#engine.getTurn());
       case SESSION_ACTION.DRAW:
         return this.#agreeDraw();
-      case SESSION_ACTION.UNDO:
-        return this.#undo();
       case SESSION_ACTION.RESTART:
         return this.#restart();
       case SESSION_ACTION.REMATCH:
@@ -326,23 +324,6 @@ export class LocalSession {
     this.#engine.setHeader('Result', '1/2-1/2');
     this.#publish();
     return { ok: true, state: this.getState() };
-  }
-
-  /**
-   * Take back one half-move (one player's move), as required for local play.
-   * Also clears any finished-game result, so undoing out of a checkmate
-   * returns the game to a playable state rather than a frozen board.
-   */
-  #undo() {
-    if (!this.#engine.canUndo()) return { ok: false, error: 'Nothing to undo' };
-    const undone = this.#engine.undo();
-    if (!undone) return { ok: false, error: 'Undo failed' };
-
-    this.#result = null;
-    this.#engine.setHeader('Result', '*');
-    this.#refreshStatus();
-    this.#publish();
-    return { ok: true, move: undone, state: this.getState() };
   }
 
   /** Reset the position but keep both players — names and pictures. */
@@ -452,7 +433,6 @@ export class LocalSession {
       result: this.#result ? { ...this.#result } : null,
       isCheck,
       checkSquare: isCheck ? engine.getKingSquare(turn) : null,
-      canUndo: engine.canUndo(),
       moveNumber: engine.moveNumber(),
       startFen: this.#startFen,
       isGameOver: this.#isTerminal(),

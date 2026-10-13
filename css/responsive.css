@@ -14,8 +14,10 @@
     padding: 0.6rem 0.5rem 2rem;
   }
 
-    .player-card {
+  .player-card {
     padding: 0.5rem 0.6rem;
+    /* A narrow phone's cards have less width to stand a long row in. */
+    --taken: 2.1rem;
   }
 
   .player-card__avatar {
@@ -192,13 +194,11 @@
     width: min(58vw, 600px);
   }
 
-  .controls {
-    /* Back to rows here: the base rule flows controls into a single row of
-       columns, which on a narrow panel would keep adding columns instead of
-       wrapping onto a second line. */
-    grid-auto-flow: row;
-    grid-template-columns: repeat(2, 1fr);
-  }
+  /* The controls stay in the one row the base rule gives them. They were
+     put in two columns here while there were four — Undo, Flip, Size and
+     Resign, two and two. Undo was removed, and three in two columns is two
+     and one, with Resign on a line by itself. Three fit the panel side by
+     side. */
 
   /* On desktop there is room for the history to stay open. */
   .history__list,
@@ -264,6 +264,11 @@
    -------------------------------------------------------------------------- */
 
 @media (orientation: landscape) and (max-height: 560px) {
+  /* The cards are shorter here, and the taken pieces with them. */
+  .player-card {
+    --taken: 1.9rem;
+  }
+
   .game {
     display: grid;
     grid-template-columns: auto minmax(0, 300px);
@@ -291,12 +296,6 @@
     /* Bound by height, not width — the short axis is what constrains here.
        Sized so the header and both player cards still fit on screen. */
     width: min(52vw, 56vh);
-  }
-
-  /* Two columns so labels are never squeezed into the narrow side panel. */
-  .controls {
-    grid-auto-flow: row;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .btn--control {

@@ -74,43 +74,6 @@
 .board-area {
   display: flex;
   justify-content: center;
-  /* The capture trays are positioned against this box, so they span exactly
-     the board's height whatever the board is sized to. */
-  position: relative;
-}
-
-/*
-   Room for the trays, where the camera does not leave enough.
-
-   The trays are slim columns laid over the canvas either side of the board,
-   3.4% of its width, and they are free only while the tiles are drawn
-   narrower than the canvas by that much. At Fit they are, exactly: the board
-   is fitted to the canvas rim to rim, and beside the near rank the rim and
-   the sliver of lawn outside it come to 3.6%. The tray stands on those.
-
-   At Large there is less: 2.4%. It is padded by what it is short, as a
-   percentage so that it holds on every phone — the margin is a fraction of
-   the canvas, and a padding in pixels that was right at 412px put the pile
-   on the h-file at 360. The alternative to padding is a pile of captured
-   pieces sitting on the a- and h-files.
-
-   It was 2% and a padding of 1.5%, while the board at Large was fitted to
-   the canvas by its width with half the rim cropped. Since the pieces there
-   were stood up (see `lean` in config.js) it is the board's height that
-   fills the canvas, heads of the far rank included, and the width has a
-   little to spare. Giving that back to the canvas is what keeps a square
-   the size it was: 45px across on a 390px phone, before and after.
-
-   Both levels used to have room to spare, and a 20px tray to use it. That
-   was while the board was drawn through a short lens, which shrinks the far
-   side and needs a wide margin to keep a corner king in frame, and while the
-   fit left a further 4% all round. The long lens the tall pieces are drawn
-   through does not need the first and the second was given to the squares:
-   see FRAME_FILL and #build in board-3d.js.
-*/
-.board-area[data-zoom="large"] {
-  padding-left: 1.15%;
-  padding-right: 1.15%;
 }
 
 /*
@@ -123,8 +86,8 @@
 .board-frame {
   width: min(94vw, 560px);
   max-width: 100%;
-  /* A flex item beside the trays; without this its content sets a floor and
-     the row would rather overflow than let the board give up any width. */
+  /* A flex item; without this its content sets a floor and the row would
+     rather overflow than let the board give up any width. */
   min-width: 0;
 }
 

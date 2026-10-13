@@ -333,17 +333,22 @@
           <input class="player-card__rename-input" id="input-rename-top" type="text"
                  hidden autocomplete="off" spellcheck="false" aria-label="Your name">
           <!--
-            Colour, the pieces this player has taken, and by how much they are
-            ahead — all on one line, so the captured pile costs the card no
-            extra height on a phone.
+            The colour this player has, and whether it is their move. The
+            badge is here, under the name, and not at the far end of the
+            card: the far end is where the pieces they have taken stand.
           -->
           <span class="player-card__meta">
             <span class="player-card__color" id="top-color">Black</span>
-            <!-- The pile itself lives in the tray beside the board; the card
-                 keeps only the score, which is the part you read at a glance. -->
-            <span class="player-card__edge" id="top-edge" hidden></span>
+            <span class="player-card__turn" id="top-turn" hidden>To move</span>
           </span>
         </span>
+        <!--
+          The pieces this player has taken, and by how much they are ahead:
+          a row of the real pieces, stood up, at the end of the card. See
+          #renderCaptures in ui.js and .player-card__taken.
+        -->
+        <span class="player-card__taken" id="top-taken" role="img" aria-label=""></span>
+        <span class="player-card__edge" id="top-edge" hidden></span>
         <!--
           Where an emote lands. On the card of whoever sent it, so it is
           obvious who is waving without a name attached to it.
@@ -355,25 +360,12 @@
           region. One event, announced once, in language.
         -->
         <span class="player-card__emote" id="top-emote" hidden aria-hidden="true"></span>
-        <span class="player-card__turn" id="top-turn" hidden>To move</span>
       </section>
 
-      <!--
-        Board, flanked by the two piles of taken pieces.
-
-        Each tray belongs to the player at its own end of the board: the left
-        one fills downward from the top and goes with the top card, the right
-        one fills upward from the bottom and goes with the bottom card. So the
-        pile always starts at the same edge as the player it belongs to, which
-        is what makes a left/right split readable when the players are
-        arranged top/bottom. Both follow a board flip.
-      -->
       <div class="board-area" id="board-area">
-        <div class="capture-tray capture-tray--top" id="tray-top" role="img" aria-label=""></div>
         <div class="board-frame">
           <div class="board" id="board" data-theme="classic"></div>
         </div>
-        <div class="capture-tray capture-tray--bottom" id="tray-bottom" role="img" aria-label=""></div>
       </div>
 
       <!-- Current player card (bottom of board) -->
@@ -397,9 +389,11 @@
                  hidden autocomplete="off" spellcheck="false" aria-label="Your name">
           <span class="player-card__meta">
             <span class="player-card__color" id="bottom-color">White</span>
-            <span class="player-card__edge" id="bottom-edge" hidden></span>
+            <span class="player-card__turn" id="bottom-turn" hidden>To move</span>
           </span>
         </span>
+        <span class="player-card__taken" id="bottom-taken" role="img" aria-label=""></span>
+        <span class="player-card__edge" id="bottom-edge" hidden></span>
         <!--
           Where an emote lands. On the card of whoever sent it, so it is
           obvious who is waving without a name attached to it.
@@ -411,7 +405,6 @@
           region. One event, announced once, in language.
         -->
         <span class="player-card__emote" id="bottom-emote" hidden aria-hidden="true"></span>
-        <span class="player-card__turn" id="bottom-turn" hidden>To move</span>
       </section>
 
       <!--
@@ -429,9 +422,6 @@
 
         <!-- Primary controls -->
         <nav class="controls" aria-label="Game controls">
-          <button type="button" class="btn btn--control" id="btn-undo">
-            <span aria-hidden="true">↶</span> Undo
-          </button>
           <button type="button" class="btn btn--control" id="btn-flip">
             <span aria-hidden="true">⇅</span> Flip
           </button>

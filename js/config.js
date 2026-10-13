@@ -358,7 +358,7 @@ export const INVITE_TTL_MS = 180_000;
  * small one.
  *
  * It evens the squares out as well. At 56 degrees a far-rank square is 35px
- * deep against 41px for a near one; at 70 they are 42px and 46px, and the
+ * deep against 41px for a near one; at 70 they are 43px and 47px, and the
  * far one is all but the 44px touch target this app uses everywhere else.
  *
  * What raising the camera costs is the pieces, since they were made tall. A
@@ -424,9 +424,9 @@ export const BOARD_ZOOM_LEVELS = [
  * phone:
  *
  *   Fit    far square 44x35   near 48x41
- *   Large  far square 45x42   near 48x46
+ *   Large  far square 46x43   near 49x47
  *
- * So the back rank is a 35px-deep target here against 42px at Large. That is
+ * So the back rank is a 35px-deep target here against 43px at Large. That is
  * under the 44px this app uses everywhere else, and it is the cost of seeing
  * the board from an angle: a square seen from the side is not as deep as it
  * is wide. It was a much worse trade once — 31x24 for a far square — while
@@ -559,23 +559,6 @@ export function resolveUiStyle(savedStyle) {
   }
 
   return SELECTABLE_UI_STYLES.includes(savedStyle) ? savedStyle : DEFAULT_UI_STYLE;
-}
-
-/**
- * Game controls that are shown but cannot be used.
- *
- * A locked control keeps its place in the row rather than disappearing: the
- * player can see the game has an Undo and that it is simply not on offer,
- * which an absent button cannot communicate. It is inert to pointer and
- * keyboard alike, and says so when pressed.
- *
- * Ids are the part after `btn-`. Take one out of this list to restore that
- * control — nothing else needs changing.
- */
-export const LOCKED_CONTROLS = ['undo'];
-
-export function isControlLocked(id) {
-  return LOCKED_CONTROLS.includes(id);
 }
 
 export const DEFAULT_SETTINGS = {

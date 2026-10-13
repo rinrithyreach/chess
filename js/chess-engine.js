@@ -92,7 +92,7 @@ export class ChessEngine {
   /**
    * Load a FEN. Returns {ok, error}. Never throws.
    * Note: this discards move history — prefer loadPgn() when restoring a game
-   * that needs undo or threefold-repetition detection.
+   * that needs its move list or threefold-repetition detection.
    */
   loadFen(fen) {
     const check = ChessEngine.validateFen(fen);
@@ -108,8 +108,8 @@ export class ChessEngine {
 
   /**
    * Restore from PGN, replaying every move. This is the preferred restore
-   * path: unlike loadFen it rebuilds the full move history, which keeps undo
-   * and threefold-repetition detection working after a page refresh. PGN from
+   * path: unlike loadFen it rebuilds the full move history, which keeps the
+   * move list and threefold-repetition detection right after a page refresh. PGN from
    * a non-standard starting position carries SetUp/FEN headers, so custom
    * positions round-trip correctly too.
    */
@@ -255,7 +255,13 @@ export class ChessEngine {
     }
   }
 
-  /** Undo the last half-move. Returns the undone move descriptor, or null. */
+  /**
+   * Take the last half-move back off the board. Returns it, or null.
+   *
+   * Not a move a player can make: the game has no Undo. It is how an online
+   * move the room refused is rolled back out of this device's own copy of
+   * the position — see submitMove in firebase-session.js.
+   */
   undo() {
     try {
       return describeMove(this.#chess.undo());
@@ -263,11 +269,6 @@ export class ChessEngine {
       warn('undo failed', error);
       return null;
     }
-  }
-
-  /** Can a half-move be taken back? */
-  canUndo() {
-    return this.#chess.history().length > 0;
   }
 
   /** Set a PGN header (used for player names and the result tag). */
