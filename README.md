@@ -770,6 +770,23 @@ motion too: the pieces answer to **Settings → Animations** alone, which is the
 one switch that stops them. The camera swinging round on a flip or a zoom is
 the exception, and still follows the device, because it moves the whole view.
 
+A move is timed by the frame's own clock and counts from the first frame it is
+drawn in. The time a browser hands to a frame steps by exactly one frame each
+time; `performance.now()` read inside the callback is that plus however long
+the browser took to get round to calling it, which is different every frame, so
+a piece timed by it moves unequal amounts on equal frames — and that is seen as
+stutter even when no frame was dropped. And a move is asked for in the middle of
+the busiest task the app has, so whatever that task took used to be spent out
+of the animation before a frame of it had been shown. Now the first frame a
+piece is drawn in is its first frame.
+
+Nothing is done for the first time during a move, where it can be helped. The
+board draws on demand, so before the first move the renderer has barely run:
+half a second of frames are drawn straight after the board appears, for no
+reason but to have drawn them. The portraits of taken pieces are drawn ahead,
+one at a time and never while a piece is moving, instead of inside the move
+that makes the first capture.
+
 Dragging follows the pointer continuously rather than snapping the piece to the
 centre of whichever square it is over, and a piece released onto a square it
 cannot legally reach is animated back rather than teleported. A piece is
@@ -1969,6 +1986,32 @@ being hidden by a rule that changed underneath it:
    zero and are never touched. Tested the way the first should have been:
    in both engines, with each half of the fix switched off in turn, and with
    both off to show the tests can see the bug at all.
+
+23. **The shadow under the board made every move stutter on a phone.** The
+   clay look gave the board a shadow on the lawn with one line of CSS: a
+   `drop-shadow` filter on the canvas, which follows the board's outline for
+   nothing. A filter on a canvas is run again whenever the canvas changes,
+   and during a move that is every frame — on Safari, by taking the frame
+   back off the GPU to blur it. So the look that was added to make the board
+   sit on the page cost the board its frame rate, in exactly the half second
+   where a dropped frame is seen. It could not be measured on an iPhone from
+   here; it was removed on the strength of what the filter is, and of moves
+   having been reported as not smooth only after it arrived.
+
+   The shadow is a layer of its own now: a bar under the slab's front edge,
+   drawn once by CSS behind the canvas, with the board telling it where that
+   edge is whenever the camera is seated. A sheet in the scene was tried
+   first and was cut off square at the edge of the canvas, which the board
+   very nearly fills.
+
+   Two things measured in the same pass did show up, on a processor slowed
+   four times. The first capture of a game froze for 115ms before the piece
+   set off, because the portrait of the taken piece was drawn inside that
+   move — a new shader program, a read back from the GPU, a PNG encoded. The
+   portraits are drawn ahead of time now and that move runs like any other.
+   And the first move of a game had two or three long frames in its first
+   eight, the renderer running hot for the first time; warming it up when
+   the board appears leaves one.
 
 ### Manual checklist
 

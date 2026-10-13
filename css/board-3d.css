@@ -17,9 +17,12 @@
   display: block;
   position: relative;
   padding: 0;
-  /* Visible, so the shadow the canvas throws on the grass is not cut off at
-     the edge of the board's own box. Nothing in here overflows otherwise. */
+  /* Visible, so the shadow under the board is not cut off at the edge of the
+     board's own box. Nothing in here overflows otherwise. */
   overflow: visible;
+  /* Its own stacking context, so that shadow can go behind the canvas
+     without going behind the page. */
+  isolation: isolate;
   /*
      board.css gives .board `container-type: size` so pieces can scale from the
      board's size. That is a purely 2D concern here, and a size container also
@@ -47,16 +50,41 @@
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   /*
-     The shadow the board throws on the lawn.
-
-     The canvas is transparent wherever there is no board, so a drop-shadow
-     follows the board's real outline — the rounded tray, and the pieces that
-     stand above its far edge — rather than the square the canvas is. It is
-     the cheap half of a ground shadow: a shadow-catching plane in the scene
-     would be the honest half, and would be cut off at the edge of the canvas,
-     which the board very nearly fills.
+     No filter here, and there was one: a drop-shadow, for the shadow the
+     board throws on the lawn. A filter on a canvas is run again every time
+     the canvas changes, which during a move is every frame, and it made
+     moves stutter on a phone. The shadow is the rule below.
   */
-  filter: drop-shadow(0 16px 12px rgba(33, 84, 14, 0.42));
+}
+
+/*
+   The shadow the board lays on the lawn.
+
+   A bar the width of the slab's front edge, sitting just above it, with
+   nothing drawn but its shadow — which falls below and a little to either
+   side, where the lawn shows. The board covers the bar itself. It is behind
+   the canvas, on a layer of its own that is painted once: nothing about it
+   changes while a piece is moving, so a move costs it nothing.
+
+   Where the front edge is depends on the camera, so the board says:
+   #placeGroundShadow in board-3d.js sets the three properties whenever the
+   camera is seated. The fallbacks are the default view's, for the moment
+   before it has.
+*/
+.board.board--3d::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: var(--shadow-left, 3%);
+  right: var(--shadow-right, 3%);
+  bottom: var(--shadow-bottom, 6%);
+  height: 10%;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 14px 12px -3px rgba(33, 84, 14, 0.45);
+  pointer-events: none;
+  /* A change of board size swings the camera to a new seat over 430ms; the
+     shadow goes with it rather than arriving first. */
+  transition: left 0.43s ease, right 0.43s ease, bottom 0.43s ease;
 }
 
 /*

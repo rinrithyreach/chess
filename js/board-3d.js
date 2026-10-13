@@ -569,6 +569,18 @@ export class Board3D {
   #cameraSpin = null;
   #needsRender = true;
   #frame = null;
+  /**
+   * Frames still to be drawn for no reason but to have drawn them.
+   *
+   * The board draws on demand, so before the first move it has drawn a
+   * handful of frames and the code that draws one has never run hot. The
+   * first move of every game was then the renderer's warm-up: measured on a
+   * slowed-down processor, seven of its first eight frames ran long and the
+   * piece covered a fifth of its journey in one step. Half a second of
+   * frames nobody is watching for, straight after the board appears, moves
+   * that cost to where it does not show.
+   */
+  #warmFrames = 30;
   #resizeObserver = null;
 
   // Interaction
@@ -605,6 +617,7 @@ export class Board3D {
     this.#build();
     this.#attachListeners();
     this.#loop();
+    this.#warmPortraits();
   }
 
   /** Register the tap/click handler. The controller decides what it means. */
@@ -1108,6 +1121,48 @@ export class Board3D {
   }
 
   /**
+   * Tell the page where the front of the board is drawn, for the shadow
+   * under it.
+   *
+   * The shadow the board lays on the lawn is the page's, not the scene's: a
+   * soft bar under the slab's front edge, drawn once by CSS on a layer
+   * behind the canvas (see ::after in board-3d.css). It has been both of the
+   * other things. A drop-shadow filter on the canvas followed the board's
+   * outline for one line of CSS, and a browser runs a filter again every
+   * time the canvas changes — every frame of a move, which on Safari means
+   * taking the frame back off the GPU to blur it. A sheet in the scene cost
+   * nothing and was cut off square at the edge of the canvas, which the
+   * board very nearly fills.
+   *
+   * A layer of its own is neither. It is painted once and then only
+   * composited, and it may spill past the canvas. All it needs is to be told
+   * where the slab's front corners land, which changes when the camera is
+   * seated and never during a move — so that is when this runs, with the
+   * seat the camera is going to rather than where it is on the way.
+   */
+  #placeGroundShadow(seat) {
+    const probe = this.#camera.clone();
+    probe.position.copy(seat);
+    probe.lookAt(0, 0, 0);
+    probe.updateMatrixWorld(true);
+    probe.updateProjectionMatrix();
+
+    // The two bottom corners of the slab on the side nearest the camera, a
+    // little in from the ends: the tray's corners are rounded.
+    const near = (Math.sign(seat.z) || 1) * (HALF + RIM);
+    const reach = HALF + RIM - 0.25;
+    const corners = [-reach, reach]
+      .map((x) => new THREE.Vector3(x, BOARD_Y - TRAY_DEPTH, near).project(probe));
+    const xs = corners.map((corner) => (corner.x + 1) / 2);
+    const percent = (fraction) => `${(fraction * 100).toFixed(2)}%`;
+
+    const { style } = this.#root;
+    style.setProperty('--shadow-left', percent(Math.min(...xs)));
+    style.setProperty('--shadow-right', percent(1 - Math.max(...xs)));
+    style.setProperty('--shadow-bottom', percent((corners[0].y + 1) / 2));
+  }
+
+  /**
    * Seat the camera behind the player whose turn the board is showing.
    *
    * The board itself never moves. Rotating the camera instead of the board
@@ -1117,6 +1172,7 @@ export class Board3D {
   #applyCamera(animate = true) {
     const side = this.#orientation === 'white' ? 1 : -1;
     const target = this.#cameraSeat(side);
+    this.#placeGroundShadow(target);
 
     if (!animate || !this.#animationsEnabled || prefersReducedMotion()) {
       this.#camera.position.copy(target);
@@ -1128,7 +1184,8 @@ export class Board3D {
     this.#cameraSpin = {
       from: this.#camera.position.clone(),
       to: target,
-      start: performance.now(),
+      // Set by the first frame that draws it. See the note on time in #loop.
+      start: null,
       // Longer than a move once was: the whole view is turning, and at move
       // speed it read as a glitch rather than a deliberate change of seat.
       //
@@ -1334,6 +1391,31 @@ export class Board3D {
     }
   }
 
+  /**
+   * Draw the portraits before anyone needs one.
+   *
+   * A portrait is drawn the first time its piece is captured, and drawing
+   * one is not quick: a shader program the board has not used before, a
+   * frame read back off the GPU, a PNG encoded. That all happened inside
+   * the move that made the capture — 118ms of it on a slowed-down
+   * processor, at the very start of the animation, which is a capture that
+   * visibly sticks before it goes.
+   *
+   * So they are drawn ahead, one at a time with a pause between, and never
+   * while something on the board is moving. Pawns first: a pawn is usually
+   * the first thing taken. No kings, which never are.
+   */
+  #warmPortraits() {
+    const queue = ['p', 'n', 'b', 'r', 'q'].flatMap((type) => [[type, 'w'], [type, 'b']]);
+    const next = () => {
+      if (this.#disposed || !queue.length) return;
+      const busy = this.#animations.length > 0 || this.#cameraSpin || this.#drag || this.#warmFrames > 0;
+      if (!busy) this.pieceSprite(...queue.shift());
+      setTimeout(next, busy ? 250 : 80);
+    };
+    setTimeout(next, 600);
+  }
+
   render(snapshot, options = {}) {
     const { state, view } = snapshot;
     if (!state || this.#disposed) return;
@@ -1404,6 +1486,8 @@ export class Board3D {
     this.#renderer = null;
 
     this.#root.classList.remove('board--3d');
+    ['--shadow-left', '--shadow-right', '--shadow-bottom']
+      .forEach((name) => this.#root.style.removeProperty(name));
     this.#root.innerHTML = '';
   }
 
@@ -1705,12 +1789,15 @@ export class Board3D {
     }
 
     // Held until the piece taking it is nearly there, then displaced — the
-    // two motions end on the same frame. See CAPTURE_FADE_DELAY.
-    const start = performance.now() + CAPTURE_FADE_DELAY;
+    // two motions end on the same frame. See CAPTURE_FADE_DELAY. Counted
+    // from the same first frame as the piece taking it, which is what keeps
+    // that true: see the note on time in #loop.
+    let start = null;
     const duration = ANIMATION_MS * CAPTURE_FADE_RATIO;
     const from = group.position.clone();
     this.#animations.push({
       update: (now) => {
+        start ??= now + CAPTURE_FADE_DELAY;
         if (now < start) return false;
         const t = Math.min(1, (now - start) / duration);
         const k = ease(t);
@@ -1757,9 +1844,10 @@ export class Board3D {
     group.position.copy(from);
     this.#needsRender = true;
 
-    const start = performance.now();
+    let start = null;
     this.#startCarry(square, {
       update: (now) => {
+        start ??= now;
         const t = Math.min(1, (now - start) / ANIMATION_MS);
         const k = ease(t);
         group.position.lerpVectors(from, home, k);
@@ -1817,10 +1905,11 @@ export class Board3D {
       // not be drawn there even once before it sets off.
       group.position.copy(from);
 
-      const start = performance.now();
+      let start = null;
 
       this.#startCarry(toSquare, {
         update: (now) => {
+          start ??= now;
           const t = Math.min(1, (now - start) / ANIMATION_MS);
           const k = ease(t);
           group.position.x = from.x + (to.x - from.x) * k;
@@ -1877,13 +1966,37 @@ export class Board3D {
     }
   }
 
-  #loop = () => {
+  /*
+     Time, here, is the frame's own.
+
+     `frameTime` is the instant the browser began this frame, and it steps
+     by exactly one frame each time. performance.now() read inside the
+     callback is that plus however long the browser took to get round to
+     calling it, which is different every frame — so a piece timed by it
+     moves by slightly unequal amounts on equal frames, and that unevenness
+     is what the eye calls stutter even when no frame was dropped.
+
+     And every motion counts from the first frame that draws it, not from
+     the moment it was asked for. A move is asked for in the middle of the
+     busiest task the app has — the engine, the save, the sound, the cards —
+     and whatever that task took used to be spent out of the animation
+     before a single frame of it had been seen: the piece began its journey
+     already part of the way along. Now the first frame it is drawn in is
+     its first frame.
+  */
+  #loop = (frameTime) => {
     if (this.#disposed) return;
     this.#frame = requestAnimationFrame(this.#loop);
-    const now = performance.now();
+    const now = typeof frameTime === 'number' ? frameTime : performance.now();
+
+    if (this.#warmFrames > 0) {
+      this.#warmFrames -= 1;
+      this.#needsRender = true;
+    }
 
     if (this.#cameraSpin) {
       const spin = this.#cameraSpin;
+      spin.start ??= now;
       const t = Math.min(1, (now - spin.start) / spin.duration);
       const k = ease(t);
       // Interpolate around the board rather than straight through it: a linear
