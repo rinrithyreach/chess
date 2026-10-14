@@ -66,14 +66,6 @@ const VS = '\uFE0E';
 const PIECE_GLYPHS = {
   k: `♚${VS}`, q: `♛${VS}`, r: `♜${VS}`, b: `♝${VS}`, n: `♞${VS}`, p: `♟${VS}`,
 };
-/**
- * What each piece is worth, for the running material score.
- *
- * The textbook values. The king is absent on purpose: it is never captured,
- * so it can never appear in a pile.
- */
-const PIECE_VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9 };
-
 /** Captured pieces read best strongest-first, not in the order they fell. */
 const CAPTURE_ORDER = ['q', 'r', 'b', 'n', 'p'];
 
@@ -250,7 +242,7 @@ export class UI {
       'bottom-name', 'bottom-color', 'bottom-turn',
       'btn-rename-top', 'btn-rename-bottom',
       'input-rename-top', 'input-rename-bottom',
-      'top-taken', 'bottom-taken', 'top-edge', 'bottom-edge',
+      'top-taken', 'bottom-taken',
       'board', 'board-area', 'status', 'status-text', 'status-badge',
       'btn-flip', 'btn-resign', 'btn-zoom', 'zoom-label',
       'history-panel', 'btn-history-toggle', 'history-list', 'history-count',
@@ -879,8 +871,12 @@ export class UI {
   }
 
   /**
-   * Draw the pieces one player has taken, at the end of that player's card,
-   * and their lead if they have one.
+   * Draw the pieces one player has taken, at the end of that player's card.
+   *
+   * Only the pieces. There was a number after them, the material lead —
+   * "+7" on the card of whoever was ahead, by the textbook values — and it
+   * was removed: the row says what was taken, and how much that is worth is
+   * the player's to weigh.
    *
    * A row of the pieces themselves, stood up side by side: strongest first,
    * each kind together, a pawn overlapping the pawn before it the way a row
@@ -901,13 +897,9 @@ export class UI {
    */
   #renderCaptures(prefix, taken, color) {
     const row = this.#dom[`${prefix}-taken`];
-    const edgeEl = this.#dom[`${prefix}-edge`];
-    if (!row || !edgeEl) return;
+    if (!row) return;
 
     const mine = taken[color] ?? [];
-    const theirs = taken[color === WHITE ? BLACK : WHITE] ?? [];
-    const worth = (list) => list.reduce((sum, p) => sum + (PIECE_VALUE[p] ?? 0), 0);
-    const edge = worth(mine) - worth(theirs);
 
     // Strongest first, which is also how a pile is read at a glance.
     const sorted = [...mine].sort(
@@ -920,7 +912,7 @@ export class UI {
     // an even trade, which is common — a key of pieces alone is unchanged
     // across the flip, the early return fires, and the card keeps the previous
     // player's pile: the right shapes in the wrong colour.
-    const key = `${color}|${sorted.join('')}|${edge}|${this.#spriteEpoch}`;
+    const key = `${color}|${sorted.join('')}|${this.#spriteEpoch}`;
     if (row.dataset.key === key) return;
     row.dataset.key = key;
 
@@ -951,9 +943,6 @@ export class UI {
     const spoken = [...counts].map(([p, n]) =>
       `${n} ${PIECE_NAME[p]}${n === 1 ? '' : 's'}`).join(', ');
     row.setAttribute('aria-label', spoken ? `Captured ${spoken}` : '');
-
-    edgeEl.hidden = edge <= 0;
-    if (edge > 0) edgeEl.textContent = `+${edge}`;
   }
 
   #renderPlayers({ state, orientation, controllable = [] }) {

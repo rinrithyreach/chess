@@ -488,9 +488,9 @@ otherwise somebody with friends would appear idle to all of them for the
 whole game they are visibly in the middle of.
 
 **Captured pieces, on the players' cards** — the pieces each player has taken
-stand in a row at the end of that player's card, with the material lead (`+2`)
-after them: strongest first, each kind together, a pawn a little in front of
-the pawn before it, the way a row of them stands on a table. They are as tall
+stand in a row at the end of that player's card: strongest first, each kind
+together, a pawn a little in front of the pawn before it, the way a row of them
+stands on a table. They are as tall
 as the inside of the card, 38px on a phone, and they follow a board flip with
 the card.
 
@@ -1705,7 +1705,7 @@ the totals are reported separately rather than as one number:
 | **Profile pictures — EXIF (Chromium)** | **3** | **A JPEG built with a real EXIF Orientation tag comes out upright, proved by which edge the colours land on — the classic sideways-avatar bug, tested rather than assumed** |
 | Live two-device game (Chromium ×2 + real project) | 11 | Two browsers against the actual Firebase project, not the emulator: create, join, seats and names sync, a move each way, room deleted afterwards. Pictures were off at the time and so went untested here; the suite above covers them, but against a stand-in for the database rather than the real one |
 | **Capture trays (Chromium)** — since replaced by the rows on the cards, which are checked at five screen sizes on both boards with every piece taken | **19** | **The trays must never cover a square — the drawn board and the tray are both measured through the live camera at each zoom — must vanish when empty, must follow a board flip, and a full pile of 15 3D portraits must stay within the board's height. Caught a real bug: the render cache keyed on pieces alone, so after an even trade a flip left the right shapes in the wrong colour** |
-| **Mobile board + captures (Chromium)** | **24** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile** |
+| **Mobile board + captures (Chromium)** | **24** | **The board measured on four phones (it must use ≥92% of the width, with no horizontal overflow), then the piles driven through real moves: the right piece in the right side's colour, the lead only on the leader, level material showing no lead at all, and a promotion adding nothing to either pile. The lead has since been removed** |
 | **Room code (Chromium)** | **35** | **Every character of the code measured against the viewport across 5 widths × 7 text sizes. `body{overflow-x:hidden}` clips overflow and `.waiting` centres, so an over-wide code used to lose one character from EACH end and still read as a valid shorter code** |
 | **Room code length (Chromium + emulator)** | **14** | **Six characters everywhere the length appears independently: the constant, `ONLINE_AVATARS`, the normaliser, the join field's maxlength and typing limit, both placeholders, and the security rules — which cannot import the constant, so they are checked to accept 6 and reject 3, 4 and look-alike characters** |
 
@@ -2157,6 +2157,19 @@ being hidden by a rule that changed underneath it:
    cards*, which also has the arrangement that was tried first and what it
    pushed off the screen.
 
+   The number that followed the row — the material lead, "+7" on the card
+   of whoever was ahead — was removed after, at the player's request: "after
+   eliminate chess, no need to show number". The pieces are the whole
+   answer to what was taken.
+
+   Taking it away uncovered something it had been hiding. The pictures are
+   wider than their slots, and the last one's empty side ran past the end
+   of the card; the number had stood there and caught it. Without it, on a
+   320px phone with the flat board, the page came out 2px wider than the
+   screen and the game could be slid sideways. The row clips its own
+   overflow now, a few pixels out from the slots so that a foot reaching
+   past its slot is not cut.
+
    One bug on the way. Each piece is a slot narrower than its picture, and
    the slots were given their width as a flex-basis. A row is as wide as
    its slots only if the slots have a width of their own to count; a basis
@@ -2197,7 +2210,7 @@ being hidden by a rule that changed underneath it:
 | 26 | Create a room with the phone's text size at maximum | All six characters of the code still readable |
 | 27 | Capture a piece | It appears in the tray at that player's end of the board, in the other side's colour |
 | 27b | Flip the board after an even trade | Both piles swap sides and keep their own colours |
-| 28 | Trade evenly, then win a piece | The lead badge appears only on the side that is ahead, and vanishes at level material |
+| 28 | Trade evenly, then win a piece | Each card shows the pieces that player took, and no number |
 | 29 | Promote a pawn | Neither pile changes — a promotion is not a capture |
 | 30 | Play on a phone | The board reaches both edges of the screen; cards and controls keep their margins |
 | 31 | Open Friends from the menu | A six-character code appears; copy it |

@@ -1274,6 +1274,15 @@ body::before {
    stand in; the pieces then close up evenly, and the row never pushes the
    card wider.
 */
+/*
+   Clipped, a few pixels out from the slots. The pictures are wider than the
+   slots and their sides are empty air, which shows nothing and still counts
+   as overflow: the last piece's air ran past the card, and on a 320px phone
+   it made the page a couple of pixels wider than the screen, so the whole
+   game slid sideways under a thumb. The material lead used to stand after
+   the row and catch it. The few pixels kept are for the part of a foot that
+   really does reach past its slot.
+*/
 .player-card__taken {
   display: flex;
   align-items: flex-end;
@@ -1281,6 +1290,8 @@ body::before {
   flex: 1 1 0;
   min-width: 0;
   height: var(--taken);
+  padding-inline: 3px;
+  overflow: hidden;
 }
 
 .player-card__taken:empty {
@@ -1358,15 +1369,6 @@ body::before {
 
 .taken--glyph[data-color="b"] {
   color: #4d4c54;
-}
-
-/* Only ever shown on the side that is actually ahead. */
-.player-card__edge {
-  flex: none;
-  color: var(--accent-deep);
-  font-size: 0.9rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 .player-card__turn {
