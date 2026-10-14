@@ -13,6 +13,7 @@ import { Board } from './board.js';
 import { UI } from './ui.js';
 import * as storage from './storage.js';
 import sound from './sound.js';
+import { startMeadow, hushMeadow, dressMeadow } from './meadow.js';
 import {
   WHITE,
   GAME_MODE,
@@ -59,6 +60,44 @@ async function boot() {
 
   // A move waiting to be animated on the next render.
   let pendingAnimation = null;
+
+  /**
+   * The side the board is shown from while it waits to turn, and the wait.
+   *
+   * With two players on one device the board turns to whoever is to move —
+   * see #faceTheBoard in game-controller.js — and the controller says so the
+   * moment the move is made. Turning then would swing the board round while
+   * the piece is still in the air: the move just made, watched from the far
+   * side of the table halfway through. So a turn that comes with a move waits
+   * for the move to land and a beat more, as the game-over dialog does, and
+   * the cards wait with it, because the cards follow the board.
+   */
+  let shownOrientation = null;
+  let turnTimer = null;
+  const TURN_PAUSE_MS = 200;
+
+  /** The snapshot as it is to be shown: turned now, or not yet. */
+  function holdTurn(snapshot) {
+    const turning = shownOrientation !== null && snapshot.orientation !== shownOrientation;
+    if (turning && (pendingAnimation || turnTimer !== null)) {
+      // A second move inside the wait starts it again; anything else that
+      // happens in it leaves it alone.
+      if (pendingAnimation) {
+        window.clearTimeout(turnTimer);
+        turnTimer = window.setTimeout(() => {
+          turnTimer = null;
+          repaint();
+        }, ANIMATION_MS + TURN_PAUSE_MS);
+      }
+      return { ...snapshot, orientation: shownOrientation };
+    }
+    // The board is about to turn — a swing of the camera a little under half
+    // a second long — and the animals hold still while it does. See
+    // hushMeadow.
+    if (shownOrientation !== null && snapshot.orientation !== shownOrientation) hushMeadow(500);
+    shownOrientation = snapshot.orientation;
+    return snapshot;
+  }
 
   // Online transitions we need to notice between renders.
   let wasWaiting = false;
@@ -121,11 +160,14 @@ async function boot() {
     // style the player has chosen. A no-op when it already matches.
     applyBoardStyle(snapshot.settings.uiStyle);
 
-    board.setOrientation(snapshot.orientation);
-    board.setZoom(snapshot.settings.boardZoom);
-    board.render(snapshot, { animateMove: pendingAnimation });
+    const shown = holdTurn(snapshot);
+    // The animals on the lawn hold still while a piece moves. See hushMeadow.
+    if (pendingAnimation) hushMeadow(ANIMATION_MS + 100);
+    board.setOrientation(shown.orientation);
+    board.setZoom(shown.settings.boardZoom);
+    board.render(shown, { animateMove: pendingAnimation });
     pendingAnimation = null;
-    ui.render(snapshot);
+    ui.render(shown);
     handleOnlineTransitions(snapshot);
     reportActivity(snapshot);
   });
@@ -499,6 +541,8 @@ async function boot() {
         ? (type, color) => board.pieceSprite(type, color)
         : null,
     );
+    // The animals on the lawn are drawn in the same clay, by the same board.
+    dressMeadow(board);
   }
   wireBoard();
 
@@ -567,7 +611,7 @@ async function boot() {
 
   /** Push the current snapshot at whichever board is mounted. */
   function repaint() {
-    const snapshot = controller.getSnapshot();
+    const snapshot = holdTurn(controller.getSnapshot());
     board.setOrientation(snapshot.orientation);
     board.setZoom(snapshot.settings.boardZoom);
     board.render(snapshot);
@@ -819,7 +863,18 @@ async function boot() {
     onAcceptDraw: () => controller.acceptDraw(),
     onDeclineDraw: () => controller.declineDraw(),
 
-    onFlip: () => controller.flipBoard(),
+    onFlip: () => {
+      // Pressed while the board waits to turn for the next player, Flip is
+      // that turn, now. Flipping the controller instead would turn it back
+      // to the side already on screen, and the press would do nothing at all.
+      if (turnTimer !== null) {
+        window.clearTimeout(turnTimer);
+        turnTimer = null;
+        repaint();
+        return;
+      }
+      controller.flipBoard();
+    },
 
     onResign: async () => {
       const snapshot = controller.getSnapshot();
@@ -907,6 +962,10 @@ async function boot() {
   // one, so it is there before anything connects.
   ui.setOnlineName(storage.loadProfile().name);
   ui.showScreen('menu');
+
+  // The cat, the dog and the parrot on the lawn round the game. They look
+  // after themselves from here: see meadow.js.
+  startMeadow();
 
   // Restore the board the player last chose. Deliberately not awaited: the
   // menu should be interactive immediately, and the 3D board mounts itself

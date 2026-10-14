@@ -14,8 +14,6 @@
   --board-dark: #b97a4f;
   --board-edge: #94603f;
   --board-side: #74492f;
-  --coord-on-light: #b97a4f;
-  --coord-on-dark: #f9e4b7;
 }
 
 .board[data-theme="blueberry"],
@@ -24,8 +22,6 @@
   --board-dark: #79a8e8;
   --board-edge: #4f7cc2;
   --board-side: #3c5f99;
-  --coord-on-light: #5f8fd4;
-  --coord-on-dark: #e9f3ff;
 }
 
 .board[data-theme="strawberry"],
@@ -34,8 +30,6 @@
   --board-dark: #f0919b;
   --board-edge: #c9636f;
   --board-side: #a04a55;
-  --coord-on-light: #dc7480;
-  --coord-on-dark: #fff1ea;
 }
 
 /* Highlight colours are shared across themes. */
@@ -111,7 +105,7 @@
   touch-action: manipulation;
   user-select: none;
   /*
-     Establish a size container so pieces and coordinates can scale from the
+     Establish a size container so the pieces can scale from the
      BOARD's size rather than the viewport's. Sizing from vw is wrong whenever
      the board is not the width-limiting element — a landscape phone or a
      desktop side-by-side layout — and produced pieces far too large or small.
@@ -152,43 +146,6 @@
 
 .square--dark {
   background: var(--board-dark);
-}
-
-/* --- Coordinates: subtle, inside the edge squares --- */
-
-.square__coord {
-  position: absolute;
-  /* Fallback; the container-query value below is the real one. */
-  font-size: clamp(7px, 1.6vw, 11px);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  pointer-events: none;
-  opacity: 0.75;
-}
-
-@supports (container-type: size) {
-  .square__coord {
-    font-size: clamp(7px, 2.1cqmin, 12px);
-  }
-}
-
-.square__coord--rank {
-  top: 3px;
-  left: 3px;
-}
-
-.square__coord--file {
-  right: 3px;
-  bottom: 3px;
-}
-
-.square--light .square__coord {
-  color: var(--coord-on-light);
-}
-
-.square--dark .square__coord {
-  color: var(--coord-on-dark);
 }
 
 /* --------------------------------------------------------------------------

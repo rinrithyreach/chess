@@ -3,7 +3,7 @@
    Host styling for the WebGL board.
 
    There is very little here on purpose. Everything the player sees on this
-   board — squares, pieces, highlights, coordinates — is drawn by the GPU from
+   board — squares, pieces, highlights — is drawn by the GPU from
    board-3d.js, not by CSS. This file only carves out the space the canvas
    lives in and keeps the accessibility layer invisible but usable.
    ========================================================================== */

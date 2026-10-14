@@ -17,7 +17,16 @@
   .player-card {
     padding: 0.5rem 0.6rem;
     /* A narrow phone's cards have less width to stand a long row in. */
-    --taken: 2.1rem;
+    --taken: 1.55rem;
+  }
+
+  /* And less grass for the animals to run on. */
+  .meadow {
+    --pet: 38px;
+  }
+
+  .meadow--header {
+    --pet: 32px;
   }
 
   .player-card__avatar {
@@ -120,6 +129,15 @@
 
   .status__text {
     font-size: 1.1rem;
+  }
+
+  /* More grass, bigger animals. */
+  .meadow {
+    --pet: 50px;
+  }
+
+  .meadow--header {
+    --pet: 40px;
   }
 
   .btn--control {
@@ -266,7 +284,16 @@
 @media (orientation: landscape) and (max-height: 560px) {
   /* The cards are shorter here, and the taken pieces with them. */
   .player-card {
-    --taken: 1.9rem;
+    --taken: 1.5rem;
+  }
+
+  /* The status line is right under the header here: smaller animals. */
+  .meadow {
+    --pet: 42px;
+  }
+
+  .meadow--header {
+    --pet: 34px;
   }
 
   .game {

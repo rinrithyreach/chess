@@ -76,6 +76,13 @@ const TRAY_DEPTH = 0.5;
 const DRAG_LIFT = 0.5;
 
 /**
+ * A move dot: how big it is drawn, and how far from the middle of its square
+ * a press on it reaches, both in squares. The reach is a little wider than
+ * the dot, for a finger, and well short of the square's edge. See #dotOnRay.
+ */
+const DOT = { radius: 0.17, reach: 0.25 };
+
+/**
  * How much of the canvas the board is fitted across.
  *
  * Nearly all of it. This was 0.96, a comfortable hair of room all round, and
@@ -100,9 +107,9 @@ const FRAME_FILL = 0.985;
  * sampling rendered pixels against these values. See the note in #build.
  */
 const THEMES = {
-  classic: { light: '#f9e4b7', dark: '#b97a4f', rim: '#94603f', inkOnLight: '#b97a4f', inkOnDark: '#f9e4b7' },
-  blueberry: { light: '#e9f3ff', dark: '#79a8e8', rim: '#4f7cc2', inkOnLight: '#5f8fd4', inkOnDark: '#e9f3ff' },
-  strawberry: { light: '#fff1ea', dark: '#f0919b', rim: '#c9636f', inkOnLight: '#dc7480', inkOnDark: '#fff1ea' },
+  classic: { light: '#f9e4b7', dark: '#b97a4f', rim: '#94603f' },
+  blueberry: { light: '#e9f3ff', dark: '#79a8e8', rim: '#4f7cc2' },
+  strawberry: { light: '#fff1ea', dark: '#f0919b', rim: '#c9636f' },
 };
 
 /**
@@ -124,6 +131,11 @@ const HIGHLIGHT = {
   // vanishes into the dark tile and cream into the light one.
   legal: { color: 0x4a2f1b, opacity: 0.34 },
   legalOnDark: { color: 0xfff3d6, opacity: 0.6 },
+  // The part of a move dot a piece stands in front of, drawn over the piece:
+  // the selection's blue, which reads on a black piece, a white one and gold.
+  // The flat board has no such thing, nothing there standing in front of
+  // anything. See #syncMarkers.
+  legalThrough: { color: 0x35aaf7, opacity: 0.9 },
   capture: { color: 0xff4f4f, opacity: 0.7 },
 };
 
@@ -169,23 +181,39 @@ const CLAY_ROUGHNESS = 0.78;
  * Piece heights, in squares — the top of each recipe below. For the pawn that
  * is its head; the point of its spear stands a third of a square higher.
  *
- * Tall: a king is nearly two squares high on a foot less than one across,
- * which is about what a tournament set is. The first clay set was two thirds
- * of this, squat on the reasoning that clay slumps and that a tall back rank
- * hides the pawns in front of it. Both are true and it was still the wrong
- * call — from 56 degrees a squat piece is mostly the top of its own foot, and
- * six kinds of disc are hard to tell apart. Standing up, each piece shows its
- * side, which is where a rook's teeth and a queen's crown actually are.
+ * Tall: a king is a square and two thirds high on a foot less than one
+ * across. The first clay set was squat, on the reasoning that clay slumps and
+ * that a tall back rank hides the pawns in front of it. Both are true and it
+ * was still the wrong call — from 56 degrees a squat piece is mostly the top
+ * of its own foot, and six kinds of disc are hard to tell apart. Standing up,
+ * each piece shows its side, which is where a rook's teeth and a queen's
+ * crown actually are.
  *
- * What the height costs is paid for in two places. A back-rank piece now
- * stands in front of the foot of the pawn behind it, so a pointer has to mean
- * the piece it is on rather than the tile under it: see #squareOnRay. And the
+ * Then it was too tall, the other way. The king was nearly two squares high
+ * and the queen 1.69, and on a phone that was "too much tall, hard to click
+ * the board": a tall piece is drawn over the squares behind it, and a press
+ * meant for one of those lands on the piece. So the long middle of each tall
+ * piece was shortened — the king's stem by 0.3, the queen's by 0.21, the
+ * bishop's robe by 0.12, the knight's pedestal by 0.08, the pawn's skirt by
+ * 0.1 — and nothing else: the crowns, rings and balls above came down whole,
+ * so they keep their shapes. The rook was left alone. On a 390px phone, over
+ * every move in seven real positions, a press missed the square it was meant
+ * for 8.3% of the time at Fit and 6.1% at Large; now 6.4% and 3.7%, and the
+ * nine squares at Fit that could only be hit on less than half of themselves
+ * are none. Taking
+ * more off the king and queen was tried, from their crowns as well, and
+ * squashed the crowns while hardly helping: what is left of the misses is
+ * the body of the piece standing right in front of a square, not its top.
+ *
+ * What the height costs is paid for in two places. A back-rank piece stands
+ * in front of the foot of the pawn behind it, so a pointer has to mean the
+ * piece it is on rather than the tile under it: see #squareOnRay. And the
  * camera has to leave room above the far rank: see #cameraSeat.
  *
  * The order still runs pawn, rook, knight, bishop, queen, king, which is what
  * makes them tell apart at a glance.
  */
-const PIECE_HEIGHT = { p: 1.08, r: 1.27, n: 1.4, b: 1.5, q: 1.69, k: 1.95 };
+const PIECE_HEIGHT = { p: 0.98, r: 1.27, n: 1.3, b: 1.38, q: 1.48, k: 1.65 };
 
 /**
  * The picture the board draws of a piece for the page around it. See
@@ -460,7 +488,9 @@ function knightSolids(seg) {
  * The heights are a tall set's and the widths are still a squat one's. That
  * is on purpose. Stretching a piece upward while its rings, balls and feet
  * stay the size they were keeps a ball a ball; scaling the whole thing by one
- * number would have made eggs of the heads and hoops of the rings.
+ * number would have made eggs of the heads and hoops of the rings. Taking
+ * height back out was done the same way round, from the long middle of each
+ * piece only: see PIECE_HEIGHT.
  *
  * Returned as fresh geometries for bakePiece to colour, merge and dispose.
  */
@@ -492,59 +522,60 @@ function pieceRecipe(type, seg) {
       const { coat, mane, eyes } = knightSolids(seg);
       return [
         ['body', lump(0.4, 0.4, 0, 0.11, 0.05, seg)],
-        ['body', lump(0.31, 0.275, 0.09, 0.4, 0.04, seg)],
+        ['body', lump(0.31, 0.275, 0.09, 0.32, 0.04, seg)],
         // The band every piece above a rook wears, here as a collar.
-        ['trim', ring(0.25, 0.052, 0.41, seg)],
-        ...coat.map((g) => ['alt', g]),
-        ...mane.map((g) => ['accent', g]),
-        ...eyes.map((g) => ['eye', g]),
+        ['trim', ring(0.25, 0.052, 0.33, seg)],
+        // Modelled standing on the pedestal as it was, 0.08 taller.
+        ...coat.map((g) => ['alt', g.translate(0, -0.08, 0)]),
+        ...mane.map((g) => ['accent', g.translate(0, -0.08, 0)]),
+        ...eyes.map((g) => ['eye', g.translate(0, -0.08, 0)]),
       ];
     }
 
     case 'b':
       return [
         ['body', lump(0.38, 0.38, 0, 0.1, 0.045, seg)],
-        ['alt', lump(0.3, 0.185, 0.085, 0.78, 0.04, seg)],
-        ['trim', ring(0.205, 0.054, 0.8, seg)],
+        ['alt', lump(0.3, 0.185, 0.085, 0.66, 0.04, seg)],
+        ['trim', ring(0.205, 0.054, 0.68, seg)],
         // The mitre is a tall egg. Without the height a bishop is a pawn.
         ['body', turned([
-          [0, 0.8], [0.185, 0.82], [0.245, 0.98], [0.21, 1.18], [0.105, 1.34], [0, 1.385],
+          [0, 0.68], [0.185, 0.7], [0.245, 0.86], [0.21, 1.06], [0.105, 1.22], [0, 1.265],
         ], seg)],
-        ['trim', ball(0.072, 1.428, seg)],
+        ['trim', ball(0.072, 1.308, seg)],
       ];
 
     case 'q':
       return [
         ['body', lump(0.41, 0.41, 0, 0.11, 0.05, seg)],
-        ['accent', lump(0.335, 0.21, 0.09, 0.86, 0.045, seg)],
-        ['trim', ring(0.235, 0.058, 0.88, seg)],
+        ['accent', lump(0.335, 0.21, 0.09, 0.65, 0.045, seg)],
+        ['trim', ring(0.235, 0.058, 0.67, seg)],
         ['body', turned([
-          [0, 0.87], [0.19, 0.89], [0.205, 1.02], [0.26, 1.26], [0.298, 1.4], [0.304, 1.46], [0, 1.49],
+          [0, 0.66], [0.19, 0.68], [0.205, 0.81], [0.26, 1.05], [0.298, 1.19], [0.304, 1.25], [0, 1.28],
         ], seg)],
-        ['trim', ring(0.275, 0.047, 1.475, seg)],
+        ['trim', ring(0.275, 0.047, 1.265, seg)],
         // Points stand on the crown's ring rather than sunk into it, so they
         // read as a coronet instead of lumps.
-        ...around(7, 0.275, () => new THREE.ConeGeometry(0.07, 0.2, 10).translate(0, 1.585, 0))
+        ...around(7, 0.275, () => new THREE.ConeGeometry(0.07, 0.2, 10).translate(0, 1.375, 0))
           .map((g) => ['trim', g]),
-        ['body', ball(0.165, 1.5, seg)],
-        ['trim', ball(0.058, 1.632, seg)],
+        ['body', ball(0.165, 1.29, seg)],
+        ['trim', ball(0.058, 1.422, seg)],
       ];
 
     case 'k':
       return [
         ['body', lump(0.425, 0.425, 0, 0.11, 0.05, seg)],
-        ['accent', lump(0.347, 0.224, 0.09, 0.94, 0.045, seg)],
-        ['trim', ring(0.244, 0.062, 0.96, seg)],
+        ['accent', lump(0.347, 0.224, 0.09, 0.64, 0.045, seg)],
+        ['trim', ring(0.244, 0.062, 0.66, seg)],
         ['body', turned([
-          [0, 0.95], [0.204, 0.97], [0.222, 1.1], [0.27, 1.32],
-          [0.305, 1.46], [0.311, 1.535], [0.249, 1.595], [0, 1.61],
+          [0, 0.65], [0.204, 0.67], [0.222, 0.8], [0.27, 1.02],
+          [0.305, 1.16], [0.311, 1.235], [0.249, 1.295], [0, 1.31],
         ], seg)],
-        ['trim', ring(0.293, 0.045, 1.535, seg)],
+        ['trim', ring(0.293, 0.045, 1.235, seg)],
         // The cross is rolled, not cut: two short sausages, pressed together.
         // Big for the piece it stands on, because from above it is most of
         // what says which of the two tall pieces this one is.
-        ['trim', new THREE.CapsuleGeometry(0.066, 0.25, 4, 12).translate(0, 1.759, 0)],
-        ['trim', new THREE.CapsuleGeometry(0.066, 0.2, 4, 12).rotateZ(Math.PI / 2).translate(0, 1.79, 0)],
+        ['trim', new THREE.CapsuleGeometry(0.066, 0.25, 4, 12).translate(0, 1.459, 0)],
+        ['trim', new THREE.CapsuleGeometry(0.066, 0.2, 4, 12).rotateZ(Math.PI / 2).translate(0, 1.49, 0)],
       ];
 
     default: {
@@ -557,14 +588,14 @@ function pieceRecipe(type, seg) {
       return [
         ['body', lump(0.36, 0.36, 0, 0.1, 0.045, seg)],
         ['body', turned([
-          [0, 0.08], [0.262, 0.085], [0.24, 0.2], [0.165, 0.42], [0.128, 0.62], [0, 0.66],
+          [0, 0.08], [0.262, 0.085], [0.24, 0.18], [0.165, 0.36], [0.128, 0.52], [0, 0.56],
         ], seg)],
-        ['body', lump(0.185, 0.185, 0.6, 0.675, 0.032, seg)],
-        ['accent', ball(0.192, 0.888, seg)],
-        ['shaft', new THREE.CylinderGeometry(0.03, 0.034, 1.02, 10).translate(reach, 0.59, 0)],
+        ['body', lump(0.185, 0.185, 0.5, 0.575, 0.032, seg)],
+        ['accent', ball(0.192, 0.788, seg)],
+        ['shaft', new THREE.CylinderGeometry(0.03, 0.034, 0.92, 10).translate(reach, 0.54, 0)],
         // A leaf, not a needle: a point thin enough to be sharp is thin
         // enough to vanish at the size a pawn is drawn on a phone.
-        ['blade', turned([[0, 1.06], [0.092, 1.14], [0.072, 1.22], [0.026, 1.33], [0, 1.39]], 12)
+        ['blade', turned([[0, 0.96], [0.092, 1.04], [0.072, 1.12], [0.026, 1.23], [0, 1.29]], 12)
           .translate(reach, 0, 0)],
       ];
     }
@@ -572,15 +603,15 @@ function pieceRecipe(type, seg) {
 }
 
 /**
- * Colour a recipe's lumps and press them into one geometry.
+ * Colour a list of [pigment, lump] pairs and press them into one geometry.
  *
  * Each lump is filled with its pigment as a vertex colour, then all of them
  * are concatenated. A `THREE.Color` built from a CSS string is already in the
- * linear working space, which is what a vertex colour is read as.
+ * linear working space, which is what a vertex colour is read as. The
+ * pieces are made this way, and so are the animals on the lawn.
  */
-function bakePiece(type, side, segments) {
-  const pigments = CLAY[side] ?? CLAY.w;
-  const lumps = pieceRecipe(type, segments).map(([role, geometry]) => {
+function bake(recipe, pigments) {
+  const lumps = recipe.map(([role, geometry]) => {
     const flat = geometry.index ? geometry.toNonIndexed() : geometry;
     if (flat !== geometry) geometry.dispose();
     const pigment = new THREE.Color(pigments[role] ?? pigments.body);
@@ -598,6 +629,322 @@ function bakePiece(type, side, segments) {
   lumps.forEach((geometry) => geometry.dispose());
   return baked;
 }
+
+/** One piece, baked: its recipe in its side's clay. */
+function bakePiece(type, side, segments) {
+  return bake(pieceRecipe(type, segments), CLAY[side] ?? CLAY.w);
+}
+
+// ---------------------------------------------------------------------------
+// The animals on the lawn
+// ---------------------------------------------------------------------------
+
+/*
+   A ginger cat, a puppy in a blue collar and a green parrot, who run about on
+   the grass round the game. Asked for as cute animals with animation, then as
+   clay ones that run about the grass, and then as "all animal clay styles
+   like chess styles" — so they are made exactly as the pieces are: lumps of
+   clay with their pigments baked in as vertex colours, in the pieces' one
+   matt clay, under the pieces' light.
+
+   They are not drawn in the board's scene, which ends at the rim, and the
+   grass they run on is the page round it. Each is drawn here, through the
+   board's own renderer, into a strip of frames — a run and a rest — and the
+   page plays the frames. See critterSheet(), and "The animals on the lawn"
+   in style.css and meadow.js.
+
+   Built standing on the ground at y = 0, facing +x, about one unit tall. The
+   parts that move are their own groups, each turned about its own joint: a
+   hip, a shoulder, the root of a tail, the neck.
+*/
+
+/** Their clay. Roles as for the pieces: see CLAY. */
+const CRITTER_CLAY = {
+  cat: {
+    body: '#f6a35c', cream: '#fff1dc', pink: '#f6a99a', nose: '#ee7d8b',
+    eye: '#2b1a10', shine: '#ffffff', cheek: '#f58f85',
+  },
+  dog: {
+    body: '#e6b97f', patch: '#c48a52', ear: '#8a5a36', cream: '#fff6ea',
+    nose: '#2b1a10', eye: '#2b1a10', shine: '#ffffff', tongue: '#f5848f', cheek: '#f39a8a',
+    collar: '#3ba3f0', tag: '#ffb92e',
+  },
+  parrot: {
+    body: '#5fc45e', belly: '#c3e877', wing: '#3f9e45', blue: '#3ba3f0',
+    beak: '#ffb92e', jaw: '#d9862a', crest: '#ff7a45', face: '#fff8ec',
+    cheek: '#ff8f7f', eye: '#2b1a10', shine: '#ffffff', leg: '#f09a3e',
+  },
+};
+
+/**
+ * How many frames each loop has, and how big a frame is, in pixels.
+ *
+ * A run is ten frames, played in about a third of a second: fast enough to be
+ * a run. A rest is twenty-four, played over three and a half seconds, which
+ * is stop-motion pace — what a clay animal is supposed to move at — and
+ * mostly still. A frame is drawn at about three times the size the page
+ * shows it on a phone, and the page scales it down, which is what smooths
+ * its edges.
+ */
+const CRITTER_FRAMES = { run: 10, rest: 24 };
+const CRITTER_FRAME = { width: 192, height: 154 };
+
+/**
+ * How each animal is framed: how many units of height its frame holds, and
+ * where across it the frame is centred. As close as each will go. The cat and
+ * the dog stand about a unit high and never leave the ground; the parrot
+ * hops, and needs the room over its head.
+ */
+const CRITTER_VIEW = {
+  cat: { tall: 1.12, x: -0.04 },
+  dog: { tall: 1.12, x: -0.03 },
+  parrot: { tall: 1.3, x: 0.0 },
+};
+
+/**
+ * An egg of clay: a ball pressed to three radii, turned about its own middle
+ * (`turn`, radians about x and about z) and set at `at`.
+ */
+const egg = ([rx, ry, rz], [x, y, z], seg, turn = {}) =>
+  new THREE.SphereGeometry(1, seg, Math.max(8, seg >> 1))
+    .scale(rx, ry, rz)
+    .rotateX(turn.x ?? 0)
+    .rotateZ(turn.z ?? 0)
+    .translate(x, y, z);
+
+/** A roll of clay along a few points: a tail, a leg. */
+const roll = (points, radius, seg) => new THREE.TubeGeometry(
+  new THREE.CatmullRomCurve3(points.map(([x, y, z]) => new THREE.Vector3(x, y, z))),
+  24, radius, Math.max(8, seg >> 1), false,
+);
+
+/** A leg hanging from its hip at the origin: a roll down to a paw. */
+const leg = (length, radius, paw, seg) => [
+  ['body', roll([[0, 0.02, 0], [0.005, -length / 2, 0], [0.01, -length, 0]], radius, seg)],
+  ['body', egg([radius, radius, radius], [0, 0.02, 0], seg)],
+  [paw, egg([radius * 1.3, radius * 0.8, radius * 1.15], [radius * 0.35, -length - radius * 0.3, 0], seg)],
+];
+
+/**
+ * What each animal is made of: the lumps that do not move, and each moving
+ * part as its joint (`at`, relative to whatever it hangs from) and its own
+ * lumps around that joint.
+ */
+function critterModel(kind, seg) {
+  if (kind === 'parrot') {
+    return {
+      body: [
+        ['body', egg([0.2, 0.3, 0.2], [0, 0.42, 0], seg, { z: -0.22 })],
+        ['belly', egg([0.13, 0.22, 0.155], [0.09, 0.4, 0], seg)],
+      ],
+      head: {
+        at: [0.06, 0.68, 0],
+        lumps: [
+          ['body', egg([0.17, 0.17, 0.17], [0.03, 0.1, 0], seg)],
+          ['face', egg([0.09, 0.1, 0.13], [0.11, 0.11, 0], seg)],
+          ['cheek', egg([0.04, 0.026, 0.03], [0.13, 0.03, 0.1], seg)],
+          ['cheek', egg([0.04, 0.026, 0.03], [0.13, 0.03, -0.1], seg)],
+          ['crest', new THREE.ConeGeometry(0.04, 0.13, seg).rotateZ(0.5).translate(-0.05, 0.29, 0)],
+          ['crest', new THREE.ConeGeometry(0.04, 0.13, seg).rotateZ(0.15).translate(0.01, 0.3, 0)],
+          ['beak', new THREE.ConeGeometry(0.055, 0.15, seg).rotateZ(-Math.PI / 2 - 0.7).translate(0.21, 0.07, 0)],
+          ['jaw', egg([0.045, 0.03, 0.04], [0.17, 0.02, 0], seg)],
+        ],
+      },
+      eyes: {
+        at: [0.15, 0.14, 0],
+        lumps: [
+          ['eye', egg([0.034, 0.044, 0.03], [0, 0, 0.088], seg)],
+          ['eye', egg([0.034, 0.044, 0.03], [0, 0, -0.088], seg)],
+          ['shine', egg([0.013, 0.013, 0.013], [0.016, 0.018, 0.112], seg)],
+          ['shine', egg([0.013, 0.013, 0.013], [0.016, 0.018, -0.112], seg)],
+        ],
+      },
+      tail: {
+        at: [-0.13, 0.24, 0],
+        lumps: [
+          ['wing', egg([0.05, 0.2, 0.035], [-0.09, -0.14, -0.025], seg, { z: -0.5 })],
+          ['blue', egg([0.055, 0.22, 0.04], [-0.11, -0.165, 0.02], seg, { z: -0.6 })],
+        ],
+      },
+      legs: [
+        { name: 'fn', at: [0.03, 0.17, 0.06], lumps: [['leg', roll([[0, 0, 0], [0.005, -0.08, 0], [0.01, -0.15, 0]], 0.02, seg)], ['leg', egg([0.05, 0.018, 0.035], [0.03, -0.16, 0], seg)]] },
+        { name: 'bn', at: [0.0, 0.17, -0.06], lumps: [['leg', roll([[0, 0, 0], [0.005, -0.08, 0], [0.01, -0.15, 0]], 0.02, seg)], ['leg', egg([0.05, 0.018, 0.035], [0.03, -0.16, 0], seg)]] },
+      ],
+      wings: [-1, 1].map((side) => ({
+        side,
+        at: [-0.03, 0.6, side * 0.165],
+        lumps: [
+          ['wing', egg([0.1, 0.25, 0.05], [-0.06, -0.19, 0], seg, { z: -0.3 })],
+          ['blue', egg([0.06, 0.1, 0.053], [-0.106, -0.344, 0], seg, { z: -0.3 })],
+        ],
+      })),
+    };
+  }
+
+  const dog = kind === 'dog';
+  const body = dog
+    ? [
+      ['body', egg([0.37, 0.23, 0.22], [0, 0.44, 0], seg)],
+      ['patch', egg([0.15, 0.13, 0.222], [-0.13, 0.5, 0], seg)],
+      ['cream', egg([0.27, 0.13, 0.18], [0.05, 0.35, 0], seg)],
+      ['body', egg([0.17, 0.19, 0.18], [0.27, 0.53, 0], seg)],
+      ['collar', new THREE.TorusGeometry(0.155, 0.03, 8, 28).rotateX(Math.PI / 2).rotateZ(-0.7).translate(0.31, 0.58, 0)],
+      ['tag', egg([0.035, 0.035, 0.02], [0.42, 0.48, 0.0], seg)],
+    ]
+    : [
+      ['body', egg([0.36, 0.22, 0.21], [0, 0.43, 0], seg)],
+      ['cream', egg([0.26, 0.13, 0.17], [0.05, 0.34, 0], seg)],
+      ['body', egg([0.16, 0.18, 0.17], [0.27, 0.52, 0], seg)],
+    ];
+
+  const head = dog
+    ? {
+      at: [0.34, 0.65, 0],
+      lumps: [
+        ['body', egg([0.24, 0.22, 0.23], [0.1, 0.14, 0], seg)],
+        ['patch', egg([0.08, 0.08, 0.07], [0.26, 0.21, 0.12], seg)],
+        ['cream', egg([0.13, 0.1, 0.14], [0.3, 0.05, 0], seg)],
+        ['nose', egg([0.045, 0.035, 0.05], [0.43, 0.09, 0], seg)],
+        ['cheek', egg([0.04, 0.025, 0.03], [0.26, 0.06, 0.17], seg)],
+        ['cheek', egg([0.04, 0.025, 0.03], [0.26, 0.06, -0.17], seg)],
+      ],
+    }
+    : {
+      at: [0.34, 0.63, 0],
+      lumps: [
+        ['body', egg([0.25, 0.22, 0.24], [0.12, 0.14, 0], seg)],
+        ['cream', egg([0.1, 0.075, 0.13], [0.31, 0.06, 0], seg)],
+        ['nose', egg([0.03, 0.022, 0.035], [0.4, 0.1, 0], seg)],
+        ['cheek', egg([0.04, 0.025, 0.03], [0.27, 0.07, 0.17], seg)],
+        ['cheek', egg([0.04, 0.025, 0.03], [0.27, 0.07, -0.17], seg)],
+        ['body', new THREE.ConeGeometry(0.085, 0.17, seg).rotateZ(0.2).translate(0.06, 0.38, -0.13)],
+        ['pink', new THREE.ConeGeometry(0.05, 0.11, seg).rotateZ(0.2).translate(0.085, 0.36, -0.13)],
+      ],
+    };
+
+  return {
+    body,
+    head,
+    eyes: {
+      at: dog ? [0.31, 0.19, 0] : [0.34, 0.18, 0],
+      lumps: [
+        ['eye', egg([0.038, 0.055, 0.034], [0, 0, 0.095], seg)],
+        ['eye', egg([0.038, 0.055, 0.034], [0, 0, -0.095], seg)],
+        ['shine', egg([0.016, 0.016, 0.016], [0.02, 0.022, 0.122], seg)],
+        ['shine', egg([0.016, 0.016, 0.016], [0.02, 0.022, -0.122], seg)],
+      ],
+    },
+    // The cat's near ear, on its own so that it can twitch.
+    ear: dog ? null : {
+      at: [0.06, 0.3, 0.13],
+      lumps: [
+        ['body', new THREE.ConeGeometry(0.085, 0.17, seg).rotateZ(0.2).translate(0, 0.08, 0)],
+        ['pink', new THREE.ConeGeometry(0.05, 0.11, seg).rotateZ(0.2).translate(0.025, 0.06, 0)],
+      ],
+    },
+    // The dog's ears hang from the top of his head, both together.
+    ears: dog ? {
+      at: [0.06, 0.3, 0],
+      lumps: [
+        ['ear', egg([0.065, 0.16, 0.04], [-0.03, -0.12, 0.215], seg, { x: -0.12 })],
+        ['ear', egg([0.065, 0.16, 0.04], [-0.03, -0.12, -0.215], seg, { x: 0.12 })],
+      ],
+    } : null,
+    tongue: dog ? {
+      at: [0.36, -0.01, 0],
+      lumps: [['tongue', egg([0.035, 0.05, 0.04], [0, -0.04, 0], seg)]],
+    } : null,
+    tail: dog
+      ? {
+        at: [-0.34, 0.53, 0],
+        lumps: [
+          ['body', roll([[0.04, -0.02, 0], [-0.07, 0.07, 0], [-0.1, 0.19, 0], [-0.07, 0.29, 0]], 0.042, seg)],
+          ['body', egg([0.042, 0.042, 0.042], [-0.07, 0.29, 0], seg)],
+        ],
+      }
+      : {
+        at: [-0.32, 0.5, 0],
+        lumps: [
+          ['body', roll([[0.04, -0.02, 0], [-0.1, 0.05, 0], [-0.2, 0.2, 0], [-0.18, 0.38, 0], [-0.1, 0.46, 0]], 0.045, seg)],
+          ['cream', egg([0.05, 0.05, 0.05], [-0.1, 0.46, 0], seg)],
+        ],
+      },
+    legs: [
+      ['fn', 0.21, 0.11], ['ff', 0.21, -0.11], ['bn', -0.22, 0.11], ['bf', -0.22, -0.11],
+    ].map(([name, x, z]) => ({ name, at: [x, 0.34, z], lumps: leg(0.3, dog ? 0.06 : 0.055, 'cream', seg) })),
+  };
+}
+
+/**
+ * Where every moving part is, in one frame of one loop. Angles in radians.
+ *
+ * The run: legs in diagonal pairs, as a trot; two bounces of the body to a
+ * stride; the tail streaming. The parrot hops instead, once a loop, wings
+ * going. The rest: mostly nothing, which is the point of it, with a swish or
+ * a wag, a blink, an ear, a tilt of the head, each at its own place in the
+ * loop. Its last frame is the plain pose, which is the one a device asking
+ * for less motion is left showing.
+ */
+function critterPose(kind, loop, frame) {
+  const pose = { lift: 0, nod: 0, tilt: 0, tail: 0, ear: 0, ears: 0, tongue: 1, blink: 1, wings: 0, legs: {} };
+  if (loop === 'run') {
+    const phase = (frame / CRITTER_FRAMES.run) * Math.PI * 2;
+    if (kind === 'parrot') {
+      const hop = Math.sin((frame / CRITTER_FRAMES.run) * Math.PI);
+      pose.lift = 0.13 * hop;
+      pose.wings = 0.35 + 0.35 * Math.sin(phase * 2);
+      pose.tail = -0.2 * hop;
+      pose.nod = -0.08 * hop;
+      pose.legs = { fn: 0.35 * hop, bn: 0.35 * hop };
+      return pose;
+    }
+    const stride = 0.6 * Math.sin(phase);
+    pose.legs = { fn: stride, bf: stride, ff: -stride, bn: -stride };
+    pose.lift = 0.035 * Math.abs(Math.sin(phase));
+    pose.nod = -0.05 * Math.sin(phase * 2);
+    pose.tail = kind === 'dog' ? 0.45 * Math.sin(phase * 2) : -0.2 + 0.2 * Math.sin(phase);
+    pose.ears = 0.2 * Math.sin(phase * 2);
+    if (kind === 'dog') pose.tongue = 1.35;
+    return pose;
+  }
+
+  const wave = (from, to, beats) => (frame >= from && frame <= to
+    ? Math.sin(((frame - from) / (to - from)) * Math.PI * beats)
+    : 0);
+  if (kind === 'cat') {
+    pose.tail = 0.32 * wave(0, 10, 2);
+    if (frame === 12 || frame === 13) pose.ear = 0.35;
+    pose.tilt = 0.14 * wave(15, 21, 1);
+    if (frame === 18) pose.blink = 0.12;
+  } else if (kind === 'dog') {
+    pose.tail = 0.5 * wave(0, 8, 4);
+    if (frame <= 8) pose.tongue = frame % 2 ? 1.3 : 1;
+    pose.tilt = -0.16 * wave(10, 18, 1);
+    pose.ears = 0.12 * wave(10, 18, 1);
+    if (frame === 20) pose.blink = 0.12;
+  } else {
+    pose.nod = 0.18 * wave(3, 9, 3);
+    if (frame === 14) pose.blink = 0.12;
+    pose.tail = 0.15 * wave(10, 13, 1);
+    pose.wings = 0.7 * wave(18, 21, 1);
+  }
+  return pose;
+}
+
+/**
+ * How far each animal's head is turned toward the camera, in radians. It
+ * runs side-on, which is the only way a run can be seen, and looks at you
+ * while it does — which is where a face is, and a face is what makes it cute.
+ */
+const LOOK = -0.75;
+
+/**
+ * The finished strips of frames, by animal, for as long as the page is open.
+ * Kept here rather than on a board, because a board can be taken down and
+ * put up again — a change of style — and the animals should not be drawn
+ * twice for it.
+ */
+const CRITTER_SHEETS = new Map();
 
 /** A square with its corners rounded off, centred on the origin. */
 function roundedSquare(size, radius) {
@@ -638,6 +985,8 @@ export class Board3D {
 
   /** Piece portraits, drawn once each and kept. See pieceSprite(). */
   #spriteCache = new Map();
+  /** Animals waiting to be drawn, and how far each has got. See critterSheet(). */
+  #critterJobs = [];
   #richDetail = true;
   #pieceGroup = null;
   #markerGroup = null;
@@ -648,6 +997,8 @@ export class Board3D {
    * height is set per drag, to the part of the piece in hand: #carriedFoot.
    */
   #dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(BOARD_Y + DRAG_LIFT));
+  /** The board's own surface, which the move dots lie on. See #dotOnRay. */
+  #boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -BOARD_Y);
 
   // Reusable resources, disposed together in dispose().
   #geometries = new Map();
@@ -708,6 +1059,8 @@ export class Board3D {
   #turn = WHITE;
   #movable = new Set();
   #targets = new Set();
+  /** The targets with nothing on them, which are marked by a dot. */
+  #dots = new Set();
 
   /**
    * Cancels every listener this board added, in one call.
@@ -813,12 +1166,6 @@ export class Board3D {
 
     this.#buildLights();
     this.#buildBoard();
-    // The coordinates are drawn in the page's own typeface, which can still
-    // be on its way when the first texture is painted. Paint them again once
-    // it has landed, or the board keeps the fallback's letters for the game.
-    document.fonts?.load?.('700 32px Fredoka')
-      .then(() => { if (!this.#disposed) this.#refreshBoardTexture(); })
-      .catch(() => { /* the fallback letters are already on the board */ });
 
     this.#pieceGroup = new THREE.Group();
     this.#markerGroup = new THREE.Group();
@@ -972,7 +1319,7 @@ export class Board3D {
   }
 
   /**
-   * Draw the tiles — and the coordinates — into one canvas texture.
+   * Draw the tiles into one canvas texture.
    *
    * Each square is painted as a tile pressed into the tray: a face with
    * rounded corners, and around it the rolled edge where the tile turns down
@@ -982,11 +1329,13 @@ export class Board3D {
    * a tile it falls on. It is what makes sixty-four flat quads read as
    * sixty-four separate tiles, at a thousandth of the cost of modelling them.
    *
-   * The labels are painted into the board rather than floated above it as
-   * sprites, which is why this is regenerated when the orientation flips: a
-   * label painted on the surface would otherwise be upside down for whichever
-   * player is not White. Regenerating is one 2D canvas pass on a rare event,
-   * far cheaper than sixteen extra objects in the scene forever.
+   * Nothing else is painted on them. The coordinates — a to h along the
+   * near edge, 1 to 8 up the left — were painted here too, and the texture
+   * was drawn again on every flip so that they faced whoever was reading
+   * them. They were removed at the player's request, "on board remove
+   * 123456789 and letter", and with them the redraw on a flip and the
+   * second redraw once the page's typeface had loaded. The texture now
+   * changes only with the theme.
    */
   #makeCheckerTexture() {
     const theme = THEMES[this.#theme] ?? THEMES.classic;
@@ -1039,51 +1388,6 @@ export class Board3D {
       }
     }
 
-    // The coordinates, always. There was a switch for them once; it was only
-    // ever left on, so it was taken out.
-    const flip = this.#orientation === 'black';
-    ctx.font = `700 ${Math.round(cell * 0.21)}px Fredoka, system-ui, sans-serif`;
-    ctx.textBaseline = 'top';
-    for (let row = 0; row < 8; row += 1) {
-      for (let col = 0; col < 8; col += 1) {
-        const isLight = (row + col) % 2 === 0;
-        ctx.fillStyle = isLight ? theme.inkOnLight : theme.inkOnDark;
-        ctx.globalAlpha = 0.9;
-
-        // Ranks down the left edge, files along the bottom, of the CURRENT
-        // view — which is the opposite edge of the texture when flipped.
-        const rankEdge = flip ? col === 7 : col === 0;
-        const fileEdge = flip ? row === 0 : row === 7;
-        if (!rankEdge && !fileEdge) continue;
-
-        /*
-           Which edge moves with the view. What the label SAYS does not.
-
-           Flipping swings the camera round to the other side; no square
-           goes anywhere, so the tile in texture row 0 is rank 8 whoever is
-           looking at it. This used to renumber as well as move — the rank
-           nearest a player sitting as Black was labelled 1, on the row
-           their own king started on — and drew the glyphs the texture's
-           way up, which from that side is upside down. So the label is the
-           square's true name, and the cell is turned half a circle before
-           it is written so that it faces whoever is reading it.
-        */
-        ctx.save();
-        ctx.translate(col * cell + cell / 2, row * cell + cell / 2);
-        if (flip) ctx.rotate(Math.PI);
-        if (rankEdge) {
-          ctx.textAlign = 'left';
-          ctx.fillText(String(8 - row), -cell * 0.4, -cell * 0.41);
-        }
-        if (fileEdge) {
-          ctx.textAlign = 'right';
-          ctx.fillText(FILES[col], cell * 0.4, cell * 0.18);
-        }
-        ctx.restore();
-      }
-    }
-    ctx.globalAlpha = 1;
-
     const texture = new THREE.CanvasTexture(canvas);
     /*
        Linear, not nearest.
@@ -1091,9 +1395,9 @@ export class Board3D {
        Nearest was the right call when a square was one flat colour: it kept
        the boundary between two fields perfectly crisp. Now that each tile
        carries a drawn edge, nearest samples that fine detail into hard
-       stair-steps. Anisotropy is what keeps the far rank legible at this
-       camera angle — without it the edges and the coordinates smear into mush
-       a couple of ranks out.
+       stair-steps. Anisotropy is what keeps the far rank crisp at this
+       camera angle — without it the tiles' edges smear into mush a couple of
+       ranks out.
     */
     texture.magFilter = THREE.LinearFilter;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
@@ -1469,7 +1773,6 @@ export class Board3D {
     this.#orientation = next;
     this.#applyCamera(true);
     this.#applyA11yOrder();
-    this.#refreshBoardTexture();
   }
 
   /**
@@ -1661,6 +1964,238 @@ export class Board3D {
     setTimeout(next, 600);
   }
 
+  /**
+   * One of the animals on the lawn, drawn in clay as a strip of frames.
+   *
+   * Resolves with `{ url, columns, rows, run, rest, width, height }`: a
+   * picture of every frame side by side, the run along the top row and the
+   * rest along the bottom one, `columns` frames wide; or null, if it could
+   * not be drawn. The page plays it (see "The animals on the lawn" in
+   * style.css): the frames are the movement, and only running along the
+   * grass is left to the page, which is the part it does for free.
+   *
+   * Why frames, and not the animal itself moving in a scene of its own: the
+   * grass the animals run on is the page, outside this board's canvas, and a
+   * canvas of their own would be a second WebGL context — browsers allow a
+   * page few — drawing all the time. Drawn once, here, through the board's
+   * renderer and its own clay and light, they are the same stuff as the
+   * pieces and cost nothing after.
+   *
+   * Drawn a frame at a time, with a pause between, and never while anything
+   * on the board is moving: thirty-four frames each, and a frame is a render
+   * and a read back off the GPU. Kept for the page's lifetime; see
+   * CRITTER_SHEETS.
+   */
+  critterSheet(kind) {
+    if (!CRITTER_CLAY[kind]) return Promise.resolve(null);
+    const kept = CRITTER_SHEETS.get(kind);
+    if (kept?.board === this) return kept.promise;
+    // Being drawn by a board that has since been taken down — the style
+    // changed, or its context was lost — which gives up on it unfinished.
+    // This one takes over if it does.
+    if (kept) {
+      return kept.promise.then((sheet) => sheet ?? (this.#disposed ? null : this.critterSheet(kind)));
+    }
+
+    const promise = new Promise((resolve) => {
+      this.#critterJobs.push({ kind, frame: 0, resolve });
+      if (this.#critterJobs.length === 1) setTimeout(() => this.#drawCritters(), 400);
+    });
+    CRITTER_SHEETS.set(kind, { promise, board: this });
+    // A sheet this board could not finish is forgotten, so that it can be
+    // tried again. See #drawCritters.
+    promise.then((sheet) => {
+      if (!sheet && CRITTER_SHEETS.get(kind)?.promise === promise) CRITTER_SHEETS.delete(kind);
+    });
+    return promise;
+  }
+
+  /** Draw the next frame of the first animal waiting, then come back. */
+  #drawCritters() {
+    const job = this.#critterJobs[0];
+    if (!job) return;
+    if (this.#disposed || !this.#renderer) {
+      this.#critterJobs.splice(0).forEach((waiting) => {
+        waiting.rig?.dispose();
+        waiting.target?.dispose();
+        waiting.resolve(null);
+      });
+      return;
+    }
+
+    const busy = this.#animations.length > 0 || this.#cameraSpin || this.#drag || this.#warmFrames > 0;
+    if (busy) {
+      setTimeout(() => this.#drawCritters(), 250);
+      return;
+    }
+
+    try {
+      this.#drawCritterFrame(job);
+    } catch (error) {
+      warn('Could not draw an animal', error);
+      this.#critterJobs.shift();
+      job.rig?.dispose();
+      job.target?.dispose();
+      job.resolve(null);
+      setTimeout(() => this.#drawCritters(), 60);
+      return;
+    }
+
+    const total = CRITTER_FRAMES.run + CRITTER_FRAMES.rest;
+    if (job.frame < total) {
+      setTimeout(() => this.#drawCritters(), 30);
+      return;
+    }
+
+    // Done: hand the strip over as a picture, and start on the next animal.
+    this.#critterJobs.shift();
+    job.rig.dispose();
+    job.target.dispose();
+    const { width, height } = CRITTER_FRAME;
+    const sheet = {
+      columns: job.columns, rows: 2, run: CRITTER_FRAMES.run, rest: CRITTER_FRAMES.rest, width, height,
+    };
+    const finish = (url) => job.resolve(url ? { ...sheet, url } : null);
+    if (typeof job.canvas.toBlob === 'function') {
+      job.canvas.toBlob((blob) => finish(blob ? URL.createObjectURL(blob) : null), 'image/png');
+    } else {
+      finish(job.canvas.toDataURL('image/png'));
+    }
+    setTimeout(() => this.#drawCritters(), 60);
+  }
+
+  /**
+   * Draw one frame of an animal into its strip.
+   *
+   * The first frame also builds what every frame needs: the animal, the
+   * scene and light it stands in — the portraits' light, as the pieces in
+   * the picker have — the camera, and the strip itself.
+   *
+   * The camera is a little in front of the animal's side and a little
+   * above, so that a face can be seen as well as a run; and it does not
+   * shrink with distance, because every frame of every animal has to stand
+   * on the same line of grass at the same size.
+   */
+  #drawCritterFrame(job) {
+    const { width, height } = CRITTER_FRAME;
+    if (!job.rig) {
+      job.rig = this.#critterRig(job.kind);
+      job.columns = Math.max(CRITTER_FRAMES.run, CRITTER_FRAMES.rest);
+      job.canvas = document.createElement('canvas');
+      job.canvas.width = width * job.columns;
+      job.canvas.height = height * 2;
+      job.target = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true });
+      job.target.texture.colorSpace = THREE.SRGBColorSpace;
+      job.pixels = new Uint8Array(width * height * 4);
+
+      const scene = new THREE.Scene();
+      scene.add(new THREE.HemisphereLight(0xffffff, 0xf3e8d2, 1.6));
+      const key = new THREE.DirectionalLight(0xfffbf4, 2.1);
+      key.position.set(-1.4, 2.4, 2.2);
+      const fill = new THREE.DirectionalLight(0xe8f0ff, 0.45);
+      fill.position.set(2.2, 1.2, 1.6);
+      const rim = new THREE.DirectionalLight(0xffffff, 0.8);
+      rim.position.set(0.6, 2.0, -2.4);
+      scene.add(key, fill, rim, job.rig.root);
+      job.scene = scene;
+
+      // How much of the animal's world the frame holds, with its feet a
+      // little above the frame's bottom edge: see CRITTER_VIEW.
+      const view = CRITTER_VIEW[job.kind];
+      const wide = view.tall * (width / height);
+      const camera = new THREE.OrthographicCamera(-wide / 2, wide / 2, view.tall / 2, -view.tall / 2, 0.1, 20);
+      const toward = new THREE.Vector3(0.34, 0.3, 1).normalize();
+      // The feet stand this far above the bottom of the frame, in units.
+      const footroom = 0.07;
+      const level = Math.hypot(toward.x, toward.z);
+      const target = new THREE.Vector3(view.x, (view.tall / 2 - footroom) / level, 0);
+      camera.position.copy(target).addScaledVector(toward, 6);
+      camera.lookAt(target);
+      job.camera = camera;
+    }
+
+    const loop = job.frame < CRITTER_FRAMES.run ? 'run' : 'rest';
+    const index = loop === 'run' ? job.frame : job.frame - CRITTER_FRAMES.run;
+    job.rig.pose(critterPose(job.kind, loop, index));
+
+    const renderer = this.#renderer;
+    const previous = renderer.getRenderTarget();
+    renderer.setRenderTarget(job.target);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.render(job.scene, job.camera);
+    renderer.readRenderTargetPixels(job.target, 0, 0, width, height, job.pixels);
+    renderer.setRenderTarget(previous);
+
+    // WebGL reads bottom-up; a canvas is top-down. As in pieceSprite().
+    const image = new ImageData(width, height);
+    for (let row = 0; row < height; row += 1) {
+      const from = (height - 1 - row) * width * 4;
+      image.data.set(job.pixels.subarray(from, from + width * 4), row * width * 4);
+    }
+    job.canvas.getContext('2d').putImageData(image, index * width, (loop === 'run' ? 0 : 1) * height);
+    job.frame += 1;
+  }
+
+  /**
+   * One animal, built from critterModel() in the pieces' clay, with a
+   * handle on every part that moves and a pose() that sets them all.
+   *
+   * Its geometry is its own — it is drawn and done with, unlike a piece's,
+   * which is shared and cached — and dispose() frees it. The material is
+   * the pieces' and is not.
+   */
+  #critterRig(kind) {
+    const spec = critterModel(kind, this.#richDetail ? 24 : 16);
+    const pigments = CRITTER_CLAY[kind];
+    const material = this.#pieceMaterial();
+    const geometries = [];
+    const mesh = (lumps) => {
+      const geometry = bake(lumps, pigments);
+      geometries.push(geometry);
+      return new THREE.Mesh(geometry, material);
+    };
+
+    const root = new THREE.Group();
+    const lift = new THREE.Group();
+    root.add(lift);
+    lift.add(mesh(spec.body));
+    const part = (piece, parent) => {
+      if (!piece) return null;
+      const group = new THREE.Group();
+      group.position.set(...piece.at);
+      group.add(mesh(piece.lumps));
+      parent.add(group);
+      return group;
+    };
+    const head = part(spec.head, lift);
+    const eyes = part(spec.eyes, head);
+    const ear = part(spec.ear, head);
+    const ears = part(spec.ears, head);
+    const tongue = part(spec.tongue, head);
+    const tail = part(spec.tail, lift);
+    const legs = spec.legs.map((piece) => ({ name: piece.name, group: part(piece, lift) }));
+    const wings = (spec.wings ?? []).map((piece) => ({ side: piece.side, group: part(piece, lift) }));
+
+    return {
+      root,
+      pose(p) {
+        lift.position.y = p.lift;
+        head.rotation.set(p.tilt, LOOK, p.nod);
+        eyes.scale.y = p.blink;
+        if (ear) ear.rotation.z = p.ear;
+        if (ears) ears.rotation.z = p.ears;
+        if (tongue) tongue.scale.y = p.tongue;
+        tail.rotation.z = p.tail;
+        legs.forEach(({ name, group }) => { group.rotation.z = p.legs[name] ?? 0; });
+        wings.forEach(({ side, group }) => { group.rotation.x = -side * p.wings; });
+      },
+      dispose() {
+        geometries.forEach((geometry) => geometry.dispose());
+      },
+    };
+  }
+
   render(snapshot, options = {}) {
     const { state, view } = snapshot;
     if (!state || this.#disposed) return;
@@ -1687,6 +2222,8 @@ export class Board3D {
     this.#turn = state.turn;
     this.#movable = new Set(snapshot.movable ?? []);
     this.#targets = new Set((view?.legalTargets ?? []).map((target) => target.to));
+    this.#dots = new Set((view?.legalTargets ?? [])
+      .filter((target) => !target.isCapture).map((target) => target.to));
 
     if (move) this.#animateMove(move);
 
@@ -1975,6 +2512,8 @@ export class Board3D {
       marker.material.color.setHex(spec.color);
       marker.material.opacity = spec.opacity;
       marker.scale.setScalar(1);
+      marker.material.depthFunc = THREE.LessEqualDepth;
+      marker.renderOrder = 0;
       return marker;
     };
 
@@ -2001,7 +2540,27 @@ export class Board3D {
         0.01,
         target.isCapture ? 'halo' : 'disc',
       );
-      marker.scale.setScalar(target.isCapture ? 0.92 : 0.34);
+      marker.scale.setScalar(target.isCapture ? 0.92 : DOT.radius * 2);
+
+      /*
+        And the part of a dot a piece is standing in front of, drawn over that
+        piece. A tall piece covers the square beyond it — the selected piece
+        most of all, whose own head is drawn over the middle of the square
+        straight past it — and a dot nobody can see is a move nobody knows is
+        there. A press there means the move: see #dotOnRay.
+
+        Only that part, by drawing it where the depth test fails: where
+        something nearer the eye is already drawn, which on a dot lying on the
+        board is exactly a piece in front of it. And in the selection's blue,
+        because the dot's own colour is chosen against its tile, and a brown
+        dot faint enough for a cream tile is nothing at all on a black crown.
+      */
+      if (!target.isCapture) {
+        const through = place(target.to, HIGHLIGHT.legalThrough, 0.01, 'disc');
+        through.scale.setScalar(DOT.radius * 2);
+        through.material.depthFunc = THREE.GreaterDepth;
+        through.renderOrder = 1;
+      }
     });
   }
 
@@ -2343,12 +2902,18 @@ export class Board3D {
    * the controller clears the selection on a press that means nothing and it
    * needs a square to be told about.
    *
+   * Before any of that, the move dots. They are drawn over the pieces, so a
+   * press on one is that move whatever stands in front of it: see #dotOnRay.
+   *
    * `carried` is a piece in the player's hand. It is left out, or every drop
    * would land on the piece being dropped. A hand that is already holding a
    * piece is not picking up another, so only a square that piece may move to
    * counts, and nothing stands in its way.
    */
   #squareOnRay(carried = null) {
+    const dot = this.#dotOnRay();
+    if (dot) return dot;
+
     const tile = this.#raycaster.intersectObject(this.#boardMesh, false)[0];
     const inSight = this.#piecesOnRay(carried);
     if (tile) {
@@ -2366,6 +2931,37 @@ export class Board3D {
       if (own && !carried) mayMove = false;
     }
     return inSight[0] ?? null;
+  }
+
+  /**
+   * The square whose move dot the line of sight is on, if it is on one.
+   *
+   * Reported as "I still can't click this front board", with a picture of
+   * the black queen selected: the square straight past her was a move, and
+   * her own crown was drawn over the middle of it, dot and all. A press
+   * there met the queen first, and a press on the selected piece puts it
+   * down — so the move took a press on the strip of that square showing
+   * either side of her, and the obvious press let go of her instead. Only
+   * 40% of that square answered to its own move. The same is true, less
+   * badly, of any square behind a tall piece of your own.
+   *
+   * The dots are drawn over the pieces now, and this is the other half: the
+   * line of sight is followed to the board itself, through whatever stands
+   * on it, and if it lands within reach of a dot, that is the press. Where
+   * a dot is drawn, a press means that move — the same rule as everywhere
+   * else on this board, that what is drawn under the pointer is what was
+   * pressed. The reach is a little wider than the dot and no more, so the
+   * head of a piece standing in front of a move is still that piece's
+   * everywhere off the dot.
+   */
+  #dotOnRay() {
+    if (!this.#dots.size) return null;
+    const ground = this.#raycaster.ray.intersectPlane(this.#boardPlane, new THREE.Vector3());
+    if (!ground) return null;
+    const square = this.#worldToSquare(ground);
+    if (!square || !this.#dots.has(square)) return null;
+    const middle = this.#squareToWorld(square);
+    return Math.hypot(ground.x - middle.x, ground.z - middle.z) <= DOT.reach ? square : null;
   }
 
   /**

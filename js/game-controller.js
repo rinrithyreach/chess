@@ -247,6 +247,9 @@ export class GameController {
 
     if (moveAdded || movesRemoved) {
       this.#clearSelection();
+      // Two players sharing this device: the board turns to whoever is to
+      // move. See #faceTheBoard.
+      if (this.#playsBothSides()) this.#faceTheBoard();
     }
 
     if (moveAdded) {
@@ -355,6 +358,7 @@ export class GameController {
 
     this.#started = true;
     this.#view.orientation = 'white';
+    this.#faceTheBoard();
     this.#save();
     this.#emitChange();
     log('New game started');
@@ -380,6 +384,7 @@ export class GameController {
     this.#resetView();
     this.#started = true;
     this.#view.orientation = saved.orientation === 'black' ? 'black' : 'white';
+    this.#faceTheBoard();
     this.#emitChange();
     this.#toast('Game restored');
     return { ok: true };
@@ -668,6 +673,7 @@ export class GameController {
     const result = await this.#session.submitAction(SESSION_ACTION.RESTART);
     if (result.ok) {
       this.#resetView();
+      this.#faceTheBoard();
       this.#save();
       this.#emitChange();
       this.#toast('Game restarted');
@@ -749,6 +755,8 @@ export class GameController {
     }
 
     this.#resetView();
+    // Against the bot the colours have just swapped, and yours with them.
+    this.#faceTheBoard();
 
     if (this.isOnline()) {
       const rematch = this.#state?.online?.rematch;
@@ -802,6 +810,42 @@ export class GameController {
     this.#emitChange();
     this.#toast(`Board flipped — ${this.#view.orientation === 'white' ? 'White' : 'Black'} at bottom`);
     return this.#view.orientation;
+  }
+
+  /**
+   * Turn the board to the side the person holding this device is playing.
+   *
+   * Against the bot that is the human's colour, which is White in a new game
+   * and swaps with every rematch. With two players sharing the device it is
+   * whoever is to move, so each of them plays from their own side of the
+   * board, the right way up; it stays where it is once the game is over,
+   * on the side that made the last move. Online it is this device's seat,
+   * and #syncFromSession already follows that, so nothing here.
+   *
+   * There was a switch for the two-player case, Auto Flip Board, off unless
+   * turned on. It was removed with the flipping behind it, which left Black
+   * playing every move from the far side of the board, upside down, on a
+   * phone passed across a table. That came back as "my board does not flip"
+   * and it was right: the turning is how a shared game is played, not a
+   * preference, so it is back with no switch. Flip still turns the board by
+   * hand, until the next move.
+   *
+   * The board waits for the move to land before it turns: see the held turn
+   * in app.js.
+   */
+  #faceTheBoard() {
+    if (!this.#state || this.isOnline()) return;
+    const seats = this.#session.getControllableColors?.() ?? [];
+    let side = null;
+    if (seats.length === 1) side = seats[0];
+    else if (this.#playsBothSides() && !this.#state.isGameOver) side = this.#state.turn;
+    if (side) this.#view.orientation = side === BLACK ? 'black' : 'white';
+  }
+
+  /** Both colours are played from this device: a two-player game on one phone. */
+  #playsBothSides() {
+    const seats = this.#session.getControllableColors?.() ?? [];
+    return seats.includes(WHITE) && seats.includes(BLACK);
   }
 
   #resetView() {

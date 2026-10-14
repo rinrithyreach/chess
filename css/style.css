@@ -1134,6 +1134,8 @@ body::before {
    row of taken pieces'. Once there is a row the name may have just under
    half the card at most: a long name gives way, with an ellipsis, before
    the pieces are squeezed to nothing. Until then it may have all of it.
+   Inside that half it does not shrink: a long row closes its pieces up
+   rather than cutting a short name.
 */
 .player-card__info {
   display: flex;
@@ -1143,6 +1145,7 @@ body::before {
 }
 
 .player-card:has(.taken) .player-card__info {
+  flex-shrink: 0;
   max-width: 48%;
 }
 
@@ -1220,11 +1223,14 @@ body::before {
   board between them would step up and down the page with every move.
 */
 .player-card {
-  /* How tall a taken piece's picture is drawn: as near the height of the
-     card's inside as it goes without making the card any taller. A queen
-     fills nine tenths of it and a pawn's head a little over half. Smaller
-     on a narrow phone and on one held sideways: see responsive.css. */
-  --taken: 2.4rem;
+  /* How big a taken piece's picture is drawn, before it is squashed: see
+     .taken__piece. Small, and meant to be: as tall as the inside of the
+     card, the pieces were the tallest thing on it and read as a second set
+     standing there, not as a few toys won. Smaller again on a narrow phone
+     and on one held sideways: see responsive.css. */
+  --taken: 1.7rem;
+  /* How much of that height the squashed piece keeps. */
+  --taken-squat: 0.86;
 }
 
 .player-card__meta {
@@ -1260,38 +1266,48 @@ body::before {
 
    Each piece is a slot, and its picture is centred on the slot and wider
    than it. The picture is square and the piece in it is tall and thin — the
-   foot is four tenths of the picture's width — so a slot the width of the
-   foot puts the pieces shoulder to shoulder, and the air either side of one
+   foot is under half the picture's width — so a slot a little wider than
+   the foot stands the pieces just apart, and the air either side of one
    lies over its neighbours, where it shows nothing.
 
-   A slot is narrower again for a piece of the same kind as the one before
-   it, so that pawns stand overlapping, each a little in front of the last,
-   and the first of a new kind stands clear. Eight pawns and seven others,
-   which is everything that can be taken, come to five and a bit times the
-   height of a picture.
+   A slot is narrower for a piece of the same kind as the one before it, so
+   that pawns stand close, each a little in front of the last, and the first
+   of a new kind stands clear. Eight pawns and seven others, which is
+   everything that can be taken, come to seven and a bit times the height
+   of a picture.
 
    The slots shrink. A long row on a narrow phone has less than that to
    stand in; the pieces then close up evenly, and the row never pushes the
-   card wider.
+   card wider. The name keeps its own width while they do: see
+   .player-card__info.
+
+   The row is a little dish of its own, a soft sunk pill as long as the
+   pieces in it, and they stand on its floor. It is pushed to the card's
+   end by its margin rather than by filling the space, so the dish is no
+   longer than the row.
 */
 /*
-   Clipped, a few pixels out from the slots. The pictures are wider than the
-   slots and their sides are empty air, which shows nothing and still counts
-   as overflow: the last piece's air ran past the card, and on a 320px phone
-   it made the page a couple of pixels wider than the screen, so the whole
-   game slid sideways under a thumb. The material lead used to stand after
-   the row and catch it. The few pixels kept are for the part of a foot that
-   really does reach past its slot.
+   Clipped. The pictures are wider than the slots and their sides are empty
+   air, which shows nothing and still counts as overflow: the last piece's
+   air ran past the card, and on a 320px phone it made the page a couple of
+   pixels wider than the screen, so the whole game slid sideways under a
+   thumb. The material lead used to stand after the row and catch it. The
+   padding at the ends is the dish's rim, and room for the part of a foot
+   that really does reach past its slot.
 */
 .player-card__taken {
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-width: 0;
-  height: var(--taken);
-  padding-inline: 3px;
+  margin-left: auto;
+  height: calc(var(--taken) * var(--taken-squat) + 8px);
+  padding: 0 10px 4px;
   overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  box-shadow: inset 0 1px 2px rgba(120, 80, 40, 0.16);
 }
 
 .player-card__taken:empty {
@@ -1305,13 +1321,13 @@ body::before {
 .taken {
   position: relative;
   flex: 0 1 auto;
-  width: calc(var(--taken) * 0.3);
+  width: calc(var(--taken) * 0.42);
   min-width: 2px;
-  height: var(--taken);
+  height: calc(var(--taken) * var(--taken-squat));
 }
 
 .taken--lead {
-  width: calc(var(--taken) * 0.46);
+  width: calc(var(--taken) * 0.6);
 }
 
 /*
@@ -1319,6 +1335,12 @@ body::before {
    clay under a bright light is very nearly the colour of the card. A tight
    one draws a line round the piece and a soft one stands it on the card. A
    filter on a picture that never changes is worked out once.
+
+   Squashed, a little wider and a good deal shorter, from the foot: a
+   chubby toy of the piece rather than the statue on the board. Done to the
+   picture and not to the piece it was drawn from, because the promotion
+   picker shows the same picture and there it has to look like what will
+   stand on the board.
 */
 .taken__piece {
   position: absolute;
@@ -1327,7 +1349,8 @@ body::before {
   width: var(--taken);
   height: var(--taken);
   max-width: none;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(1.1, var(--taken-squat));
+  transform-origin: 50% 100%;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
@@ -1442,6 +1465,239 @@ body::before {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
+}
+
+/* ==========================================================================
+   The animals on the lawn
+   ========================================================================== */
+
+/*
+   A ginger cat and a puppy run about on the grass along the status line, and
+   a green parrot hops along the header between its two buttons. Asked for as
+   "outside the board should add cute cat, cute dog, cute parrot, have
+   animation", then "make all animation clay style, cute, can run around in
+   grass", and then "set all animal clay styles like chess styles".
+
+   So they are made as the pieces are made: lumps of clay with the pigments
+   baked in, in the pieces' one matt clay, under the light the pieces in the
+   promotion picker stand in — by the 3D board itself. It draws each animal
+   once into a strip of frames, a run and a rest (critterSheet() in
+   board-3d.js), and this plays the frames: stop-motion, which is how clay
+   animals have always moved. The flat board has no clay to draw them with,
+   and there they are not shown.
+
+   Where: the grass a phone has free. On a phone the board runs to both edges
+   of the screen, so there is no lawn beside it, and an animal on the board
+   would stand on squares somebody has to press. Each strip of grass is a lane
+   (.meadow), laid over its row and taking no room in it, so nothing on the
+   page has moved; each animal runs along its own lane, behind the words, and
+   never leaves it. When it runs, and to where, is meadow.js.
+
+   A tap is a pat: a hop and a heart. When the game ends they stop and cheer.
+   Someone who has asked their device for less motion gets three animals
+   standing still at home: meadow.js sends nobody anywhere, and the
+   reduced-motion rule at the end of this file stops the frames.
+*/
+.status {
+  position: relative;
+}
+
+/* The words in front; the animals pass behind them. */
+.status__text,
+.status__badge,
+.app-header__title {
+  position: relative;
+  z-index: 1;
+}
+
+.meadow {
+  --pet: 44px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* Feet a little below the row, on the grass between it and the controls. */
+  bottom: -5px;
+  height: var(--pet);
+  pointer-events: none;
+}
+
+/* Between the header's two buttons, along its lower edge. */
+.meadow--header {
+  --pet: 36px;
+  left: 3.9rem;
+  right: 3.9rem;
+  bottom: 9px;
+}
+
+/*
+   One animal. As wide as one of its frames is, for its height: 192 by 154.
+   Moved along its lane by --x over --run, and turned to face the way it is
+   going by --face, all three set by meadow.js. Hidden until its frames
+   have been drawn.
+*/
+.critter {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: calc(var(--pet) * 1.247);
+  height: var(--pet);
+  transform: translateX(var(--x, 0px));
+  transition: transform var(--run, 0ms) cubic-bezier(0.42, 0.08, 0.45, 1);
+  pointer-events: auto;
+  cursor: pointer;
+  visibility: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.critter.is-dressed {
+  visibility: visible;
+}
+
+/*
+   Home, before meadow.js has measured the lane and taken over: so the first
+   frame already has each one where it lives, rather than all three at the
+   left edge for an instant and then jumping. Where these put them is exactly
+   where meadow.js would: see `home` in KINDS.
+*/
+.critter--dog:not(.is-placed) {
+  left: calc(100% - var(--pet) * 1.247);
+}
+
+.critter--parrot:not(.is-placed) {
+  left: calc((100% - var(--pet) * 1.247) * 0.72);
+}
+
+/* A shadow on the grass, which stays on the grass when the animal hops. */
+.critter::before {
+  content: "";
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 4%;
+  height: 9%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(33, 84, 14, 0.3), rgba(33, 84, 14, 0));
+}
+
+.critter__hop {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+}
+
+/*
+   The frames: a strip of 24 across, the run along the top row and the rest
+   along the bottom. Drawn facing right; -1 turns it round, light and all.
+
+   Stepping through them is a matter of where the strip sits. Positions run
+   from 0% to 100% across the 23 frame-widths the strip can move, so frame k
+   is at k/23 of the way: the run's ten frames end at 10/23, and the rest's
+   twenty-four at 24/23 — one past the last, which steps() never shows.
+*/
+.critter__sprite {
+  position: absolute;
+  inset: 0;
+  background-image: var(--sheet, none);
+  background-size: 2400% 200%;
+  background-repeat: no-repeat;
+  background-position: 0% 100%;
+  transform: scaleX(var(--face, 1));
+  animation: critter-rest 3.6s steps(24) infinite;
+}
+
+.critter--dog .critter__sprite {
+  animation-duration: 3.3s;
+  animation-delay: -1.2s;
+}
+
+.critter--parrot .critter__sprite {
+  animation-duration: 3.9s;
+  animation-delay: -2.1s;
+}
+
+.critter.is-running .critter__sprite {
+  animation: critter-run 0.42s steps(10) infinite;
+}
+
+.critter--dog.is-running .critter__sprite {
+  animation-duration: 0.34s;
+}
+
+.critter--parrot.is-running .critter__sprite {
+  animation-duration: 0.36s;
+}
+
+@keyframes critter-rest {
+  from { background-position: 0% 100%; }
+  to { background-position: 104.348% 100%; }
+}
+
+@keyframes critter-run {
+  from { background-position: 0% 0%; }
+  to { background-position: 43.478% 0%; }
+}
+
+/* --- Held still while a piece moves or the board turns: see hushMeadow --- */
+
+/* Important, because the rules above set the whole animation shorthand, and
+   with it the play state, and some of them are more specific. */
+.meadow.is-hushed .critter__sprite {
+  animation-play-state: paused !important;
+}
+
+/* --- A pat, and the end of a game --- */
+
+.critter.is-happy .critter__hop {
+  animation: pet-hop 0.6s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+
+#screen-game:has(.status.is-over) .critter__hop {
+  animation: pet-cheer 2.4s ease-in-out infinite;
+}
+
+#screen-game:has(.status.is-over) .critter--dog .critter__hop {
+  animation-delay: 0.15s;
+}
+
+#screen-game:has(.status.is-over) .critter--parrot .critter__hop {
+  animation-delay: 0.3s;
+}
+
+/* Floats up from the animal that was patted. Placed by meadow.js. */
+.pet-heart {
+  position: fixed;
+  z-index: 30;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  pointer-events: none;
+  animation: pet-heart 0.9s ease-out forwards;
+}
+
+.pet-heart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes pet-hop {
+  0%, 100% { transform: none; }
+  25% { transform: scale(1.08, 0.9); }
+  55% { transform: translateY(-12px) scale(0.95, 1.06); }
+  80% { transform: scale(1.06, 0.94); }
+}
+
+@keyframes pet-cheer {
+  0%, 40%, 100% { transform: none; }
+  8% { transform: scale(1.08, 0.9); }
+  20% { transform: translateY(-12px) scale(0.95, 1.06); }
+  32% { transform: scale(1.06, 0.94); }
+}
+
+@keyframes pet-heart {
+  0% { opacity: 0; transform: translateY(0) scale(0.4); }
+  20% { opacity: 1; transform: translateY(-8px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-34px) scale(0.9); }
 }
 
 /* ==========================================================================

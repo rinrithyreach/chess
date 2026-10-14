@@ -252,6 +252,10 @@
   <!-- ==================== GAME SCREEN ==================== -->
   <main class="screen" id="screen-game">
     <header class="app-header">
+      <!-- The parrot's strip of grass, between the two buttons. See meadow.js. -->
+      <div class="meadow meadow--header" aria-hidden="true">
+        <span class="critter critter--parrot" data-pet="parrot"><span class="critter__hop"><span class="critter__sprite"></span></span></span>
+      </div>
       <!-- Bars drawn to the same weight as the gear, so the two ends of the
            header read as one set rather than two fonts. -->
       <button type="button" class="icon-btn" id="btn-game-menu" aria-label="Game menu">
@@ -414,6 +418,13 @@
 
         <!-- Status -->
         <div class="status" id="status" role="status" aria-live="polite">
+          <!-- The cat's and the dog's strip of grass, behind the words.
+               Pictures only: hidden from screen readers, and outside the
+               text this live region announces. See meadow.js. -->
+          <div class="meadow meadow--status" aria-hidden="true">
+            <span class="critter critter--cat" data-pet="cat"><span class="critter__hop"><span class="critter__sprite"></span></span></span>
+            <span class="critter critter--dog" data-pet="dog"><span class="critter__hop"><span class="critter__sprite"></span></span></span>
+          </div>
           <span class="status__text" id="status-text">White's Turn</span>
           <span class="status__badge" id="status-badge" hidden>Check</span>
         </div>

@@ -148,23 +148,16 @@ export class Board {
       el.setAttribute('role', 'gridcell');
       el.tabIndex = -1;
 
-      const fileLabel = document.createElement('span');
-      fileLabel.className = 'square__coord square__coord--file';
-      fileLabel.textContent = square[0];
-      fileLabel.setAttribute('aria-hidden', 'true');
-
-      const rankLabel = document.createElement('span');
-      rankLabel.className = 'square__coord square__coord--rank';
-      rankLabel.textContent = square[1];
-      rankLabel.setAttribute('aria-hidden', 'true');
-
+      // No letters or numbers on the board: the coordinates were removed, at
+      // the player's request. Each square still says its own name to a screen
+      // reader, through its label — see render().
       const piece = document.createElement('span');
       piece.className = 'piece';
       piece.setAttribute('aria-hidden', 'true');
 
-      el.append(rankLabel, fileLabel, piece);
+      el.append(piece);
       this.#root.append(el);
-      this.#squares.set(square, { el, piece, fileLabel, rankLabel });
+      this.#squares.set(square, { el, piece });
     });
 
     this.#applyOrientation();
@@ -172,7 +165,7 @@ export class Board {
 
   /**
    * Reorder the DOM so visual order matches reading order.
-   * Rebuilding order (rather than rotating with CSS) keeps coordinates upright
+   * Rebuilding order (rather than rotating with CSS) keeps the pieces upright
    * and keeps keyboard navigation matching what the player sees.
    */
   #applyOrientation() {
@@ -180,17 +173,7 @@ export class Board {
       this.#orientation === 'white' ? ALL_SQUARES : [...ALL_SQUARES].reverse();
 
     const fragment = document.createDocumentFragment();
-    ordered.forEach((square, index) => {
-      const entry = this.#squares.get(square);
-      const row = Math.floor(index / 8);
-      const col = index % 8;
-
-      // Coordinates live in the edge squares of the current orientation.
-      entry.rankLabel.hidden = col !== 0;
-      entry.fileLabel.hidden = row !== 7;
-
-      fragment.append(entry.el);
-    });
+    ordered.forEach((square) => fragment.append(this.#squares.get(square).el));
     this.#root.append(fragment);
   }
 

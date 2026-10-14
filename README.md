@@ -490,9 +490,14 @@ whole game they are visibly in the middle of.
 **Captured pieces, on the players' cards** — the pieces each player has taken
 stand in a row at the end of that player's card: strongest first, each kind
 together, a pawn a little in front of the pawn before it, the way a row of them
-stands on a table. They are as tall
-as the inside of the card, 38px on a phone, and they follow a board flip with
-the card.
+stands on a table. They are small and chubby, about 23px on a phone, standing
+in a soft sunk dish the length of the row, and they follow a board flip with
+the card. They were as tall as the inside of the card once, 38px, and were
+the tallest thing on it: a second set standing there rather than a few pieces
+won. Each picture is squashed to 86% of its height and widened a tenth, from
+the foot, in CSS — the picture and not the piece it was drawn from, because
+the promotion picker shows the same picture and there it has to look like
+what will stand on the board.
 
 They are the board's own pieces, not Unicode glyphs. `Board3D.pieceSprite()`
 builds the real piece — the same baked lumps of the same clay under the same
@@ -512,15 +517,17 @@ pictures is a row of pieces on one floor. The black pieces get a **rim light**
 card there is no tile, so an unlit charcoal piece is one flat shape; lighting
 from behind draws the edge that carries the shape at this size. And each piece
 is a **slot narrower than its picture**. The pieces are tall, so a square
-picture of one is mostly air at the sides — the foot is four tenths of its
-width — and a slot the width of the foot puts the pieces shoulder to shoulder
+picture of one is mostly air at the sides — the foot is under half its
+width — and a slot a little wider than the foot stands the pieces just apart
 with the air lying over the neighbours, where it shows nothing. A slot is
-narrower again for a second piece of the same kind, which is what overlaps the
-pawns. The slots shrink before the row is allowed to push the card wider: all
-fifteen pieces that can be taken stand at 94% of their natural spacing on a
-390px phone and 71% on a 320px one. A name gives way before the pieces do:
-once a card has a row, the name may have just under half of it and takes an
-ellipsis past that.
+narrower for a second piece of the same kind, which is what stands the pawns
+close. The slots shrink before the row is allowed to push the card wider: all
+fifteen pieces that can be taken stand at their full spacing on a 390px phone
+and 80% of it on a 320px one, and at about half beside a long name with the
+To Move badge under it. A name gives way before the pieces do: once a card has
+a row, the name may have just under half of it and takes an ellipsis past
+that — and inside that half it keeps its width, so a long row closes its
+pieces up rather than cutting a short name.
 
 The row stands **beside the name, and not under it**, and the first version
 had it under. A second line has to be as tall as a piece whether or not there
@@ -608,6 +615,80 @@ room — agreed by both devices, with nowhere to honour one player's preference
 the rule the same everywhere, and it is the ordinary one: whoever had Black has
 White next.
 
+**The board faces the player.** With two players on one phone it turns to
+whoever is to move after every move, so each plays from their own side, the
+right way up; it stays put once the game is over. Against the bot it shows
+your colour, which a rematch swaps. Online it shows your seat. There is no
+setting: it used to be a switch, *Auto Flip Board*, and was removed with the
+turning behind it — see bug 28. The turn waits until the move has landed and a
+beat more (`holdTurn` in `app.js`), so the move is seen from the side that
+made it, and the cards turn with the board. Flip still turns it by hand until
+the next move, and pressed during that wait it makes the turn at once.
+
+**No coordinates on the board.** Neither board has the letters a to h or the
+numbers 1 to 8 along its edges. They were removed at the player's request,
+"on board remove 123456789 and letter", whole: on the 3D board the painting
+of them into the tile texture, the inks they were painted in, the repaint of
+that texture on every flip so they faced whoever was reading them, and a
+second repaint once the typeface had loaded; on the flat board the two labels
+in every square, the rules that placed and coloured them, and their colours
+in each theme. The square names are still there for a screen reader — every
+square on both boards is labelled with its name and what stands on it — and
+in the move list, which is written in algebraic notation as before.
+
+**The animals on the lawn.** A ginger cat and a puppy in a blue collar run
+about on the grass along the status line, and a green parrot hops along the
+header between its two buttons. Asked for in three steps: "outside the board
+should add cute cat, cute dog, cute parrot, have animation", then "make all
+animation clay style, cute, can run around in grass", and then "set all
+animal clay styles like chess styles".
+
+So they are made exactly as the pieces are: lumps of clay — eggs, rolls,
+cones, a ring for the dog's collar — with their pigments baked in as vertex
+colours, in the pieces' one matt clay, under the light the pieces in the
+promotion picker stand in (`critterModel` in `board-3d.js`). Each moving
+part is its own joint: the legs at hip and shoulder, the tail at its root,
+the head at the neck, the eyes for blinking, the cat's ear, the dog's ears
+and tongue, the parrot's wings. They run side-on, which is how a run can be
+seen, with their heads turned to look at you, which is where a face is.
+
+They are not in the board's scene, which ends at its rim. The 3D board draws
+each animal once, through its own renderer, into a strip of frames — a run
+of ten, the legs in diagonal pairs as a trot and the body bouncing, or for
+the parrot a hop with its wings going; and a rest of twenty-four, mostly
+still, with a swish or a wag, a blink, an ear, a tilt of the head
+(`critterSheet`). The page plays the frames: stop-motion, which is how clay
+animals have always moved, and nearly free to show. The drawing is done a
+frame at a time in the first few seconds, never while a piece is moving,
+and kept for the visit; a board taken down half way hands the rest to the
+next one. The flat board has no clay to draw them with, and on it they are
+not shown.
+
+They run where the grass is. On a phone the board reaches both edges of the
+screen, so there is none beside it, and an animal on the board would stand
+on squares somebody has to press. Each strip of grass is a lane laid over its
+row and taking no room in it, so nothing on the page moved (on a 390px phone
+the controls start at the same 639px); each animal keeps to its own lane,
+passes behind the words, and turns to face the way it runs. `js/meadow.js`
+decides when each sets off and to where. A tap is a pat — a hop and a heart —
+and when the game ends they stop and cheer. Nothing runs while the page is
+hidden, the game screen is not showing or the game is over, and someone who
+has asked their device for less motion gets three animals standing still at
+home.
+
+They cost the board nothing. While they were SVG drawings moving part by
+part, on a four-times-slowed processor a move ran at 50 frames against 62;
+they were held still for every move and turn (`hushMeadow`), which won most
+of it back. As clay frames, a move runs at the same frame count as the build
+without them, the capture's first frame included. Checked, at five screen
+sizes over ten seconds each once they are drawn: all three set off, each
+stays in its own lane, none touches the board, a card, a header button or
+the controls, and the page never scrolls sideways; with reduced motion on,
+all three stay home and still; on the flat board there are none; and in
+Safari's engine, set up as an iPhone, they are drawn, a tap on each hops it
+and floats a heart that then goes, plays no move, and the Flip button under
+them still flips.
+
 **There is no Undo.** There was one, and for most of its life it was a button
 nobody could press: built and correct, then locked — shown in the row with a
 padlock, refused on tap and on keyboard alike — so that a player could see the
@@ -690,10 +771,12 @@ was all there was to recognise a piece by. Stood up and seen from the side it
 was a lump with a ball on the front, and each part showed where it stopped. See
 *Things that went wrong* for the first three.
 
-**The pieces are tall.** A king stands nearly two squares high on a foot less
-than one across, which is about what a tournament set is, and a pawn a little
-over one, with the point of its spear a third of a square above its head. The
-first clay set was two thirds of that — squat, on the reasoning that clay
+**The pieces are tall.** A king stands a square and two thirds high on a foot
+less than one across, the queen a square and a half, and a pawn just under
+one, with the point of its spear a third of a square above its head. The king
+was nearly two squares once and was trimmed, with the other tall pieces, for
+being hard to tap past on a phone — see bug 29. The
+first clay set was squatter still — on the reasoning that clay
 slumps and that a tall back rank hides the pawns in front of it. Both are true
 and it was still the wrong call: seen from 56 degrees a squat piece is mostly
 the top of its own foot, and six kinds of disc are hard to tell apart.
@@ -999,6 +1082,7 @@ chess-game/
 │   ├── bot.js                    The opponent: evaluation and search
 │   ├── bot-worker.js             Runs that search off the main thread
 │   ├── ui.js                     Screens, modals, panels, toasts
+│   ├── meadow.js                 The clay cat, dog and parrot: when they run, and where
 │   ├── storage.js                Versioned, validated localStorage
 │   ├── sound.js                  Web Audio effects
 │   ├── sessions/
@@ -1998,7 +2082,9 @@ being hidden by a rule that changed underneath it:
    which edge a label sits on depends on the view and what it says does not.
    Each label is now the square's true name, in a cell turned half a circle
    before it is written so it faces whoever is reading it. Anybody playing
-   Black online, or with the board flipped, had been looking at this.
+   Black online, or with the board flipped, had been looking at this. The
+   coordinates have since been removed from both boards: see *No
+   coordinates on the board*.
 
 20. **A pawn could not promote on a phone.** Tap the last rank and the picker
    opened and closed in the same instant, the pawn still on the seventh. Both
@@ -2162,6 +2248,11 @@ being hidden by a rule that changed underneath it:
    eliminate chess, no need to show number". The pieces are the whole
    answer to what was taken.
 
+   And then made smaller, also at the player's request: "after eliminate
+   chess show chess feel like tall, help make it small cute". At the full
+   height of the card the row was the tallest thing on it. The pieces are
+   about 23px now, squashed to a chubby toy of themselves, on a soft dish.
+
    Taking it away uncovered something it had been hiding. The pictures are
    wider than their slots, and the last one's empty side ran past the end
    of the card; the number had stood there and caught it. Without it, on a
@@ -2176,6 +2267,82 @@ being hidden by a rule that changed underneath it:
    is not counted, and a slot holds nothing in the flow, its picture being
    positioned over it. So the row measured as seven empty slots, 14px, and
    drew seven pieces on top of one another. The slots have a `width`.
+28. **Black played upside down.** Reported as "on mobile feel like error
+   when I play, why my board not flip". The setting *Auto Flip Board* was
+   removed on request, and the turning went with it. So in a two-player game
+   on one phone the board stayed on White's side for the whole game, and
+   Black played every move from the far side, upside down. The same gap
+   showed up against the bot: a rematch swaps the colours and the bot
+   session moved you to Black, but nothing turned the board, so your pieces
+   were at the top.
+
+   The turning is back, with no switch: see *The board faces the player*.
+   On the build before the fix, a test fails ten of its twenty-one checks
+   across both boards — no turn for Black, none after a restore, the wrong
+   side after a bot rematch. With the fix it passes all of them, plus Flip
+   pressed while the turn is waiting. Four older tests had assumed the
+   board never turns by itself: they tapped the next move while the board
+   was still turning, or expected Flip to land on Black. They now wait for
+   the turn, and expect Flip to reverse whatever side is showing.
+29. **The tall pieces were in the way.** Reported as "on mobile some chess
+   feel like too much tall, so hard to click board". A piece is drawn over
+   the squares behind it, and a press meant for one of those lands on the
+   piece instead. The king stood 1.95 squares high and the queen 1.69.
+
+   Measured before anything was changed. On a 390px phone, take every move
+   in seven real positions — the start, an Italian game and a quieter
+   middlegame and an open one, each from both sides — and press 25 points
+   spread over each square the piece may move to. A press missed its square
+   8.3% of the time at Fit and 6.1% at Large, and nine squares at Fit could
+   be hit on less than half of themselves. The misses landed mostly on
+   pawns, then queens, then kings.
+
+   The long middle of each tall piece is shorter now, and nothing else: the
+   king's stem by 0.3 of a square, the queen's by 0.21, the bishop's robe by
+   0.12, the knight's pedestal by 0.08 (it would otherwise have stood taller
+   than the bishop), the pawn's skirt by 0.1. Crowns, rings and balls came
+   down whole and keep their shapes; the rook is unchanged. The king is 1.65
+   squares, the queen 1.48, the pawn 0.98. Misses fell to 6.4% at Fit and
+   3.7% at Large, and no square is left that can only be hit on less than
+   half of itself. Taking more off the king and queen, from their crowns as
+   well, was tried and dropped: it squashed the crowns and hardly helped,
+   because what is left of the misses is the body of a piece standing right
+   in front of a square, not its top.
+
+   One suite had to wait longer: it checked the lean 660ms after each move,
+   which is now the moment the board starts turning to the next player (bug
+   28), with the camera off to one side.
+30. **The square straight past a selected piece could hardly be pressed.**
+   Reported as "I still can't click this front board", with a picture of the
+   black queen selected, on her blue square. The square straight past her
+   on the screen was a move, and her own crown was drawn over the middle of
+   it, move dot and all. A press there met the queen first, and a press on
+   the selected piece puts it down. So the obvious press let go of her, and
+   the move took a press on the strip of that square showing either side of
+   her: 40% of it answered to its own move. The same is true, less badly,
+   of any square behind a tall piece of your own.
+
+   The move dots are drawn over the pieces now. The part of a dot a piece
+   stands in front of is drawn over that piece in the selection's blue, by
+   drawing it only where the depth test fails, which on a dot lying on the
+   board is exactly where something is in front of it. Its own colour is
+   chosen against its tile and is invisible on a black crown. A press is
+   followed through to the board first, and if it lands within a quarter of
+   a square of a dot's middle, a little wider than the dot, it is that move.
+   What is drawn under the pointer is what was pressed, as everywhere else
+   on the board.
+
+   Measured as in bug 29, on a 390px phone. The square past the selected
+   queen answers to its move on 72% of itself, from 40%. Over every move in
+   the seven positions, presses reach their square 94.8% of the time at Fit
+   and 96.7% at Large, from 93.6% and 96.3%. The cost was measured too:
+   with a piece selected, press round the head of each of your other
+   pieces, as if changing your mind. A press like that played a move
+   instead 0.6% of the time before, the fingertip spilling past the piece
+   onto a square beside it, and 1.0% now: the new cases are a blue dot
+   drawn on that piece's crown. In Safari's engine, set up as an iPhone,
+   one tap on the queen and one on the blue dot on her crown plays the
+   move, from either side of the board.
 
 ### Manual checklist
 
@@ -2199,6 +2366,10 @@ being hidden by a rule that changed underneath it:
 | 16 | Play moves, then refresh | *Resume your game?* dialog; Continue restores position and history |
 | 16b | Refresh again, tap Exit Game | Back on the menu, nothing lost — Continue still offers the same game |
 | 17 | Flip Board | Only orientation changes |
+| 17b | Two-player game: White moves | Once the piece lands the board turns to Black's side, Black's card at the bottom; after Black's move it turns back |
+| 17c | Against the bot: resign, then Rematch | You are Black now, and Black is at the bottom of the board |
+| 17d | Look along the edges of the board, on both boards, both ways up | No letters, no numbers |
+| 17e | Watch the cat, the dog and the parrot; tap each; finish a game | They run about on their own strips of grass and rest in between, never on the board; a tap hops one and floats a heart; at the end all three cheer |
 | 18 | Move after checkmate | Rejected |
 | 19 | Pick a picture for Player 1, start a game | It shows on White's card; Black keeps the king glyph |
 | 20 | Pick a sideways phone photo | Arrives upright — EXIF rotation is applied, not ignored |
@@ -2367,12 +2538,13 @@ the DOM**. Set it to `false` before shipping.
     piece is drawn over the lower part of the tile behind it: a pawn's head
     covers about a quarter of it, a queen's crown about two thirds. At Large
     it is the same by a little less, the pieces being drawn as tall there and
-    the squares deeper. A press on
+    the squares deeper. (Less since the tall pieces were trimmed: see bug
+    29, which measures it.) A press on
     the covered part is a press on that piece. The board reaches past an
     opponent's piece that cannot be taken, and past one of your own only to
-    pick up another piece, never to play a move — so to move to a square
-    directly behind your own queen you press the part of the square you can
-    see. A move dot on that square is partly hidden for the same reason.
+    pick up another piece — except onto a move dot. The dots are drawn over
+    the pieces, the part a piece hides in the selection's blue, and a press
+    on a dot is that move whatever stands in front of it: see bug 30.
 
     None of this is a trap: the Size control switches between the two levels
     and says which one you are on, so a player who finds the back rank fiddly,
@@ -2429,7 +2601,7 @@ the DOM**. Set it to `false` before shipping.
    the setup screen's "this is the mode you picked" highlight — keyed on the
    row not being *disabled*, rather than on a class every label has to
    remember to carry (unsupported browsers lose only that highlight),
-   and CSS container queries size the pieces and coordinates relative to the
+   and CSS container queries size the pieces relative to the
    board. Both are behind `@supports` or degrade harmlessly — the container
    query falls back to a viewport-based `clamp()`. This needs a 2023-or-later
    browser for pixel-perfect piece scaling; everything remains playable
