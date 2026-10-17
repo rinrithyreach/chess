@@ -272,16 +272,26 @@ Two details that are load-bearing rather than decorative. Online, the write
 re-checks the seat *inside* the transaction rather than trusting the colour it
 was called with: a rematch swaps the two players, and that swap is written by
 whichever client gets there first, so between this device deciding it is White
-and the write landing, White can be somebody else. And a local rename does not
-touch your stored profile — online your name IS your identity to everybody
-else and is kept for the next room, but the two names in a local game belong to
-the game in front of you, and quietly overwriting your online profile because
-you renamed Player 2 would be a surprise.
+and the write landing, White can be somebody else. And a rename is kept for
+next time by whose seat it is: your seat's new name becomes your name
+everywhere (profile, New Game, Friends, and your friends' lists), while
+Player 2's goes back in Player 2's box. Which seat is yours is found by the
+seat's name rather than its colour, because a rematch swaps colours.
+
+**The picture can be changed mid-game too.** On the same cards that get a
+pencil, the circle carries a small ✎ badge; tapping it picks a new picture,
+which goes on the seat (and, online, to the other screen) and is kept the same
+way a rename is.
 
 **Profile pictures** — each player can put a picture on their seat from the
 New Game screen: tap the circle beside a name box and pick one, and it shows
 on their player card for the whole game. Optional everywhere — a seat without
 one keeps the king glyph it always had.
+
+**Player 1 is you.** Player 1's name and picture on the New Game form are your
+profile: the same name and picture as the online form and the Friends panel.
+Change any of them and the others follow, and your friends see the change once
+the box is left.
 
 Nothing is stored as picked. Whatever comes in — a 12-megapixel photo, a
 screenshot, an 8MB PNG — is cropped to a centred square, scaled to 128px and
@@ -294,9 +304,9 @@ machine.
 
 The picture is **remembered per seat**, not per name, so it is offered back on
 the next New Game rather than having to be hunted down in the camera roll
-again. The name is not remembered — a name is eight characters and takes a
-moment to retype. A rematch swaps colours, and each player's picture goes with
-them.
+again. The names in the two boxes are remembered the same way, saved as they
+are typed, so closing the app on a phone and opening it again finds them still
+there. A rematch swaps colours, and each player's picture goes with them.
 
 **Pictures travel online too** — a seat carries the picture of the player in
 it, so both devices show the same two faces. What travels is a *smaller* copy
@@ -1689,8 +1699,10 @@ you your preferences:
 
 - `chess-arena:game` — the current game
 - `chess-arena:settings` — sound, board theme, background, chat and emotes
-- `chess-arena:avatars` — the remembered profile picture for each New Game seat
-- `chess-arena:profile` — the name this device plays online under, and the
+- `chess-arena:avatars` — your profile picture (`online`, also Player 1's) and
+  Player 2's (`p2`)
+- `chess-arena:names` — Player 2's remembered name
+- `chess-arena:profile` — your name (Player 1, online and Friends), and the
   friend code it claimed
 
 Profile pictures get their own key rather than living inside settings. They

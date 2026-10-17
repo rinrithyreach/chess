@@ -449,7 +449,9 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  width: 100%;
+  /* Narrower than the screen on a phone: buttons edge to edge read as bars
+     rather than as buttons. */
+  width: min(100%, 290px);
   /* Holds the gap the subtitle used to provide below the title. */
   margin-top: 2.5rem;
 }
@@ -1127,6 +1129,61 @@ body::before {
 
 .player-card__avatar[data-color="b"]:has(.player-card__photo:not([hidden])) {
   border-color: #65646f;
+}
+
+/* ---------------------------------------------------------------------------
+   Changing your picture mid-game
+
+   The circle and what makes it a button share a wrapper, because the circle
+   clips its contents and the badge has to hang off its edge. The button lies
+   over the whole circle and a little past it, so a thumb need not be exact.
+   --------------------------------------------------------------------------- */
+.player-card__face {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+
+.player-card__repicture {
+  position: absolute;
+  inset: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.player-card__repicture:focus-visible {
+  outline: 3px solid var(--blue-deep);
+  outline-offset: 0;
+}
+
+/* The rename pencil's mark, small, on the circle's edge. Only on a seat whose
+   picture can be changed: it goes with the button. */
+.player-card__badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 0.55rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.player-card__repicture[hidden] ~ .player-card__badge {
+  display: none;
+}
+
+/* Decoding a large photo is not instant. */
+.player-card__face.is-busy .player-card__avatar {
+  opacity: 0.55;
 }
 
 /*

@@ -99,19 +99,23 @@
           all over again. The picker is a button in front of a file input,
           which is the only way to get a preview and a way to remove it — a
           bare file input can show neither.
+
+          Player 1 is you: the `online` slot, the same picture and name as
+          the Friends panel and the online form. Change any one of the three
+          and the other two follow.
         -->
         <div class="field">
           <label class="field__label" for="input-white">Player 1 <span class="field__hint">White</span></label>
           <div class="name-row">
-            <span class="avatar-picker" data-avatar-slot="p1">
+            <span class="avatar-picker" data-avatar-slot="online">
               <button type="button" class="avatar-picker__btn"
-                      aria-label="Add a profile picture for Player 1">
+                      aria-label="Add your profile picture">
                 <img class="avatar-picker__img" alt="" hidden>
                 <span class="avatar-picker__glyph" aria-hidden="true">♚&#xFE0E;</span>
               </button>
               <span class="avatar-picker__badge" aria-hidden="true">+</span>
               <button type="button" class="avatar-picker__clear"
-                      aria-label="Remove Player 1's profile picture" hidden>×</button>
+                      aria-label="Remove your profile picture" hidden>×</button>
               <input type="file" class="avatar-picker__file" accept="image/*"
                      tabindex="-1" aria-hidden="true">
             </span>
@@ -318,10 +322,22 @@
           use is hidden. aria-hidden on the wrapper covers both: the player's
           name sits immediately beside it, so neither the photo nor the piece
           has anything to add to what is announced.
+
+          On a seat this device may act for — the same seats that get the
+          rename pencil — the circle is also a button that changes the
+          picture. The button and its badge sit beside the circle rather than
+          inside it, because the circle clips whatever is in it.
         -->
-        <span class="player-card__avatar" data-color="b" aria-hidden="true">
-          <img class="player-card__photo" alt="" hidden>
-          <span class="player-card__glyph">♚&#xFE0E;</span>
+        <span class="player-card__face">
+          <span class="player-card__avatar" data-color="b" aria-hidden="true">
+            <img class="player-card__photo" alt="" hidden>
+            <span class="player-card__glyph">♚&#xFE0E;</span>
+          </span>
+          <button type="button" class="player-card__repicture" id="btn-picture-top"
+                  hidden aria-label="Change your picture"></button>
+          <span class="player-card__badge" aria-hidden="true">✎</span>
+          <input type="file" class="avatar-picker__file" id="file-picture-top"
+                 accept="image/*" tabindex="-1" aria-hidden="true">
         </span>
         <span class="player-card__info">
           <span class="player-card__nameline">
@@ -373,9 +389,16 @@
 
       <!-- Current player card (bottom of board) -->
       <section class="player-card" id="card-bottom" aria-label="Player at bottom of board">
-        <span class="player-card__avatar" data-color="w" aria-hidden="true">
-          <img class="player-card__photo" alt="" hidden>
-          <span class="player-card__glyph">♚&#xFE0E;</span>
+        <span class="player-card__face">
+          <span class="player-card__avatar" data-color="w" aria-hidden="true">
+            <img class="player-card__photo" alt="" hidden>
+            <span class="player-card__glyph">♚&#xFE0E;</span>
+          </span>
+          <button type="button" class="player-card__repicture" id="btn-picture-bottom"
+                  hidden aria-label="Change your picture"></button>
+          <span class="player-card__badge" aria-hidden="true">✎</span>
+          <input type="file" class="avatar-picker__file" id="file-picture-bottom"
+                 accept="image/*" tabindex="-1" aria-hidden="true">
         </span>
         <span class="player-card__info">
           <span class="player-card__nameline">
@@ -657,10 +680,10 @@
         <!--
           Your picture, and the place to set it.
 
-          The same `online` slot as the New Game form's picker, deliberately:
-          there is ONE profile picture, and these are two controls onto it —
-          the same arrangement as your name, which has a box here and a box on
-          the online form. Set it in either and both follow, because the whole
+          The same `online` slot as the New Game form's pickers, deliberately:
+          there is ONE profile picture, and these are controls onto it — the
+          same arrangement as your name, which has a box here and boxes on the
+          form. Set it in any and all follow, because the whole
           point of the picture is the face your friends see beside your name,
           and the friends panel is where that name lives.
         -->

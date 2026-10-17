@@ -37,6 +37,15 @@ import { ROOM_CODE_LENGTH, ONLINE_AVATARS } from './firebase-config.js';
 /** A blank friend code, drawn the same way a blank room code is. */
 const FRIEND_CODE_BLANK = '-'.repeat(FRIEND_CODE_LENGTH);
 
+/** The New Game form's name boxes that remember a seat's name, by seat. */
+const NAME_INPUTS = { p2: 'input-black' };
+
+/**
+ * Every box holding your own name: Player 1 on the form, the online form's,
+ * and the Friends panel's. One name, so they always show the same thing.
+ */
+const MY_NAME_INPUTS = ['input-white', 'input-online-name', 'input-my-name'];
+
 /**
  * How long ago, in the roughest terms that are still useful.
  *
@@ -242,6 +251,7 @@ export class UI {
       'bottom-name', 'bottom-color', 'bottom-turn',
       'btn-rename-top', 'btn-rename-bottom',
       'input-rename-top', 'input-rename-bottom',
+      'btn-picture-top', 'btn-picture-bottom', 'file-picture-top', 'file-picture-bottom',
       'top-taken', 'bottom-taken',
       'board', 'board-area', 'status', 'status-text', 'status-badge',
       'btn-flip', 'btn-resign', 'btn-zoom', 'zoom-label',
@@ -973,14 +983,19 @@ export class UI {
       //
       // It follows the COLOUR rather than the position, because Flip can put
       // your seat at the top of the screen.
+      const editable = controllable.includes(color) && !state.isGameOver;
       const rename = this.#dom[`btn-rename-${prefix}`];
       if (rename) {
-        const mine = controllable.includes(color);
-        rename.hidden = !mine || Boolean(state.isGameOver);
+        rename.hidden = !editable;
         // A box still open when the card stops being yours — a rematch
         // swapping the colours — would be writing to somebody else's seat.
         if (rename.hidden) this.#stopRenaming(prefix);
       }
+      // The picture, by the same rule — except online when seats carry no
+      // pictures at all, where a button that changes nothing is worse than
+      // none.
+      const repicture = this.#dom[`btn-picture-${prefix}`];
+      if (repicture) repicture.hidden = !editable || (Boolean(state.online) && !ONLINE_AVATARS);
       if (colorEl) colorEl.textContent = color === WHITE ? 'White' : 'Black';
 
       const avatar = card?.querySelector('.player-card__avatar');
@@ -1427,6 +1442,14 @@ export class UI {
     });
   }
 
+  /** Put the remembered names back in the New Game form's two boxes. */
+  syncNames(names = {}) {
+    Object.entries(NAME_INPUTS).forEach(([slot, id]) => {
+      const input = this.#dom[id];
+      if (input && document.activeElement !== input) input.value = names[slot] ?? '';
+    });
+  }
+
   /**
    * Paint every control onto one slot's picture.
    *
@@ -1473,9 +1496,9 @@ export class UI {
 
   /** What a picker's seat is called, for its accessible name. */
   #avatarWho(slot) {
-    if (slot === 'p1') return 'Player 1';
     if (slot === 'p2') return 'Player 2';
-    // The online form asks for YOUR name, so its picker is your own picture.
+    // Player 1, the online form and Friends all ask for YOUR name, so their
+    // picker is your own picture.
     return 'yourself';
   }
 
@@ -1559,16 +1582,17 @@ export class UI {
   // -----------------------------------------------------------------------
 
   /**
-   * The name this device plays online under, put in both boxes that hold it.
+   * Your name, put in every box that holds it.
    *
-   * Two boxes, one name: the New Game form asks for it before a room, and
-   * the friends panel shows it as who you are. Whichever one was not just
-   * typed into follows the other, so the next room is never created under a
-   * name the player thought they had changed.
+   * Three boxes, one name: Player 1 on the New Game form, the online form
+   * before a room, and the friends panel as who you are. The ones not just
+   * typed into follow, so the next game is never started under a name the
+   * player thought they had changed.
    */
   setOnlineName(name) {
     const value = name ?? '';
-    [this.#dom['input-online-name'], this.#dom['input-my-name']].forEach((input) => {
+    MY_NAME_INPUTS.forEach((id) => {
+      const input = this.#dom[id];
       if (input && document.activeElement !== input) input.value = value;
     });
   }
@@ -1628,12 +1652,11 @@ export class UI {
       this.#dom['my-code'].textContent = social.code ?? FRIEND_CODE_BLANK;
     }
 
-    // Never while it is being typed in: a render landing mid-word would
-    // take the rest of the name with it.
-    const nameInput = this.#dom['input-my-name'];
-    if (nameInput && document.activeElement !== nameInput) {
-      nameInput.value = social.name ?? '';
-    }
+    // Into every box that holds your name, so a name the hub found in the
+    // database shows on the New Game form too. Never into the box being
+    // typed in (setOnlineName skips it): a render landing mid-word would
+    // take the rest of the name with it. No name yet leaves the boxes be.
+    if (social.name) this.setOnlineName(social.name);
 
     // Your picture is deliberately NOT painted from here, unlike your name
     // and your code.
@@ -1973,12 +1996,28 @@ export class UI {
         mode,
         whiteName: this.#dom['input-white']?.value ?? '',
         blackName: this.#dom['input-black']?.value ?? '',
-        whiteAvatar: this.#avatarFor('p1'),
+        whiteAvatar: this.#avatarFor('online'),
         blackAvatar: this.#avatarFor('p2'),
       });
     });
 
     this.#attachAvatarPickers();
+
+    // Every keystroke, not on blur: a phone is often closed straight from
+    // the keyboard, and the page is gone before a `change` ever fires.
+    Object.entries(NAME_INPUTS).forEach(([slot, id]) => {
+      this.#dom[id]?.addEventListener('input', (event) =>
+        this.#call('onFormName', { slot, name: event.target.value }));
+    });
+    // Your name, from Player 1 or the online form: kept on every keystroke,
+    // and told to the other boxes and your friends once the box is left.
+    ['input-white', 'input-online-name'].forEach((id) => {
+      const input = this.#dom[id];
+      input?.addEventListener('input', () =>
+        this.#call('onFormOnlineName', { name: input.value, published: false }));
+      input?.addEventListener('change', () =>
+        this.#call('onFormOnlineName', { name: input.value, published: true }));
+    });
 
     // --- Mode toggle: each mode needs a different part of this form ---
     this.#dom['form-new-game']?.addEventListener('change', (event) => {
@@ -2166,6 +2205,29 @@ export class UI {
         this.#stopRenaming(prefix);
       });
       input?.addEventListener('blur', () => this.#stopRenaming(prefix));
+
+      // A new picture for the seat, from the circle on the card.
+      const picture = this.#dom[`btn-picture-${prefix}`];
+      const file = this.#dom[`file-picture-${prefix}`];
+      picture?.addEventListener('click', () => file?.click());
+      file?.addEventListener('change', async () => {
+        const [picked] = file.files ?? [];
+        // Cleared straight away so picking the same file again still fires.
+        file.value = '';
+        if (!picked) return;
+
+        const face = picture.parentElement;
+        face?.classList.add('is-busy');
+        const result = await fileToAvatar(picked);
+        face?.classList.remove('is-busy');
+        if (!result.ok) {
+          this.toast(result.error, 'error');
+          return;
+        }
+        // Read off the card now, not when the picker opened: the photo
+        // library can stay open across a move, a flip or a rematch.
+        this.#call('onSeatPicture', { color: this.#colorOnCard(prefix), avatar: result.avatar });
+      });
     });
 
     this.#dom['btn-restart']?.addEventListener('click', () => this.#call('onRestart'));

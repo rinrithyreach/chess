@@ -16,6 +16,7 @@ import {
   STORAGE_VERSION,
   DEFAULT_SETTINGS,
   AVATAR_SLOTS,
+  NAME_SLOTS,
   BOARD_THEMES,
   resolveUiStyle,
   resolveBackground,
@@ -148,14 +149,45 @@ export function saveSettings(settings) {
 }
 
 // -------------------------------------------------------------------------
+// Player 2's name on the New Game form
+//
+// Kept as typed, so the form opens with it already in. An empty box is
+// remembered as empty: the session fills in "Player 2" itself, and writing
+// that into the box would turn a placeholder into a name. Player 1's box is
+// your profile name, below.
+// -------------------------------------------------------------------------
+
+/** The remembered name for each seat on the form; every slot is a string. */
+export function loadNames() {
+  const { value: raw } = readJson(STORAGE_KEYS.NAMES);
+  const source = raw && typeof raw === 'object' ? raw.names : null;
+  return Object.fromEntries(NAME_SLOTS.map((slot) => [
+    slot,
+    typeof source?.[slot] === 'string' ? source[slot].slice(0, NAME_MAX_LENGTH) : '',
+  ]));
+}
+
+/** Merge into the remembered names; slots left out are left alone. */
+export function saveNames(patch = {}) {
+  const next = loadNames();
+  NAME_SLOTS.forEach((slot) => {
+    if (typeof patch[slot] === 'string') next[slot] = patch[slot].slice(0, NAME_MAX_LENGTH);
+  });
+  return writeJson(STORAGE_KEYS.NAMES, {
+    version: STORAGE_VERSION,
+    savedAt: Date.now(),
+    names: next,
+  });
+}
+
+// -------------------------------------------------------------------------
 // Who this device is, online
 //
-// The name is remembered where the New Game form deliberately forgets the
-// local ones, because this one is not typed per game: it is the name a
-// friend added, and having it change behind their back is worse than
-// retyping it. The code is remembered because it is not ours to choose — it
-// was claimed from the database, and forgetting it here would claim a second
-// one and strand every friend holding the first.
+// The name is the one in Player 1's box on the New Game form as well as the
+// one a friend added: one person, one name. The code is remembered
+// because it is not ours to choose — it was claimed from the database, and
+// forgetting it here would claim a second one and strand every friend
+// holding the first.
 // -------------------------------------------------------------------------
 
 const NO_PROFILE = { name: null, code: null };
@@ -229,6 +261,10 @@ export function loadAvatars() {
   AVATAR_SLOTS.forEach((slot) => {
     if (isAvatar(source[slot])) avatars[slot] = source[slot];
   });
+  // Player 1 had a picture of their own before it became yours. Offered as
+  // yours when you have none, and gone after the next save, which writes
+  // only the slots there are — so removing your picture cannot bring it back.
+  if (!avatars.online && isAvatar(source.p1)) avatars.online = source.p1;
   return avatars;
 }
 

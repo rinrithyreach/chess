@@ -267,6 +267,25 @@ export class LocalSession {
     return { ok: true, name, color: seat, state: this.#publish() };
   }
 
+  /**
+   * Put a new picture on a seat, mid-game, or take it off (null).
+   * The same seats as renaming may be changed, by the same rule.
+   */
+  setSeatAvatar(avatar, color) {
+    if (this.#destroyed) return { ok: false, error: 'Session destroyed' };
+
+    const seat = color ?? WHITE;
+    if (!this.#players[seat]) return { ok: false, error: 'No such seat' };
+    if (!this.getControllableColors().includes(seat)) {
+      return { ok: false, error: 'That seat is not yours to change' };
+    }
+
+    const picture = isAvatar(avatar) ? avatar : null;
+    this.#players[seat] = { ...this.#players[seat], avatar: picture };
+    log('Seat picture', picture ? 'changed:' : 'removed:', seat);
+    return { ok: true, color: seat, state: this.#publish() };
+  }
+
   async submitMove({ from, to, promotion } = {}) {
     if (this.#destroyed) return { ok: false, error: 'Session destroyed' };
     if (this.#isTerminal()) return { ok: false, error: 'Game is over' };

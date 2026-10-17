@@ -17,6 +17,7 @@ import { startMeadow, hushMeadow, dressMeadow } from './meadow.js';
 import {
   WHITE,
   GAME_MODE,
+  DEFAULT_PLAYER_NAMES,
   DEBUG,
   ANIMATION_MS,
   PRESENCE,
@@ -329,6 +330,46 @@ async function boot() {
     social.setAvatar(avatar);
   }
 
+  /**
+   * Make this your name everywhere: storage, every box that shows it, and
+   * your friends' lists. The hub is told only when it is already up — a
+   * name typed for a local game must not be what starts a sign-in.
+   */
+  function rememberMyName(name) {
+    const trimmed = String(name ?? '').trim();
+    if (!trimmed) return;
+    storage.saveProfile({ name: trimmed });
+    ui.setOnlineName(trimmed);
+    social?.setName(trimmed);
+  }
+
+  /** Make this your picture everywhere, the same way. */
+  function rememberMyPicture(avatar) {
+    controller.setAvatar('online', avatar);
+    ui.syncAvatars(controller.getAvatars());
+    social?.setAvatar(avatar);
+  }
+
+  /**
+   * Whose seat on the New Game form a seat in the current game is: 'me'
+   * for you (Player 1, your profile), 'p2' for Player 2, or null.
+   *
+   * Online the only seat you can change is yours. Otherwise it is found by
+   * the seat's name, because a rematch swaps colours and White is not always
+   * Player 1; a seat nobody named wears its placeholder, which belongs to its
+   * own empty box. Asked BEFORE a rename, while the old name is still there.
+   */
+  function formSeatOf(color) {
+    if (controller.isOnline()) return 'me';
+    const name = controller.getSnapshot().state?.players?.[color]?.name;
+    if (!name) return null;
+    const mine = storage.loadProfile().name;
+    if (mine ? name === mine : name === DEFAULT_PLAYER_NAMES.white) return 'me';
+    const theirs = storage.loadNames().p2.trim();
+    if (theirs ? name === theirs : name === DEFAULT_PLAYER_NAMES.black) return 'p2';
+    return null;
+  }
+
   /** Return to local play after an online game. */
   async function goLocal() {
     if (!controller.isOnline()) return;
@@ -624,6 +665,10 @@ async function boot() {
 
   ui.bind({
     onNewGameScreen: () => {
+      // Read again rather than trusted from startup: a rename on a card
+      // during the last game may have changed one.
+      ui.syncNames(storage.loadNames());
+      ui.setOnlineName(storage.loadProfile().name);
       ui.showScreen('setup');
       document.getElementById('input-white')?.focus();
     },
@@ -660,6 +705,22 @@ async function boot() {
         });
       }
       ui.showScreen('game');
+    },
+
+    // Straight to storage: the form is the only thing that reads it back.
+    onFormName: ({ slot, name }) => storage.saveNames({ [slot]: name }),
+
+    // Your name, from Player 1 or the online box, kept as it is typed and
+    // not only once a game is started from it. Storage on every keystroke;
+    // the other boxes and your friends hear of it once, when the box is left
+    // (`published`), rather than letter by letter.
+    onFormOnlineName: ({ name, published }) => {
+      if (published) {
+        rememberMyName(name);
+        return;
+      }
+      const trimmed = String(name ?? '').trim();
+      if (trimmed) storage.saveProfile({ name: trimmed });
     },
 
     onContinue: () => continueSavedGame(),
@@ -854,10 +915,32 @@ async function boot() {
         copied ? 'info' : 'error');
     },
 
-    // Renaming yourself without leaving the game. Online only in practice —
-    // the controller refuses it where the session cannot do it.
+    // Renaming a player without leaving the game. Kept for next time as
+    // well: your seat's name becomes your name everywhere, and Player 2's
+    // goes back in their box on the form.
     onRenameSeat: async ({ color, name }) => {
-      await controller.renameSeat(color, name);
+      const seat = formSeatOf(color);
+      const result = await controller.renameSeat(color, name);
+      if (!result?.ok) return;
+      if (seat === 'me') {
+        rememberMyName(result.name);
+      } else if (seat === 'p2') {
+        storage.saveNames({ p2: result.name });
+        ui.syncNames(storage.loadNames());
+      }
+    },
+
+    // A new picture on a card, mid-game. Kept the same way as a rename.
+    onSeatPicture: async ({ color, avatar }) => {
+      const seat = formSeatOf(color);
+      const result = await controller.setSeatAvatar(color, avatar);
+      if (!result?.ok) return;
+      if (seat === 'me') {
+        rememberMyPicture(avatar);
+      } else if (seat === 'p2') {
+        controller.setAvatar('p2', avatar);
+        ui.syncAvatars(controller.getAvatars());
+      }
     },
 
     onAcceptDraw: () => controller.acceptDraw(),
@@ -952,6 +1035,7 @@ async function boot() {
 
   ui.syncSettings(controller.getSettings());
   ui.syncAvatars(controller.getAvatars());
+  ui.syncNames(storage.loadNames());
   ui.refreshContinueButton();
   ui.setOnlineAvailable(isFirebaseConfigured(), firebaseConfigError());
   // Friends need a project behind them in a way local play does not, so the

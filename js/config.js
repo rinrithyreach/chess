@@ -21,6 +21,9 @@ export const STORAGE_KEYS = {
   GAME: 'chess-arena:game',
   SETTINGS: 'chess-arena:settings',
   AVATARS: 'chess-arena:avatars',
+  // Player 2's name on the New Game form. Player 1 is you, and your name
+  // lives in PROFILE below.
+  NAMES: 'chess-arena:names',
   // Who this device is to other people: the name it plays online under,
   // and the friend code others type to find it. Separate from the game
   // record because it outlives every game, and separate from settings
@@ -43,17 +46,23 @@ export const STORAGE_KEYS = {
 export const RETIRED_STORAGE_KEYS = ['chess-arena:gauntlet'];
 
 /**
- * Seats on the New Game form that remember a profile picture between games.
+ * Pictures remembered between games.
  *
- * Seats, not colours: `p1` is whoever fills in the first name box, and a
- * rematch swapping colours does not move their picture to the other slot. The
- * form is the only place these ids mean anything.
+ * `online` is you: your profile picture, the one your friends see, and the
+ * one on Player 1 — the first seat on the New Game form is whoever holds the
+ * phone, so it is the same face rather than a second copy to keep in step.
+ * `p2` is the other seat on the form. Seats, not colours: a rematch swapping
+ * colours does not move a picture to the other slot.
  *
- * The picture is remembered, the name is not. A name is eight characters and
- * takes a moment to retype; a picture means opening the camera roll and
- * hunting for it again, which is the part nobody will do twice.
+ * There used to be a `p1` as well. storage.js folds an old one into `online`.
  */
-export const AVATAR_SLOTS = ['p1', 'p2', 'online'];
+export const AVATAR_SLOTS = ['p2', 'online'];
+
+/**
+ * Seats on the New Game form that remember a typed name between visits.
+ * Player 1's name is your profile name, kept with your friend code.
+ */
+export const NAME_SLOTS = ['p2'];
 
 /** Colors, mirroring chess.js' single-character notation. */
 export const WHITE = 'w';

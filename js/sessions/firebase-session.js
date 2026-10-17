@@ -1130,6 +1130,62 @@ export class FirebaseSession {
     }
   }
 
+  /**
+   * Put a new picture on the seat this device is sitting in, mid-game, or
+   * take it off (null).
+   *
+   * Shrunk to what the room takes before the transaction, which can run more
+   * than once and is no place to re-encode a picture. The seat is re-checked
+   * inside it for the reason renaming re-checks it: a rematch can swap it.
+   */
+  async setSeatAvatar(avatar, color) {
+    if (this.#destroyed) return { ok: false, error: 'Session destroyed' };
+    if (!this.#roomRef || !this.#myColor || !this.#sdk) {
+      return { ok: false, error: 'Not in a room' };
+    }
+    if (color && color !== this.#myColor) {
+      return { ok: false, error: 'That seat is not yours to change' };
+    }
+    if (avatar && !ONLINE_AVATARS) {
+      return { ok: false, error: 'Pictures are not shown in online games' };
+    }
+
+    const picture = avatar ? await onlineAvatar(avatar) : null;
+    if (avatar && !picture) return { ok: false, error: 'That picture could not be used' };
+
+    const mine = this.#myColor;
+    try {
+      const { runTransaction, serverTimestamp } = this.#sdk;
+      const outcome = await runTransaction(this.#roomRef, (room) => {
+        if (room === null) return undefined;
+        const seat = room.players?.[mine];
+        if (!seat || seat.uid !== this.#uid) return undefined;
+        // Left out rather than written as null when there is none, the same
+        // shape seatRecord() builds.
+        const { avatar: _previous, ...rest } = seat;
+        return {
+          ...room,
+          players: { ...room.players, [mine]: picture ? { ...rest, avatar: picture } : rest },
+          updatedAt: serverTimestamp(),
+        };
+      });
+
+      if (!outcome.committed) {
+        return { ok: false, error: 'That seat is not yours any more' };
+      }
+      log('Seat picture', picture ? 'changed:' : 'removed:', mine);
+      return { ok: true, color: mine, state: this.getState() };
+    } catch (error) {
+      warn('Picture refused', error);
+      return {
+        ok: false,
+        error: isPermissionDenied(error)
+          ? 'The room would not take that picture'
+          : explainFirebaseError(error),
+      };
+    }
+  }
+
   async #updateRoom(fields) {
     const { runTransaction, serverTimestamp } = this.#sdk;
     const outcome = await runTransaction(this.#roomRef, (room) => {

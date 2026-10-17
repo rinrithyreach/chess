@@ -788,13 +788,28 @@ export class GameController {
       return result;
     }
 
-    // Online, the name IS your identity to everybody else, so it is kept for
-    // the next room. Locally the two names belong to the game in front of you
-    // — they are typed fresh on the form each time, and quietly overwriting
-    // your online profile because you renamed Player 2 would be a surprise.
-    if (this.#state?.online) storage.saveProfile({ name: result.name });
-
+    // Whether the new name is also kept for next time — as your profile, or
+    // as Player 2 on the form — is app.js's call: it is the one that can
+    // tell your friends as well.
     this.#toast(`Now playing as ${result.name}`);
+    this.#emitChange();
+    return result;
+  }
+
+  /**
+   * Change the picture on a seat, mid-game, or take it off (null).
+   * The same seats as renameSeat, refused the same way.
+   */
+  async setSeatAvatar(color, avatar) {
+    if (!this.#session.setSeatAvatar) return { ok: false, error: 'Not this game' };
+
+    const result = await this.#session.setSeatAvatar(avatar, color);
+    if (!result.ok) {
+      this.#toast(result.error ?? 'Could not change that picture', 'warn');
+      return result;
+    }
+
+    this.#toast(avatar ? 'Picture changed' : 'Picture removed');
     this.#emitChange();
     return result;
   }
@@ -889,9 +904,9 @@ export class GameController {
    *
    * Deliberately does NOT emit a change: this touches no game state, and the
    * picture on a player card comes from the session's player record rather
-   * than from here. Changing your picture mid-game therefore does nothing to
-   * the game in progress, which is the honest behaviour — the seat was taken
-   * with the picture it had.
+   * than from here. Changing your picture from the form or Friends mid-game
+   * therefore leaves the game in progress alone; changing it on your card
+   * goes through setSeatAvatar() as well.
    *
    * Returns whether it was actually written. A failure here is almost always
    * a full quota, and it is worth saying so: the picture still works for the
