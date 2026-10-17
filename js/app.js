@@ -519,7 +519,6 @@ async function boot() {
    */
   controller.on(EVENT.CHAT, ({ messages }) => {
     ui.onChatMessages(messages);
-    if (!controller.getSettings().chat) return;
 
     const incoming = messages.filter((message) => !message.mine);
     if (!incoming.length || ui.isChatOpen()) return;

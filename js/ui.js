@@ -188,9 +188,6 @@ export class UI {
    */
   #chatRoom = null;
 
-  /** Whether chat is switched on, remembered from the last render. */
-  #chatOn = true;
-
   /**
    * Which card each colour is on, as of the last render.
    *
@@ -277,7 +274,7 @@ export class UI {
       'modal-draw-offer', 'draw-offer-text', 'btn-draw-accept', 'btn-draw-decline',
       'modal-opponent-left', 'btn-leave-room',
       // Chat, emotes and friends
-      'set-chat', 'setting-chat', 'btn-chat', 'chat-unread',
+      'btn-chat', 'chat-unread',
       'modal-chat', 'chat-log', 'chat-empty', 'emote-bar',
       'chat-form', 'chat-input', 'btn-chat-send',
       'top-emote', 'bottom-emote',
@@ -598,6 +595,9 @@ export class UI {
   #renderZoomControl(settings = {}) {
     const zoom = BOARD_ZOOM_LEVELS[clampBoardZoom(settings.boardZoom)];
     if (this.#dom['zoom-label']) this.#dom['zoom-label'].textContent = zoom.label;
+    // For the layout: at Fit the 3D board leaves lawn above and below itself
+    // in its box, and the desktop layout draws the cards in over it.
+    if (this.#dom['board-area']) this.#dom['board-area'].dataset.zoom = zoom.id;
 
     // The accessible name carries what pressing it does; the visible label only
     // has room to say where you are now.
@@ -616,7 +616,6 @@ export class UI {
     this.#renderStatus(snapshot);
     this.#renderHistory(state);
     this.#renderControls(snapshot);
-    this.#chatOn = snapshot.settings?.chat !== false;
     this.#renderOnline(state);
   }
 
@@ -665,11 +664,9 @@ export class UI {
       this.#dom['room-bar-status-text'].textContent = text;
     }
 
-    // Hidden outright when chat is switched off, rather than shown and
-    // refusing: a button that is there is a promise that pressing it does
-    // something.
+    // Chat and emotes are always on in a room: there is no switch for them.
     const chatButton = this.#dom['btn-chat'];
-    if (chatButton) chatButton.hidden = !online.roomCode || !this.#chatOn;
+    if (chatButton) chatButton.hidden = !online.roomCode;
 
     if (online.roomCode !== this.#chatRoom) {
       this.#chatRoom = online.roomCode;
@@ -751,8 +748,6 @@ export class UI {
    * card, and count what has not been read.
    */
   onChatMessages(messages = []) {
-    if (!this.#chatOn) return;
-
     // The bubble goes on a player card, and while the sheet is open the
     // cards are behind it — so it popped UNDER the panel with about six
     // pixels of itself showing past the bottom edge. Which it did every
@@ -1168,11 +1163,6 @@ export class UI {
     const modal = this.#dom[`modal-${name}`];
     if (!modal) return;
 
-    // The chat switch is only shown where it can do anything. Decided here
-    // rather than in render(), because this panel opens from the menu too,
-    // where there is no game and render() returns early.
-    if (name === 'settings') this.#renderChatSetting();
-
     this.#lastFocused = document.activeElement;
     modal.hidden = false;
     // Opened by a press that is still going on: its click is not for us.
@@ -1521,31 +1511,9 @@ export class UI {
   // Settings
   // -----------------------------------------------------------------------
 
-  /**
-   * Show the chat switch only where flipping it does something.
-   *
-   * Chat and emotes are online-only: the button is gated on a room code and
-   * the emote bar lives inside the chat sheet, so in a local or bot game
-   * there is nothing for the setting to turn on. Left on the panel it was a
-   * switch that moved and changed nothing — the same broken promise the chat
-   * button avoids by hiding rather than refusing.
-   *
-   * Gated on the game screen as well as the state, because #lastSnapshot is
-   * never cleared: after leaving an online game it can still say `online`,
-   * which would bring the row back on a menu that has no game at all.
-   */
-  #renderChatSetting() {
-    const row = this.#dom['setting-chat'];
-    if (!row) return;
-
-    const inGame = this.#dom['screen-game']?.classList.contains('is-active');
-    row.hidden = !(inGame && this.#lastSnapshot?.state?.online);
-  }
-
   syncSettings(settings) {
     const map = {
       'set-sound': 'sound',
-      'set-chat': 'chat',
     };
     Object.entries(map).forEach(([id, key]) => {
       const input = this.#dom[id];
@@ -2319,7 +2287,6 @@ export class UI {
     // --- Settings ---
     const settingInputs = {
       'set-sound': 'sound',
-      'set-chat': 'chat',
     };
     Object.entries(settingInputs).forEach(([id, key]) => {
       this.#dom[id]?.addEventListener('change', (event) => {

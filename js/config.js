@@ -580,10 +580,8 @@ export const DEFAULT_SETTINGS = {
   boardZoom: DEFAULT_BOARD_ZOOM,
   boardTheme: 'classic',
   background: DEFAULT_BACKGROUND,
-  // Chat and emotes together, because they are one pipe and somebody who
-  // wants quiet wants quiet. Off means nothing arrives and nothing can be
-  // sent — and the panel says so, rather than swallowing what you type.
-  chat: true,
+  // No `chat`: chat and emotes are always on in an online game. There was a
+  // switch for them, and storage.js ignores a saved one that said off.
 };
 
 export const DEFAULT_PLAYER_NAMES = {

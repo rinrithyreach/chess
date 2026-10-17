@@ -173,8 +173,14 @@
 @media (min-width: 1024px) {
   .game {
     /* How wide the board is, and so how wide its column is: one number for
-       both, set again for wide screens below. */
-    --board-w: min(58vw, 600px);
+       both, set again for wide screens below. And no taller than leaves both
+       cards on a laptop's screen without a scrollbar: everything round the
+       board takes 17.25rem (measured, not added up — the sum came out 13px
+       short), and the board at Fit is 0.89 of its width tall once the cards
+       are drawn in over its bands (see .board-area below). Not under 22rem,
+       however short the window. */
+    --board-fit-h: calc((100dvh - 17.25rem) / 0.89);
+    --board-w: max(22rem, min(58vw, 600px, var(--board-fit-h)));
     display: grid;
     /* The board's column in the middle with equal room either side, so the
        board stands in the centre of the screen, and the panel uses the room
@@ -186,16 +192,44 @@
     align-items: start;
     gap: 0.75rem 1.5rem;
     max-width: none;
-    padding: 1.5rem 1.5rem 3rem;
+    padding: 1.5rem;
   }
 
   #card-top    { grid-column: 2; grid-row: 1; }
   .board-area  { grid-column: 2; grid-row: 2; }
   #card-bottom { grid-column: 2; grid-row: 3; }
 
+  /*
+     The cards against the board. At Fit the 3D board is wider than it is
+     tall, and in its square box that leaves lawn above the far rank and
+     below the near one — 44px and 41px of a 620px board, measured from
+     pixels — so the names sat a hand's width away from it. The cards are
+     drawn in over half of that: 5.5% of the board's width at the top and
+     5.3% at the bottom, less the 0.75rem row gap, which is about 22px and
+     20px at 620px. That leaves about 21px clear over the far king for the
+     8px it rises while castling (a knight's jump from the far rank rises
+     less than that); nothing moves below the near rank. In front of the
+     board, so a press there reaches the card and not the empty lawn.
+
+     Only at Fit: Large fills its box. Moved with the camera's 430ms swing
+     between the two, so the cards and the board change size as one motion.
+  */
+  .player-card { z-index: 1; }
+
+  .board-area:has(.board--3d) {
+    transition: margin 0.43s ease;
+  }
+
+  .board-area[data-zoom="fit"]:has(.board--3d) {
+    margin-top: calc(var(--board-w) * -0.055);
+    margin-bottom: calc(var(--board-w) * -0.053);
+  }
+
   /* The panel becomes one real column spanning the board's full height, so
      status, controls and history stack together instead of being spread
-     across grid rows sized by the board. */
+     across grid rows sized by the board. A narrow one: the status, and the
+     three controls one under another like the main menu's buttons, rather
+     than a 360px row of them out in the corner. */
   .game-panel {
     display: flex;
     flex-direction: column;
@@ -204,15 +238,13 @@
     grid-row: 1 / span 3;
     height: 100%;
     width: 100%;
-    max-width: 360px;
+    max-width: 240px;
     min-width: 0;
   }
 
   /* A result and its badge may not fit side by side in the narrower room. */
-  #status { justify-content: flex-start; flex-wrap: wrap; }
+  #status { justify-content: center; flex-wrap: wrap; }
 
-  /* Under 1280px the room beside the board is under 300px: one button a
-     row there rather than three squeezed into one. */
   .controls { grid-auto-flow: row; }
 
   #history-panel {
@@ -226,12 +258,6 @@
     /* Kept deliberately modest — a huge board is harder to read, not easier. */
     width: var(--board-w);
   }
-
-  /* The controls stay in the one row the base rule gives them. They were
-     put in two columns here while there were four — Undo, Flip, Size and
-     Resign, two and two. Undo was removed, and three in two columns is two
-     and one, with Resign on a line by itself. Three fit the panel side by
-     side. */
 
   /* On desktop there is room for the history to stay open. */
   .history__list,
@@ -261,10 +287,8 @@
 
 @media (min-width: 1280px) {
   .game {
-    --board-w: min(52vw, 620px);
+    --board-w: max(22rem, min(52vw, 620px, var(--board-fit-h)));
   }
-
-  .controls { grid-auto-flow: column; }
 }
 
 /* --------------------------------------------------------------------------
@@ -335,6 +359,12 @@
     /* Bound by height, not width — the short axis is what constrains here.
        Sized so the header and both player cards still fit on screen. */
     width: min(52vw, 56vh);
+  }
+
+  /* The desktop layout's cards-over-the-bands is measured against its own
+     board width, which a short window does not use. */
+  .board-area[data-zoom="fit"]:has(.board--3d) {
+    margin: 0;
   }
 
   .btn--control {

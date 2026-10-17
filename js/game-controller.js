@@ -488,14 +488,12 @@ export class GameController {
    */
   async sendChat(body) {
     if (!this.isOnline()) return { ok: false, error: 'Chat is for online games' };
-    if (!this.#settings.chat) return { ok: false, error: 'Chat is switched off in Settings' };
     return this.#session.sendChat?.(body)
       ?? { ok: false, error: 'Chat is unavailable' };
   }
 
   async sendEmote(id) {
     if (!this.isOnline()) return { ok: false, error: 'Emotes are for online games' };
-    if (!this.#settings.chat) return { ok: false, error: 'Chat is switched off in Settings' };
     return this.#session.sendEmote?.(id)
       ?? { ok: false, error: 'Emotes are unavailable' };
   }

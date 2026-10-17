@@ -553,15 +553,6 @@
         <input type="checkbox" id="set-sound" class="switch">
       </div>
 
-      <!--
-        Online only, and hidden everywhere else — see #renderChatSetting().
-        Starts hidden so it cannot flash on the way to that decision.
-      -->
-      <div class="setting" id="setting-chat" hidden>
-        <label class="setting__label" for="set-chat">Chat &amp; Emotes</label>
-        <input type="checkbox" id="set-chat" class="switch">
-      </div>
-
       <div class="setting setting--stack">
         <span class="setting__label" id="style-label">Look &amp; Feel</span>
         <div class="style-picker" id="style-picker" role="radiogroup" aria-labelledby="style-label"></div>
@@ -628,9 +619,9 @@
   </div>
 
   <!--
-    Chat (online). A sheet rather than a panel: it covers the board while it
-    is open, which is the right trade on a phone — you are either reading the
-    position or reading the message, never both.
+    Chat (online). A small popup over the board, kept to about half a phone's
+    height: the conversation scrolls inside it and the emotes are one row.
+    See .modal--chat in style.css.
   -->
   <div class="modal modal--sheet modal--chat" id="modal-chat" role="dialog" aria-modal="true"
        aria-labelledby="chat-title" hidden>

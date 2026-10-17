@@ -2756,6 +2756,25 @@ body::before {
   gap: 0.8rem;
 }
 
+/* The chat is a small popup, not a page. At the friends panel's size it
+   took 563px of a 664px phone once anybody had said anything, and covered
+   the whole board; this keeps it near half of that. */
+.modal--chat .modal__panel {
+  max-width: 340px;
+  padding: 0.85rem;
+  gap: 0.6rem;
+}
+
+.modal--chat .modal__title {
+  font-size: 1.15rem;
+}
+
+.modal--chat .chat__head .icon-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 1.05rem;
+}
+
 .chat__head {
   display: flex;
   align-items: center;
@@ -2776,8 +2795,9 @@ body::before {
   gap: 0.4rem;
   /* Capped in viewport units so the emote row and the box stay on screen on
      a short phone, where the panel would otherwise scroll them off the
-     bottom and hide the only way to reply. */
-  max-height: min(44dvh, 320px);
+     bottom and hide the only way to reply. A third of the screen at most:
+     the rest scrolls, and the latest is always the part in view. */
+  max-height: min(30dvh, 210px);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -2854,17 +2874,27 @@ body::before {
 
 .emote-bar {
   display: grid;
-  /* Four across, so eight emotes are two tidy rows at any width — and each
-     cell stays over the 44px tap target on the narrowest phone. */
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.4rem;
+  /* All eight in one row, which is most of what keeps the chat popup small:
+     about 36px wide and 40px tall each on a phone. Two rows of four below
+     360px, where one row would make them too narrow to hit.
+     minmax(0, 1fr), not 1fr: a colour emoji is wider than its font size
+     says, and with 1fr's min-content floor the row ran out past the
+     panel's edge. */
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+@media (max-width: 359px) {
+  .emote-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .emote {
   display: grid;
   place-items: center;
-  min-height: var(--tap);
-  padding: 0.3rem;
+  min-height: 40px;
+  padding: 0.2rem;
   border: 2px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--well);
@@ -2883,7 +2913,7 @@ body::before {
 }
 
 .emote__glyph {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   line-height: 1;
 }
 

@@ -425,10 +425,9 @@ leaving a gap. The set is also deliberately chosen: there is no emote here
 that can be aimed at somebody, which is the cheapest moderation there is and
 close to the only kind a client with no server behind it can do.
 
-**Chat and emotes are one switch in Settings, and off means off.** Nothing is
-sent, nothing arrives, no bubble pops and no count appears — and the chat
-button goes away rather than sitting there refusing, because a button that is
-there is a promise that pressing it does something.
+**Chat and emotes are always on in an online game.** There used to be a Chat &
+Emotes switch in Settings; it was removed, and a device that had saved it as
+off has it on again — the saved value is no longer read.
 
 **Friends** — a six-character **friend code**, claimed once and yours, on the
 Friends panel reachable from the main menu. Give somebody your code, they
@@ -713,14 +712,23 @@ it.
 With three controls where there were four, the row is one line at every width
 but one. On a wide screen it used to be two columns, two and two, and three in
 two columns is two and one, with Resign on a line by itself. The exception is
-a desktop window 1024–1279px wide, where the room beside the board is under
-300px and the three stand one under another instead.
+desktop, where they stand one under another in a 240px column beside the
+board, under the status line, like the main menu's buttons.
 
 **On desktop the board is in the middle of the screen.** From 1024px the game
 is three columns: equal room either side of the board's, and the status line
 and controls in the room on the right. It used to be two — board, then panel —
 which was worth it while the panel held the move list, and with the list
 hidden put the board about 190px left of centre.
+
+The cards sit against the board there. At Fit the 3D board is wider than it
+is tall, and in its square box that leaves lawn above the far rank and below
+the near one — 44px and 41px of a 620px board — so the names stood a hand's
+width away. The cards are drawn in over half of that, in front of the board,
+leaving room above the far king for the 8px it rises while castling; at Large,
+which fills its box, they step back out with the camera. And the board is no
+taller than lets both cards fit on the screen without a scrollbar, from
+1280×720 up.
 
 **The Draw button was removed.** The capability underneath is intact and still
 tested: `offerDraw()` is still part of the session contract, and the dialog
@@ -1040,7 +1048,7 @@ and fall back to the default.
 
 **Interface** — start screen, new-game setup, waiting room with the shareable
 code, responsive game screen, friends panel, chat sheet, settings (sound,
-board theme, chat and emotes),
+board theme),
 custom confirmation modals, toasts, and a collapsible move history.
 
 **Every control answers the pointer** — hovering any button lifts it 2px,
@@ -1706,7 +1714,7 @@ Five independent `localStorage` keys are used so a corrupt game never costs
 you your preferences:
 
 - `chess-arena:game` — the current game
-- `chess-arena:settings` — sound, board theme, background, chat and emotes
+- `chess-arena:settings` — sound, board theme, background
 - `chess-arena:avatars` — your profile picture (`online`, also Player 1's) and
   Player 2's (`p2`)
 - `chess-arena:names` — Player 2's remembered name
@@ -2406,7 +2414,7 @@ being hidden by a rule that changed underneath it:
 | 30 | Play on a phone | The board reaches both edges of the screen; cards and controls keep their margins |
 | 31 | Open Friends from the menu | A six-character code appears; copy it |
 | 32 | Type your name in the Friends panel | It is remembered, and the New Game form offers the same name |
-| 33 | Turn Chat & Emotes off, then join a game | No chat button; nothing arrives and nothing can be sent |
+| 33 | Join an online game and open Settings | No Chat & Emotes switch; the chat button is there and chat works |
 | 34 | Open Friends with nobody on the list | No Game invites section at all, and the empty line explains what to do |
 
 Positions for tests 9–14 are one tap away via the DEBUG presets below.
