@@ -710,9 +710,17 @@ take a half-move back, because that is how an online move the room refused is
 rolled out of this device's copy of the position; nothing a player does reaches
 it.
 
-With three controls where there were four, the row is one line at every width.
-On a wide screen it used to be two columns, two and two, and three in two
-columns is two and one, with Resign on a line by itself.
+With three controls where there were four, the row is one line at every width
+but one. On a wide screen it used to be two columns, two and two, and three in
+two columns is two and one, with Resign on a line by itself. The exception is
+a desktop window 1024–1279px wide, where the room beside the board is under
+300px and the three stand one under another instead.
+
+**On desktop the board is in the middle of the screen.** From 1024px the game
+is three columns: equal room either side of the board's, and the status line
+and controls in the room on the right. It used to be two — board, then panel —
+which was worth it while the panel held the move list, and with the list
+hidden put the board about 190px left of centre.
 
 **The Draw button was removed.** The capability underneath is intact and still
 tested: `offerDraw()` is still part of the session contract, and the dialog

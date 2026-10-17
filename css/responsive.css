@@ -167,23 +167,31 @@
 }
 
 /* --------------------------------------------------------------------------
-   Desktop — board beside a game panel
+   Desktop — the board in the middle of the screen, the panel beside it
    -------------------------------------------------------------------------- */
 
 @media (min-width: 1024px) {
   .game {
+    /* How wide the board is, and so how wide its column is: one number for
+       both, set again for wide screens below. */
+    --board-w: min(58vw, 600px);
     display: grid;
-    grid-template-columns: minmax(0, auto) 320px;
+    /* The board's column in the middle with equal room either side, so the
+       board stands in the centre of the screen, and the panel uses the room
+       on the right. It used to be board then panel, two columns, which put
+       the board about 190px left of centre — worth it while the panel held
+       the move list, not now it is a status line and three buttons. */
+    grid-template-columns: minmax(0, 1fr) var(--board-w) minmax(0, 1fr);
     grid-template-rows: auto auto auto 1fr;
     align-items: start;
     gap: 0.75rem 1.5rem;
-    max-width: 1000px;
+    max-width: none;
     padding: 1.5rem 1.5rem 3rem;
   }
 
-  #card-top    { grid-column: 1; grid-row: 1; }
-  .board-area  { grid-column: 1; grid-row: 2; }
-  #card-bottom { grid-column: 1; grid-row: 3; }
+  #card-top    { grid-column: 2; grid-row: 1; }
+  .board-area  { grid-column: 2; grid-row: 2; }
+  #card-bottom { grid-column: 2; grid-row: 3; }
 
   /* The panel becomes one real column spanning the board's full height, so
      status, controls and history stack together instead of being spread
@@ -192,13 +200,20 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1 / span 3;
     height: 100%;
+    width: 100%;
+    max-width: 360px;
     min-width: 0;
   }
 
-  #status { justify-content: flex-start; }
+  /* A result and its badge may not fit side by side in the narrower room. */
+  #status { justify-content: flex-start; flex-wrap: wrap; }
+
+  /* Under 1280px the room beside the board is under 300px: one button a
+     row there rather than three squeezed into one. */
+  .controls { grid-auto-flow: row; }
 
   #history-panel {
     flex: 1;
@@ -209,7 +224,7 @@
 
   .board-frame {
     /* Kept deliberately modest — a huge board is harder to read, not easier. */
-    width: min(58vw, 600px);
+    width: var(--board-w);
   }
 
   /* The controls stay in the one row the base rule gives them. They were
@@ -246,13 +261,10 @@
 
 @media (min-width: 1280px) {
   .game {
-    grid-template-columns: minmax(0, auto) 360px;
-    max-width: 1120px;
+    --board-w: min(52vw, 620px);
   }
 
-  .board-frame {
-    width: min(52vw, 620px);
-  }
+  .controls { grid-auto-flow: column; }
 }
 
 /* --------------------------------------------------------------------------
