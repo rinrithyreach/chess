@@ -204,6 +204,12 @@ export class UI {
   /** The timer that takes each toast on screen back off again, by node. */
   #toastTimers = new Map();
 
+  /** Whether an open dialog is following the visual viewport: see #followViewport. */
+  #viewportWatched = false;
+
+  /** Where the page was scrolled when the first dialog opened. */
+  #scrollBefore = 0;
+
   /** The last social snapshot, kept so a re-render needs no round trip. */
   #social = null;
 
@@ -826,8 +832,11 @@ export class UI {
     this.#renderUnread();
     this.openModal('chat');
     // openModal focuses the first control, which here is the close button.
-    // The box is what you came for.
-    this.#dom['chat-input']?.focus();
+    // With a keyboard on the desk the box is what you came for. Not on a
+    // touch screen: focusing it there opens the phone's keyboard over the
+    // conversation and the emotes before you have read anything, and a tap
+    // on the box opens it when you do want to type.
+    if (!window.matchMedia?.('(pointer: coarse)').matches) this.#dom['chat-input']?.focus();
     const log = this.#dom['chat-log'];
     if (log) log.scrollTop = log.scrollHeight;
   }
@@ -1159,11 +1168,63 @@ export class UI {
   // Modals
   // -----------------------------------------------------------------------
 
+  /**
+   * Keep an open dialog over what can actually be seen.
+   *
+   * A phone's keyboard does not shrink the page: it covers the bottom of it,
+   * and the browser slides the page up to show the box being typed in. A
+   * dialog centred on the whole screen then has its top pushed off the top
+   * of what is visible — the chat lost its title, its close button and the
+   * conversation the moment you started typing. So while a dialog is open,
+   * the visual viewport (the part above the keyboard) is copied into two
+   * properties that .modal is placed by. With no keyboard they are simply
+   * the whole screen.
+   */
+  #followViewport = () => {
+    const view = window.visualViewport;
+    if (!view) return;
+    // The conversation is what gives way to the keyboard. Left alone, it
+    // keeps its scroll position as it shrinks and the newest message — the
+    // one being answered — slides out under the emotes. Kept at the bottom
+    // if it was there; somebody reading further up is left where they are.
+    const log = this.#dom['chat-log'];
+    const atBottom = log && log.scrollHeight - log.scrollTop - log.clientHeight < 8;
+    const root = document.documentElement.style;
+    root.setProperty('--vv-top', `${view.offsetTop}px`);
+    root.setProperty('--vv-h', `${view.height}px`);
+    if (atBottom) log.scrollTop = log.scrollHeight;
+  };
+
+  #watchViewport(on) {
+    const view = window.visualViewport;
+    if (!view) return;
+    if (on) {
+      if (this.#viewportWatched) return;
+      this.#viewportWatched = true;
+      // Where the page was, to put it back: a phone can leave it slid up
+      // after the keyboard has gone.
+      this.#scrollBefore = window.scrollY;
+      this.#followViewport();
+      view.addEventListener('resize', this.#followViewport);
+      view.addEventListener('scroll', this.#followViewport);
+      return;
+    }
+    if (!this.#viewportWatched) return;
+    this.#viewportWatched = false;
+    view.removeEventListener('resize', this.#followViewport);
+    view.removeEventListener('scroll', this.#followViewport);
+    const root = document.documentElement.style;
+    root.removeProperty('--vv-top');
+    root.removeProperty('--vv-h');
+    if (window.scrollY !== this.#scrollBefore) window.scrollTo(0, this.#scrollBefore);
+  }
+
   openModal(name) {
     const modal = this.#dom[`modal-${name}`];
     if (!modal) return;
 
     this.#lastFocused = document.activeElement;
+    this.#watchViewport(true);
     modal.hidden = false;
     // Opened by a press that is still going on: its click is not for us.
     if (this.#pressing) this.#strayClick = true;
@@ -1190,7 +1251,10 @@ export class UI {
       this.#openModal = name === 'confirm' ? this.#confirmUnder : null;
     }
     if (name === 'confirm') this.#confirmUnder = null;
-    if (!this.#openModal) document.body.classList.remove('is-modal-open');
+    if (!this.#openModal) {
+      document.body.classList.remove('is-modal-open');
+      this.#watchViewport(false);
+    }
 
     // A cancelled confirmation must still settle its promise. What a dismissal
     // means is the caller's to decide: for a two-button dialog it is "no", but
@@ -1359,7 +1423,10 @@ export class UI {
     }
     if (this.#openModal === 'confirm') this.#openModal = this.#confirmUnder;
     this.#confirmUnder = null;
-    if (!this.#openModal) document.body.classList.remove('is-modal-open');
+    if (!this.#openModal) {
+      document.body.classList.remove('is-modal-open');
+      this.#watchViewport(false);
+    }
     this.#lastFocused?.focus?.();
     this.#lastFocused = null;
 
@@ -2264,6 +2331,7 @@ export class UI {
       }
       if (this.#openModal === 'promotion') this.#openModal = null;
       document.body.classList.remove('is-modal-open');
+      this.#watchViewport(false);
       this.#call('onPromotionChoice', choice.dataset.piece);
     });
 

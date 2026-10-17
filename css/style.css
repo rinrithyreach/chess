@@ -1880,6 +1880,12 @@ body::before {
 .modal {
   position: fixed;
   inset: 0;
+  /* Over the part of the screen that can be seen: above a phone's keyboard
+     while one is open, the whole screen otherwise. ui.js sets the two
+     properties from the visual viewport while a dialog is open. */
+  top: var(--vv-top, 0px);
+  bottom: auto;
+  height: var(--vv-h, 100%);
   z-index: 100;
   display: grid;
   place-items: center;
@@ -1912,7 +1918,10 @@ body::before {
 }
 
 .modal__backdrop {
-  position: absolute;
+  /* The whole screen, not just the dialog's box: with a phone's keyboard up
+     the box is only the part above it (see .modal), and the page round it
+     must stay dimmed if it is dragged into view. */
+  position: fixed;
   inset: 0;
   background: rgba(22, 60, 10, 0.62);
   backdrop-filter: blur(3px);
@@ -1928,7 +1937,7 @@ body::before {
   position: relative;
   width: 100%;
   max-width: 380px;
-  max-height: calc(100dvh - 2rem);
+  max-height: calc(var(--vv-h, 100dvh) - 2rem);
   overflow-y: auto;
   padding: 1.5rem;
   border: 0;
@@ -2285,6 +2294,45 @@ body::before {
   height: 26px;
   border-radius: var(--radius-sm);
   border: 0;
+}
+
+/* Settings is a switch, three swatches and a button, and the Game Menu is
+   three buttons: small popups, not sheets. At the default size each ran
+   358px across a 390px phone, over most of the board. Every button and the
+   switch keep their full tap size. */
+#modal-settings .modal__panel,
+#modal-menu .modal__panel {
+  max-width: 300px;
+  padding: 1.1rem 1.1rem 1rem;
+}
+
+#modal-settings .modal__title,
+#modal-menu .modal__title {
+  margin-bottom: 0.25rem;
+  font-size: 1.2rem;
+}
+
+#modal-menu .modal__actions {
+  gap: 0.5rem;
+}
+
+#modal-settings .setting {
+  padding: 0.35rem 0;
+}
+
+#modal-settings .setting--stack {
+  gap: 0.5rem;
+  padding-bottom: 0.8rem;
+}
+
+#modal-settings .theme-swatch {
+  gap: 0.3rem;
+  padding: 0.4rem 0.25rem;
+  font-size: 0.75rem;
+}
+
+#modal-settings .theme-swatch__preview {
+  height: 20px;
 }
 
 /* --------------------------------------------------------------------------
@@ -2800,6 +2848,16 @@ body::before {
   max-height: min(30dvh, 210px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* The one part that gives way when the panel is short of room — a phone's
+     keyboard is up — so the title, the emotes and the box being typed in
+     stay whole and the conversation scrolls in what is left. */
+  flex: 0 1 auto;
+  min-height: 2.5rem;
+}
+
+/* Everything else in the chat keeps its size. */
+.modal--chat .modal__panel > :not(.chat__log) {
+  flex-shrink: 0;
 }
 
 .chat__log:empty {

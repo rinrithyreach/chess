@@ -395,7 +395,7 @@
   }
 
   .modal__panel {
-    max-height: calc(100dvh - 1rem);
+    max-height: calc(var(--vv-h, 100dvh) - 1rem);
     padding: 1rem 1.25rem;
   }
 }
