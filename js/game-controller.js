@@ -156,8 +156,9 @@ export class GameController {
     this.#emit(EVENT.CHANGE, this.getSnapshot());
   }
 
-  #toast(message, tone = 'info') {
-    this.#emit(EVENT.TOAST, { message, tone });
+  /** `key` is passed through to UI.toast(): see there. */
+  #toast(message, tone = 'info', key) {
+    this.#emit(EVENT.TOAST, { message, tone, key });
   }
 
   // -----------------------------------------------------------------------
@@ -823,7 +824,7 @@ export class GameController {
     this.#view.orientation = this.#view.orientation === 'white' ? 'black' : 'white';
     this.#save();
     this.#emitChange();
-    this.#toast(`Board flipped — ${this.#view.orientation === 'white' ? 'White' : 'Black'} at bottom`);
+    this.#toast(`Board flipped — ${this.#view.orientation === 'white' ? 'White' : 'Black'} at bottom`, 'info', 'flip');
     return this.#view.orientation;
   }
 

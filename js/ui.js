@@ -204,6 +204,9 @@ export class UI {
   /** Per-card timer that takes an emote back off again. */
   #emoteTimers = { top: null, bottom: null };
 
+  /** The timer that takes each toast on screen back off again, by node. */
+  #toastTimers = new Map();
+
   /** The last social snapshot, kept so a re-render needs no round trip. */
   #social = null;
 
@@ -1888,25 +1891,45 @@ export class UI {
   // Toasts
   // -----------------------------------------------------------------------
 
-  toast(message, tone = 'info') {
+  /**
+   * Say something briefly, in a pill at the bottom of the screen.
+   *
+   * One pill per message. A message already up is not stacked again under
+   * itself: pressing the same button twice keeps the pill that is there and
+   * starts its time again, even one already fading out. `key` is for a
+   * button whose message changes with each press — Flip, Size, Sound — so
+   * its pill is brought up to date in place rather than joined by a second.
+   */
+  toast(message, tone = 'info', key = `${tone}:${message}`) {
     const container = this.#dom.toasts;
     if (!container) return;
 
-    const node = document.createElement('div');
-    node.className = 'toast';
+    let node = [...container.children].find((child) => child.dataset.key === key);
+    if (node) {
+      window.clearTimeout(this.#toastTimers.get(node));
+    } else {
+      node = document.createElement('div');
+      node.className = 'toast';
+      node.dataset.key = key;
+      container.append(node);
+    }
     node.dataset.tone = tone;
-    node.textContent = message;
-    container.append(node);
+    // Only when it changed: the container is a live region, and the same
+    // words written again would be read out again.
+    if (node.textContent !== message) node.textContent = message;
 
     // Errors are usually actionable setup instructions, so give them time to
     // actually be read rather than the standard acknowledgement duration.
     const duration = tone === 'error' ? TOAST_MS * 3 : TOAST_MS;
 
     requestAnimationFrame(() => node.classList.add('is-visible'));
-    window.setTimeout(() => {
+    this.#toastTimers.set(node, window.setTimeout(() => {
       node.classList.remove('is-visible');
-      window.setTimeout(() => node.remove(), 250);
-    }, duration);
+      this.#toastTimers.set(node, window.setTimeout(() => {
+        node.remove();
+        this.#toastTimers.delete(node);
+      }, 250));
+    }, duration));
   }
 
   // -----------------------------------------------------------------------
@@ -2170,7 +2193,7 @@ export class UI {
       const current = clampBoardZoom(this.#controller.getSettings().boardZoom);
       const next = (current + 1) % BOARD_ZOOM_LEVELS.length;
       this.#call('onSettingChange', { boardZoom: next });
-      this.toast(`Board size: ${BOARD_ZOOM_LEVELS[next].label}`);
+      this.toast(`Board size: ${BOARD_ZOOM_LEVELS[next].label}`, 'info', 'zoom');
     });
 
     // Renaming a player mid-game. Both cards are wired; only the ones this

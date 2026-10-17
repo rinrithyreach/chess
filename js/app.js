@@ -537,7 +537,7 @@ async function boot() {
     ui.toast(`${who}: ${said}`);
   });
 
-  controller.on(EVENT.TOAST, ({ message, tone }) => ui.toast(message, tone));
+  controller.on(EVENT.TOAST, ({ message, tone, key }) => ui.toast(message, tone, key));
 
   controller.on(EVENT.DRAW_OFFER, async ({ from, to, remote }) => {
     // Online the offer arrives over the network and gets its own dialog, which
@@ -1023,7 +1023,7 @@ async function boot() {
       ui.syncSettings(settings);
       if (Object.prototype.hasOwnProperty.call(patch, 'sound')) {
         sound.unlock();
-        ui.toast(settings.sound ? 'Sound enabled' : 'Sound disabled');
+        ui.toast(settings.sound ? 'Sound enabled' : 'Sound disabled', 'info', 'sound');
       }
     },
 
