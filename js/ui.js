@@ -602,8 +602,9 @@ export class UI {
     const zoom = BOARD_ZOOM_LEVELS[clampBoardZoom(settings.boardZoom)];
     if (this.#dom['zoom-label']) this.#dom['zoom-label'].textContent = zoom.label;
     // For the layout: at Fit the 3D board leaves lawn above and below itself
-    // in its box, and the desktop layout draws the cards in over it.
-    if (this.#dom['board-area']) this.#dom['board-area'].dataset.zoom = zoom.id;
+    // in its box, and the desktop layout draws the cards in over it and
+    // sizes the board by how tall that leaves it.
+    if (this.#dom['screen-game']) this.#dom['screen-game'].dataset.zoom = zoom.id;
 
     // The accessible name carries what pressing it does; the visible label only
     // has room to say where you are now.

@@ -171,16 +171,32 @@
    -------------------------------------------------------------------------- */
 
 @media (min-width: 1024px) {
+  /* Everything the board leaves room for down the screen: the header, the
+     padding, the two cards and the gaps between them, 17.25rem — measured,
+     not added up, as the sum came out 13px short — and in an online game
+     the room bar above them as well, 45px and its margin. */
+  #screen-game {
+    --board-room: 17.25rem;
+  }
+
+  #screen-game:has(#room-bar:not([hidden])) {
+    --board-room: calc(17.25rem + 3.2rem);
+  }
+
   .game {
+    /* How tall the board's box stands for its width: square, except the 3D
+       board at Fit, where the cards are drawn in over its bands (see the
+       rule below) and it takes 0.89 of its width. */
+    --board-tall: 1;
     /* How wide the board is, and so how wide its column is: one number for
-       both, set again for wide screens below. And no taller than leaves both
-       cards on a laptop's screen without a scrollbar: everything round the
-       board takes 17.25rem (measured, not added up — the sum came out 13px
-       short), and the board at Fit is 0.89 of its width tall once the cards
-       are drawn in over its bands (see .board-area below). Not under 22rem,
-       however short the window. */
-    --board-fit-h: calc((100dvh - 17.25rem) / 0.89);
-    --board-w: max(22rem, min(58vw, 600px, var(--board-fit-h)));
+       both, set again for wide screens below. And no wider than leaves it
+       short enough for the whole game to fit the window without a
+       scrollbar, at Fit and at Large, online and off. A laptop's window is
+       about 640px tall once the browser and the taskbar have had theirs.
+       Not under 17rem, which is what a 600px window leaves an online game
+       at Large. */
+    --board-fit-h: calc((100dvh - var(--board-room)) / var(--board-tall));
+    --board-w: max(17rem, min(58vw, 600px, var(--board-fit-h)));
     display: grid;
     /* The board's column in the middle with equal room either side, so the
        board stands in the centre of the screen, and the panel uses the room
@@ -213,6 +229,8 @@
 
      Only at Fit: Large fills its box. Moved with the camera's 430ms swing
      between the two, so the cards and the board change size as one motion.
+     The zoom is on #screen-game, where ui.js puts it, because the board's
+     width depends on it too.
   */
   .player-card { z-index: 1; }
 
@@ -220,9 +238,23 @@
     transition: margin 0.43s ease;
   }
 
-  .board-area[data-zoom="fit"]:has(.board--3d) {
+  #screen-game[data-zoom="fit"] .board-area:has(.board--3d) {
     margin-top: calc(var(--board-w) * -0.055);
     margin-bottom: calc(var(--board-w) * -0.053);
+  }
+
+  #screen-game[data-zoom="fit"] .game:has(.board--3d) {
+    --board-tall: 0.89;
+  }
+
+  /* New Game fits a laptop's window too. It was 694px tall — 3rem of it
+     empty under the form — in a window of about 640. */
+  .setup {
+    padding-bottom: 1.25rem;
+  }
+
+  .setup__header {
+    margin-bottom: 1rem;
   }
 
   /* The panel becomes one real column spanning the board's full height, so
@@ -287,7 +319,42 @@
 
 @media (min-width: 1280px) {
   .game {
-    --board-w: max(22rem, min(52vw, 620px, var(--board-fit-h)));
+    --board-w: max(17rem, min(52vw, 620px, var(--board-fit-h)));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Short desktop windows — New Game a little closer together, so its three
+   modes and Start still fit without a scrollbar down to about 620px.
+   -------------------------------------------------------------------------- */
+
+@media (min-width: 1024px) and (max-height: 760px) {
+  .setup__form {
+    gap: 0.9rem;
+    padding: 1rem 1.1rem;
+  }
+
+  .field {
+    gap: 0.35rem;
+  }
+
+  .field--modes {
+    gap: 0.45rem;
+  }
+
+  .mode {
+    padding: 0.6rem 0.9rem;
+  }
+}
+
+/* And the online form, the tallest of the three, in a window of 600. */
+@media (min-width: 1024px) and (max-height: 640px) {
+  .setup {
+    padding-top: 0.75rem;
+  }
+
+  .setup__header {
+    margin-bottom: 0.6rem;
   }
 }
 
@@ -363,7 +430,7 @@
 
   /* The desktop layout's cards-over-the-bands is measured against its own
      board width, which a short window does not use. */
-  .board-area[data-zoom="fit"]:has(.board--3d) {
+  #screen-game[data-zoom="fit"] .board-area:has(.board--3d) {
     margin: 0;
   }
 

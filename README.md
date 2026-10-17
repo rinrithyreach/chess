@@ -727,8 +727,10 @@ the near one — 44px and 41px of a 620px board — so the names stood a hand's
 width away. The cards are drawn in over half of that, in front of the board,
 leaving room above the far king for the 8px it rises while castling; at Large,
 which fills its box, they step back out with the camera. And the board is no
-taller than lets both cards fit on the screen without a scrollbar, from
-1280×720 up.
+taller than lets the whole game fit the window without a scrollbar — at Fit
+and at Large, with the room bar of an online game too — down to a 600px-tall
+window; a laptop's is about 640 once the browser and the taskbar have had
+theirs. New Game closes up a little in a short window for the same reason.
 
 **The Draw button was removed.** The capability underneath is intact and still
 tested: `offerDraw()` is still part of the session contract, and the dialog
