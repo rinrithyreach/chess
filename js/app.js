@@ -1045,6 +1045,9 @@ async function boot() {
   // one, so it is there before anything connects.
   ui.setOnlineName(storage.loadProfile().name);
   ui.showScreen('menu');
+  // Every menu button is now the one it will be, so they can be shown, all
+  // together. See .menu__actions in style.css.
+  document.documentElement.setAttribute('data-ready', '');
 
   // The cat, the dog and the parrot on the lawn round the game. They look
   // after themselves from here: see meadow.js.

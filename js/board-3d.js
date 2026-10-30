@@ -693,7 +693,7 @@ const CRITTER_FRAME = { width: 192, height: 154 };
  * How each animal is framed: how many units of height its frame holds, and
  * where across it the frame is centred. As close as each will go. The cat and
  * the dog stand about a unit high and never leave the ground; the parrot
- * hops, and needs the room over its head.
+ * flies, and needs the room over its head for its wings.
  */
 const CRITTER_VIEW = {
   cat: { tall: 1.12, x: -0.04 },
@@ -879,23 +879,29 @@ function critterModel(kind, seg) {
  * Where every moving part is, in one frame of one loop. Angles in radians.
  *
  * The run: legs in diagonal pairs, as a trot; two bounces of the body to a
- * stride; the tail streaming. The parrot hops instead, once a loop, wings
- * going. The rest: mostly nothing, which is the point of it, with a swish or
+ * stride; the tail streaming. The parrot flies instead — asked for as "make
+ * fly animation not walk" — leaning into it, feet tucked back, one full beat
+ * of the wings a loop, rising a little on each downstroke. The page lifts it
+ * off the grass as it goes: see is-aloft in style.css.
+ * The rest: mostly nothing, which is the point of it, with a swish or
  * a wag, a blink, an ear, a tilt of the head, each at its own place in the
  * loop. Its last frame is the plain pose, which is the one a device asking
  * for less motion is left showing.
  */
 function critterPose(kind, loop, frame) {
-  const pose = { lift: 0, nod: 0, tilt: 0, tail: 0, ear: 0, ears: 0, tongue: 1, blink: 1, wings: 0, legs: {} };
+  const pose = { lift: 0, pitch: 0, nod: 0, tilt: 0, tail: 0, ear: 0, ears: 0, tongue: 1, blink: 1, wings: 0, legs: {} };
   if (loop === 'run') {
     const phase = (frame / CRITTER_FRAMES.run) * Math.PI * 2;
     if (kind === 'parrot') {
-      const hop = Math.sin((frame / CRITTER_FRAMES.run) * Math.PI);
-      pose.lift = 0.13 * hop;
-      pose.wings = 0.35 + 0.35 * Math.sin(phase * 2);
-      pose.tail = -0.2 * hop;
-      pose.nod = -0.08 * hop;
-      pose.legs = { fn: 0.35 * hop, bn: 0.35 * hop };
+      // Wings from high over the back (the first frame) down past level and
+      // back up. The head is held up against the lean, so the face still
+      // looks out of the frame.
+      pose.wings = 1.45 + 0.95 * Math.cos(phase);
+      pose.lift = 0.1 + 0.035 * Math.sin(phase);
+      pose.pitch = -0.32;
+      pose.nod = 0.26;
+      pose.tail = -0.45 + 0.08 * Math.sin(phase);
+      pose.legs = { fn: -1.1, bn: -0.95 };
       return pose;
     }
     const stride = 0.6 * Math.sin(phase);
@@ -937,6 +943,9 @@ function critterPose(kind, loop, frame) {
  * while it does — which is where a face is, and a face is what makes it cute.
  */
 const LOOK = -0.75;
+
+/** How high the middle of an animal's body is, which a lean turns about. */
+const LEAN_ABOUT = 0.42;
 
 /**
  * The finished strips of frames, by animal, for as long as the page is open.
@@ -2180,7 +2189,10 @@ export class Board3D {
     return {
       root,
       pose(p) {
-        lift.position.y = p.lift;
+        // A lean is about the middle of the body, not about the feet, which
+        // would swing the head forward out of the frame.
+        lift.rotation.z = p.pitch;
+        lift.position.set(LEAN_ABOUT * Math.sin(p.pitch), p.lift + LEAN_ABOUT * (1 - Math.cos(p.pitch)), 0);
         head.rotation.set(p.tilt, LOOK, p.nod);
         eyes.scale.y = p.blink;
         if (ear) ear.rotation.z = p.ear;

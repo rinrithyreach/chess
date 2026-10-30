@@ -456,6 +456,14 @@ body::before {
   margin-top: 2.5rem;
 }
 
+/* The buttons wait for the script that works them, then come in all at
+   once: before it they do nothing when pressed, and Continue Game (and
+   Friends, without a project) is only known once it has run. Hidden by
+   visibility, so the space is kept and the logo does not jump. */
+:root:not([data-ready]) .menu__actions {
+  visibility: hidden;
+}
+
 /* ==========================================================================
    New game setup
    ========================================================================== */
@@ -1643,6 +1651,32 @@ body::before {
 }
 
 /*
+   The parrot flies rather than walks: up off the grass as it sets off, and
+   down again to land where it stops (is-aloft, set by meadow.js, which
+   starts the way down LANDING_MS before the end). By `translate` rather
+   than transform, which the pat and the cheer animate, so that it can be
+   patted in the air. Its shadow stays on the grass, smaller and fainter
+   while it is up. A quarter of its height: the header is only some 50px
+   tall, and any higher puts its wings off the top of the screen.
+*/
+.critter--parrot .critter__hop {
+  transition: translate 0.42s cubic-bezier(0.3, 0.6, 0.4, 1);
+}
+
+.critter--parrot.is-aloft .critter__hop {
+  translate: 0 calc(var(--pet) * -0.25);
+}
+
+.critter--parrot::before {
+  transition: transform 0.42s ease, opacity 0.42s ease;
+}
+
+.critter--parrot.is-aloft::before {
+  transform: scale(0.6);
+  opacity: 0.55;
+}
+
+/*
    The frames: a strip of 24 across, the run along the top row and the rest
    along the bottom. Drawn facing right; -1 turns it round, light and all.
 
@@ -1680,8 +1714,9 @@ body::before {
   animation-duration: 0.34s;
 }
 
+/* One beat of its wings a loop. */
 .critter--parrot.is-running .critter__sprite {
-  animation-duration: 0.36s;
+  animation-duration: 0.4s;
 }
 
 @keyframes critter-rest {

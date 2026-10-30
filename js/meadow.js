@@ -7,7 +7,8 @@
  * cute parrot, have animation", then "make all animation clay style, cute,
  * can run around in grass", then "set all animal clay styles like chess
  * styles". So they are clay, made and lit as the pieces are, and drawn by the
- * 3D board into strips of frames — a run and a rest — which the page plays:
+ * 3D board into strips of frames — a run and a rest, and for the parrot a
+ * flight and a rest — which the page plays:
  * see critterSheet() in board-3d.js, and "The animals on the lawn" in
  * style.css. This file hands each animal its strip (dressMeadow), and then
  * decides only WHEN and WHERE: it sends each one off to somewhere else on its
@@ -32,16 +33,20 @@ import { prefersReducedMotion } from './board-shared.js';
  * How each animal goes about it. Speed in pixels a second; a rest is picked
  * between the two numbers, in milliseconds. `home` is where along its lane it
  * starts, and `facing` which way it looks while it is there: inward, at the
- * words or at the title, rather than off the edge of the screen.
+ * words or at the title, rather than off the edge of the screen. One that
+ * `flies` goes up off the grass to get there and comes down at the end.
  */
 const KINDS = {
   cat: { speed: 105, rest: [1600, 5600], home: 0, facing: 1 },
   dog: { speed: 135, rest: [1100, 4400], home: 1, facing: -1 },
-  parrot: { speed: 58, rest: [2400, 6800], home: 0.72, facing: -1 },
+  parrot: { speed: 95, rest: [2400, 6800], home: 0.72, facing: -1, flies: true },
 };
 
 /** The shortest run worth setting off on, in pixels. */
 const SHORTEST_RUN = 56;
+
+/** How long a flier takes to come down, in milliseconds: is-aloft in style.css. */
+const LANDING_MS = 420;
 
 /**
  * The heart that floats up from a patted animal. Drawn rather than a ♥
@@ -63,6 +68,7 @@ class Critter {
   #x = 0;
   #placed = false;
   #timer = null;
+  #landing = null;
 
   constructor(el) {
     this.#el = el;
@@ -149,6 +155,14 @@ class Critter {
     this.#face(target > this.#x ? 1 : -1);
     this.#el.classList.add('is-running');
     this.#moveTo(target, ms);
+    if (this.#kind.flies) {
+      // Up as it sets off, and down again in time to land where it stops.
+      this.#el.classList.add('is-aloft');
+      window.clearTimeout(this.#landing);
+      this.#landing = window.setTimeout(() => {
+        this.#el.classList.remove('is-aloft');
+      }, Math.max(0, ms - LANDING_MS));
+    }
     window.clearTimeout(this.#timer);
     this.#timer = window.setTimeout(() => {
       this.#el.classList.remove('is-running');
