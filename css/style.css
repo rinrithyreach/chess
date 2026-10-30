@@ -956,7 +956,7 @@ body::before {
   justify-content: space-between;
   gap: 0.75rem;
   margin: 0.35rem auto 0;
-  padding: 0.35rem 0.45rem 0.35rem 1rem;
+  padding: 0.45rem 1rem;
   font-size: 0.8rem;
   width: min(560px, calc(100% - 1.5rem));
   border-radius: 999px;
@@ -1020,10 +1020,12 @@ body::before {
    strip laid across the lawn; this one only has to keep its two buttons and
    the title legible over whatever scrolls beneath them. */
 
+/* Three columns, the outer two equal, so the title stays in the middle of
+   the screen when the chat button joins Settings at the right-hand end. */
 .app-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.7rem 1rem;
   background: linear-gradient(180deg, rgba(108, 204, 72, 0.96) 50%, rgba(108, 204, 72, 0));
@@ -1046,6 +1048,12 @@ body::before {
   --face: var(--blue);
   --side: var(--blue-deep);
   color: #fff;
+}
+
+.app-header__end {
+  justify-self: end;
+  display: flex;
+  gap: 0.5rem;
 }
 
 .game {
@@ -1592,6 +1600,11 @@ body::before {
   left: 3.9rem;
   right: 3.9rem;
   bottom: 9px;
+}
+
+/* Online the right-hand end is two buttons, chat and Settings. */
+.app-header:has(#btn-chat:not([hidden])) .meadow--header {
+  right: calc(3.9rem + var(--tap) + 0.5rem);
 }
 
 /*
@@ -2681,12 +2694,11 @@ body::before {
 
 /*
   A count riding on a button: the Friends button on the menu, and the chat
-  button in the room bar. Absolute rather than in the flow so that adding a
+  button in the header. Absolute rather than in the flow so that adding a
   number never changes the size of the thing it is attached to — a menu
   button that grew when a request arrived would move everything under it.
 */
-.btn__badge,
-.room-bar__unread {
+.btn__badge {
   position: absolute;
   top: -6px;
   right: -6px;
@@ -2708,41 +2720,8 @@ body::before {
 /* The badge is positioned against the button, so the button has to be the
    thing it is positioned against. */
 #btn-menu-friends,
-.room-bar__chat {
+.app-header__chat {
   position: relative;
-}
-
-.room-bar__chat {
-  display: inline-grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  /* Zeroed because the browser's own is `1px 6px` and this button is only
-     34px across: with border-box that leaves a 20px content box for a 22px
-     icon, which overflows it and lands a pixel off centre in a circle. The
-     44px icon buttons either side never noticed — 32px of room is more than
-     the same icon needs. */
-  padding: 0;
-  flex: none;
-  border: 0;
-  border-radius: 50%;
-  background: var(--blue);
-  /* Inherited by the icon through `fill: currentColor`, so the bubble
-     darkens on hover with the border and the two stay in step. There is no
-     font-size here any more: the button held an emoji once and now holds a
-     drawn shape with its own dimensions, and the badge sets its own. */
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
-  box-shadow: var(--gloss), 0 3px 0 var(--blue-deep);
-}
-
-.room-bar__chat:hover {
-  background: #4bb4fb;
-}
-
-.room-bar__chat:active {
-  transform: translateY(1px);
 }
 
 /* --------------------------------------------------------- emote bubble -- */
@@ -2762,7 +2741,10 @@ body::before {
   /* Sits over the card's own top edge, so it reads as coming OUT of the
      card rather than hovering unattached above it. */
   bottom: calc(100% - 0.9rem);
-  z-index: 3;
+  /* Over the header (20), which stays at the top of the screen as the page
+     scrolls: with the page scrolled a little the opponent's card is just
+     under it, and the bubble rising out of that card was drawn behind it. */
+  z-index: 21;
   display: grid;
   place-items: center;
   min-width: 2.3rem;
@@ -3310,10 +3292,7 @@ body::before {
   .bg-swatch:focus-visible,
   .emote:hover,
   .emote:active,
-  .emote:focus-visible,
-  .room-bar__chat:hover,
-  .room-bar__chat:active,
-  .room-bar__chat:focus-visible {
+  .emote:focus-visible {
     transform: none !important;
   }
 

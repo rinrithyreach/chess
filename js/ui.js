@@ -632,11 +632,14 @@ export class UI {
    */
   #renderOnline(state) {
     const bar = this.#dom['room-bar'];
+    const chatButton = this.#dom['btn-chat'];
     const online = state.online;
 
     if (!bar) return;
     if (!online) {
       bar.hidden = true;
+      // In the header, not the bar, so it has to be put away by itself.
+      if (chatButton) chatButton.hidden = true;
       return;
     }
 
@@ -672,7 +675,6 @@ export class UI {
     }
 
     // Chat and emotes are always on in a room: there is no switch for them.
-    const chatButton = this.#dom['btn-chat'];
     if (chatButton) chatButton.hidden = !online.roomCode;
 
     if (online.roomCode !== this.#chatRoom) {

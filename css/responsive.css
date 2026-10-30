@@ -174,13 +174,13 @@
   /* Everything the board leaves room for down the screen: the header, the
      padding, the two cards and the gaps between them, 17.25rem — measured,
      not added up, as the sum came out 13px short — and in an online game
-     the room bar above them as well, 45px and its margin. */
+     the room bar above them as well, 34px and its margin. */
   #screen-game {
     --board-room: 17.25rem;
   }
 
   #screen-game:has(#room-bar:not([hidden])) {
-    --board-room: calc(17.25rem + 3.2rem);
+    --board-room: calc(17.25rem + 2.5rem);
   }
 
   .game {
